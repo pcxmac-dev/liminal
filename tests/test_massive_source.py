@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from massive_collate.models import ETF
-from massive_collate.sources.massive import MassiveClient, MassiveSource
+from massive_collate.sources.plugins.massive.client import MassiveClient, MassiveSource
 
 from .conftest import FakeResponse, FakeSession
 

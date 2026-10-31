@@ -12,8 +12,9 @@ import requests
 
 from massive_collate import cli, killswitch, live
 from massive_collate.errors import NotEntitled, Paused, RateLimited, SourceError, Unauthorized
-from massive_collate.sources.alpaca import AlpacaClient
-from massive_collate.sources.massive import RETRY_WAIT_MAX, MassiveClient, MassiveSource, SameHostSession, _retry_delay
+from massive_collate.sources.plugins.alpaca.client import AlpacaClient
+from massive_collate.sources.http import RETRY_WAIT_MAX, SameHostSession, retry_delay as _retry_delay
+from massive_collate.sources.plugins.massive.client import MassiveClient, MassiveSource
 from massive_collate.storage import Store
 from massive_collate.sources import stream
 
@@ -448,7 +449,8 @@ def test_a_years_cot_file_closes_only_once_its_last_report_can_be_out(tmp_path, 
 
 
 def _cboe(text: str):
-    from massive_collate.sources.public import CboeSource, PublicClient
+    from massive_collate.sources.http import PublicClient
+    from massive_collate.sources.plugins.cboe import CboeSource
 
     resp = FakeResponse(200, None)
     resp.text = text

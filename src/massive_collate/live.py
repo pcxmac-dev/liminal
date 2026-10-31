@@ -33,7 +33,7 @@ import time
 from collections import defaultdict
 from collections.abc import Iterator, Mapping, Set as AbstractSet
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import killswitch

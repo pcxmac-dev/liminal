@@ -12,7 +12,7 @@ from massive_collate.config import load_settings
 from massive_collate.errors import NotEntitled
 from massive_collate.sources import feed_profiles, providers
 from massive_collate.sources.plugins import tiingo
-from massive_collate.sources.public import TiingoFxSource
+from massive_collate.sources.plugins.tiingo.client import TiingoFxSource
 
 
 class FakeTiingo:

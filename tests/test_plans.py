@@ -9,7 +9,7 @@ from massive_collate.collector import ET, Refusals, history_floor
 from massive_collate.config import asset_tier, load_settings
 from massive_collate.freshness import plan_delay
 from massive_collate.sources import build_source
-from massive_collate.sources.massive import asset_class
+from massive_collate.sources.plugins.massive.client import asset_class
 from massive_collate.storage import Store
 
 from .conftest import FakeResponse, FakeSession

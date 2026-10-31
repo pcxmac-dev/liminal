@@ -14,7 +14,7 @@ from massive_collate.gui import server
 from massive_collate.gui.activity import limits
 from massive_collate.gui.server import ChartApp
 from massive_collate.ratelimit import KvLedger, RateLimiter, describe, window_state
-from massive_collate.sources.massive import MassiveClient
+from massive_collate.sources.plugins.massive.client import MassiveClient
 from massive_collate.storage import Store
 
 from .conftest import FakeResponse, FakeSession, FakeSource

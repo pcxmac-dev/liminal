@@ -167,8 +167,9 @@ python -m massive_collate gui                  # chart app in your browser (loca
 | Module | Purpose |
 | --- | --- |
 | `sources/base.py` | `DataSource` interface every provider implements |
-| `sources/massive.py` | Massive client (auth, rate limit, cap, retries, pagination) and source |
-| `sources/alpaca.py` | Alpaca source: stocks (SIP, keys) and crypto (Kraken, no key), same caps and retries |
+| `sources/registry.py` | The plugin registry and contract (`Provider`, `PLUGIN_API`) |
+| `sources/http.py` | The HTTP client every plugin's builds on (auth headers, rate limit, caps, retries) |
+| `sources/plugins/` | Every external data provider, one plugin each: its client, streams and datasets |
 | `coverage.py` | One feed per span: what a feed may download, given the ledger and the ranking |
 | `audit.py` | Feed-against-feed audits: comparison, box stats, verdicts |
 | `composite.py` | Composite and reference models across exchanges; quality scores |

@@ -265,7 +265,7 @@ def test_a_feed_on_another_feeds_account_is_killed_with_it_for_as_long_as_the_se
 
 def test_a_429_carries_its_wait_and_a_key_with_a_line_break_is_never_sent_or_repeated():
     from massive_collate.errors import Unauthorized
-    from massive_collate.sources.massive import MassiveClient
+    from massive_collate.sources.plugins.massive.client import MassiveClient
 
     from .conftest import FakeResponse, FakeSession
 

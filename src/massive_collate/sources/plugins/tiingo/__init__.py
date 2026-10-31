@@ -16,13 +16,14 @@ are free to evaluate)."""
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
-from ...config import PUBLIC_FEEDS, Tier
-from ...errors import SourceError
-from ..public import PublicClient, TiingoFxSource, TiingoSource
-from ..registry import KeyVar, Provider, Scanned, limiter, machine_caps
-from ..stream import Live
+from ....config import PUBLIC_FEEDS, Tier
+from ....errors import SourceError
+from ...http import PublicClient
+from ...registry import KeyVar, Provider, Scanned, limiter, machine_caps
+from ...stream import Live
+from .client import TiingoFxSource, TiingoSource
 
 TIER, PER_RUN, PER_DAY = PUBLIC_FEEDS["tiingo"]
 API = "https://api.tiingo.com"
@@ -85,7 +86,7 @@ def build(settings, request_budget):
 def monthly_symbols(source, settings, key):
     """The plan's different symbols a month on a Tiingo source (collector._monthly_symbol), counted
     for the key on the whole machine: its stocks and its forex (FOREX) take the same places."""
-    from ...ratelimit import MachineLedger
+    from ....ratelimit import MachineLedger
 
     source.symbols_per_month = PLANS[plan_of(settings)][3]
     source.symbol_ledger = MachineLedger("tiingo:symbols", key)
@@ -206,8 +207,8 @@ class BoatsPoller:
 
     def night(self, t: datetime):
         """The Blue Ocean session open at `t` (sessions.Session), or None."""
-        from ...freshness import CALENDAR
-        from ...sessions import ET
+        from ....freshness import CALENDAR
+        from ....sessions import ET
 
         d = t.astimezone(ET).date()
         return next((s for s in CALENDAR.sessions("overnight", d, d + timedelta(days=1)) if s.open <= t < s.close), None)
@@ -231,7 +232,7 @@ class BoatsPoller:
         evening (2026-10-28). So from the New York date of the first minute wanted (the open's until
         the minutes after midnight are stored: the night before's last hours come with it, left out
         here) to the close's."""
-        from ...sessions import ET
+        from ....sessions import ET
 
         lo = int(night.open.timestamp() * 1000)
         first = datetime.fromtimestamp(max(lo, since_ms) / 1000, ET).date()
@@ -254,7 +255,7 @@ def night_poller(settings) -> BoatsPoller | None:
 
 
 TIINGO = Provider(
-    version="1.2.0", api="1.5",  # this plugin's release (its live nights in it), and the contract it needs (live)
+    version="1.3.0", api="1.6",  # this plugin's release (its live nights and client in it), and the contract it needs
     name="tiingo", title="Tiingo", build=build, assets=frozenset({"stock"}), order=60,
     about="US stock daily bars from 1962 (a free account key)",
     keys=(KeyVar("TIINGO_API_KEY"),), signup="tiingo.com: a free account's API token",
@@ -301,7 +302,7 @@ def build_forex(settings, request_budget):
 
 
 FOREX = Provider(
-    version="1.2.0", api="1.5",  # this plugin's release, and the contract it needs (part_of)
+    version="1.3.0", api="1.6",  # this plugin's release, and the contract it needs (part_of)
     name="tiingofx", title="Forex", build=build_forex, assets=frozenset({"fx"}), order=61, account="tiingo",
     part_of="tiingo",
     about="currency pairs' 1-minute bars from 2020, from Tiingo (its key and limits)",

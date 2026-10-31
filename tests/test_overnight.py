@@ -17,7 +17,7 @@ from massive_collate.gui.bars import BarEngine, MERGED, calendar_key, in_session
 from massive_collate.gui.markets import symbol_sessions
 from massive_collate.sessions import ET, MarketCalendar
 from massive_collate.sources import build_source, feed_profiles, providers, rate_window
-from massive_collate.sources.alpaca import BoatsSource
+from massive_collate.sources.plugins.alpaca.client import BoatsSource
 from massive_collate.storage import Store
 
 KEYS = {"MASSIVE_API_KEY": "k", "ALPACA_API_KEY_ID": "i", "ALPACA_API_SECRET_KEY": "s"}

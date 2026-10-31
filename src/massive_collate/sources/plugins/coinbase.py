@@ -3,23 +3,71 @@ exchange for crypto (composite.py)."""
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Iterator
 
 from ...config import PUBLIC_FEEDS
-from ..public import CRYPTO_PAIRS, CoinbaseSource
+from ...models import Instrument
+from ..archive import CRYPTO_PAIRS, EXCHANGE_FRAMES, Archive as _Archive, bounds as _bounds, crypto_pair as _pair
+from ..archive import venue_view
+from ..base import Page
 from ..registry import Provider, public_client
 from ..stream import Live, ns, trade
 
 
-def venue_view(name: str):
-    """A crypto exchange feed's settings: all the history it holds, unless CRYPTO_VENUE_DAYS limits it."""
-    tier, per_run, per_day = PUBLIC_FEEDS[name]
+class CoinbaseSource(_Archive):
+    """Coinbase Exchange public candles: 300 per request, newest first (time, low, high, open, close,
+    volume). Minutes without trades have no candle."""
 
-    def view(base):
-        t = replace(tier, history_days=base.crypto_venue_days) if base.crypto_venue_days else tier
-        return replace(base, tier=t, max_requests_per_run=per_run, max_requests_per_day=per_day, origin=base)
+    name = "coinbase"
+    assets = ("crypto",)
+    archival = False
+    PAGE = 300
+    EMPTY_RUN = 200  # empty windows in a row (1-minute candles: about six weeks) before the listing
+    STEPS = {("minute", 1): 60, ("minute", 5): 300, ("minute", 15): 900, ("hour", 1): 3600, ("hour", 6): 21600,
+             ("day", 1): 86400}
 
-    return view
+    def resolutions(self, asset: str) -> tuple[str, ...]:
+        return ("minute",) if asset == "crypto" else ()
+
+    def native_frames(self, asset: str) -> tuple[tuple[str, int], ...]:
+        return EXCHANGE_FRAMES if asset == "crypto" else ()
+
+    def covers(self, ticker: str) -> bool:
+        return ticker.upper().removeprefix("X:") in CRYPTO_PAIRS
+
+    def bar_pages(self, ticker, start, end, timespan, multiplier=1, descending=False, asset="crypto",
+                  limit: int | None = None) -> Iterator[list[dict]]:
+        if (timespan, multiplier) not in self.STEPS:
+            raise ValueError(f"Coinbase granularities: {tuple(self.STEPS)}")
+        base, quote = _pair(ticker)
+        step = self.STEPS[(timespan, multiplier)]
+        a, b = _bounds(start, end)
+        a_s, b_s = -(-a // 1000) // step * step, b // 1000
+        windows = []
+        t = a_s
+        while t < b_s:
+            windows.append((t, min(b_s, t + self.PAGE * step)))
+            t += self.PAGE * step
+        empty = 0
+        for lo, hi in (reversed(windows) if descending else windows):
+            if descending and empty >= self.EMPTY_RUN:
+                return  # this long with nothing, going back: before the pair was listed (the sync records the rest as empty)
+            iso = lambda s: datetime.fromtimestamp(s, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
+            rows = self.client.get(f"/products/{base}-{quote}/candles",
+                                   {"granularity": step, "start": iso(lo), "end": iso(hi - step)})
+            empty = 0 if rows else empty + 1
+            bars = [{"t": int(r[0]) * 1000, "o": float(r[3]), "h": float(r[2]), "l": float(r[1]), "c": float(r[4]),
+                     "v": float(r[5]), "vw": None, "n": None} for r in rows or [] if lo <= int(r[0]) < hi]
+            bars.sort(key=lambda x: -x["t"] if descending else x["t"])
+            yield Page(bars[:limit] if limit else bars, window=(lo * 1000, hi * 1000))
+            if limit:
+                return
+
+    def instrument(self, ticker: str, resolve_exchange: bool = True) -> Instrument:
+        base, quote = _pair(ticker)
+        return Instrument(ticker=base + quote, name=f"{base}/{quote} on Coinbase", details={"venue": "Coinbase"})
 
 
 @dataclass
@@ -62,7 +110,7 @@ class CoinbaseStream:
 
 
 PLUGIN = Provider(
-    version="1.1.0", api="1.5",  # its own release (its stream in it), and the contract it needs (Provider.live)
+    version="1.2.0", api="1.6",  # its own release (its stream and client in it), and the contract it needs
     name="coinbase", title="Coinbase",
     build=lambda settings, budget: CoinbaseSource(
         public_client("coinbase", "https://api.exchange.coinbase.com", settings, budget)),

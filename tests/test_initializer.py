@@ -11,7 +11,7 @@ from massive_collate import cli, initializer
 from massive_collate.collector import ET, sync
 from massive_collate.config import TIERS, load_settings, tier_for
 from massive_collate.errors import NotEntitled
-from massive_collate.sources.massive import MassiveSource
+from massive_collate.sources.plugins.massive.client import MassiveSource
 from massive_collate.storage import Store
 
 from .conftest import FakeSource

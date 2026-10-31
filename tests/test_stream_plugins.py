@@ -99,3 +99,10 @@ def test_a_live_feed_is_never_another_plugins(installed):
     why = " ".join(w for _, w in registry.errors())
     assert "live feed 'coinbase'" in why and "live feed 'massive'" in why
     assert registry.live_feeds()["coinbase"][0].name == "coinbase"
+
+
+def test_the_night_poller_keeps_real_time_without_a_clock_given():
+    from datetime import timezone
+
+    poller = BoatsPoller(client=None)  # as the recorder makes it (night_poller): the clock is its own
+    assert poller.now().tzinfo is timezone.utc  # it lost its `timezone` import once in the move (2026-10-31)

@@ -6,7 +6,7 @@ import pytest
 from massive_collate.config import ConfigError, load_settings
 from massive_collate.errors import BudgetExhausted, NotEntitled, RateLimited, SourceError
 from massive_collate.ratelimit import RateLimiter
-from massive_collate.sources.massive import MassiveClient
+from massive_collate.sources.plugins.massive.client import MassiveClient
 
 from .conftest import FakeResponse, FakeSession
 

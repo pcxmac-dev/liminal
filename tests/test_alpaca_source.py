@@ -6,7 +6,7 @@ import pytest
 from massive_collate.config import load_settings
 from massive_collate.errors import NotEntitled
 from massive_collate.sources import build_source
-from massive_collate.sources.alpaca import AlpacaClient, AlpacaSource, normalize_trade, _ns
+from massive_collate.sources.plugins.alpaca.client import AlpacaClient, AlpacaSource, _ns, normalize_trade
 
 from .conftest import FakeResponse, FakeSession
 

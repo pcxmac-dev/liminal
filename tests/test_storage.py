@@ -71,7 +71,7 @@ def test_interrupted_run_still_counts_its_requests(store):
 
 
 def test_client_reports_every_request():
-    from massive_collate.sources.massive import MassiveClient
+    from massive_collate.sources.plugins.massive.client import MassiveClient
 
     from .conftest import FakeResponse, FakeSession
 

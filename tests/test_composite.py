@@ -112,7 +112,8 @@ def test_audits_pair_only_feeds_of_the_same_market(store):
     store.watch_spec("coinbase", resolve("BTCUSD"))
     store.watch_spec("alpaca", resolve("BTCUSD"))
     store.add_coverage("alpaca", "BTCUSD", "minute", T0 - 10 * 86_400_000, T0)
-    from massive_collate.sources.public import CoinbaseSource, PublicClient
+    from massive_collate.sources.http import PublicClient
+    from massive_collate.sources.plugins.coinbase import CoinbaseSource
 
     src = CoinbaseSource(PublicClient("https://x.test"))
     now = datetime.fromtimestamp(T0 / 1000, timezone.utc)

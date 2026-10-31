@@ -132,8 +132,10 @@ it. The built-in ones are `sources/plugins/` (Massive, Alpaca with its overnight
 Bitstamp, Coinbase, Bitfinex, Cboe, Tiingo with its forex feed; the publishers: Federal, the federal
 agencies in one plugin (the Fed, New York Fed, SEC, BLS, Federal Register, CFTC: `plugins/federal/`),
 and Massive's headlines), one module each defining `PLUGIN` (Alpaca's and Tiingo's `PLUGINS`: two
-feeds each; Federal's `PUBLISHERS`); their data-source classes stay in `sources/massive.py`,
-`alpaca.py` and `public.py`. A module added to `sources/plugins/` is found on the next start; a
+feeds each; Federal's `PUBLISHERS`), each holding its own client, source classes, live streams
+and datasets (Massive, Alpaca and Tiingo as packages with a `client.py`; the user, 2026-10-31: "every
+external data provider must be in a plugin structure"), on the contract's shared pieces
+(`sources/http.py`, `archive.py`, `stream.py`, `dataset.py`). A module added to `sources/plugins/` is found on the next start; a
 provider shipped as its own package registers under the entry point group `massive_collate.providers`.
 A plugin that fails to load is left out and reported (`plugins`), never fatal.
 
@@ -199,7 +201,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     An unknown value is Starter.
 - **The plugin contract, versioned** (2026-10-29; the user: "eventually plugins will need to be in
   their own repo with their own version"). The app offers `registry.PLUGIN_API` (major.minor, now
-  1.5). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
+  1.6). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
   major.minor.patch) and the contract it was written for (`api`: a literal such as `"1.0"`, never
   `PLUGIN_API` itself, which would always match). At discovery a plugin written for another major,
   or for a newer minor than the app offers, is left out and reported with the ones that fail to
@@ -270,6 +272,17 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     from the plugins (`registry.partial_feeds`, `registry.live_feeds`). A live feed's name is its
     own provider's or one no other provider has; another plugin's is left out and reported. The
     stream helpers (`Reconnect`, `Refused`, `Notice`, `PING`, `trade`, `ns`) are the contract's.
+  - **1.6** (2026-10-31) adds `sources.http` (`HttpClient`: the HTTP client every plugin's client
+    builds on, its headers, its window or a window per asset class (`class_of`, Massive's), the
+    request and daily caps, pauses, retries with Retry-After, links on its own host only;
+    `PublicClient`, its keyless form that identifies itself; `SameHostSession`, `retry_delay`) and
+    `sources.archive` (`Archive`: a public feed's source; `bounds`, `ms`, `ET`, `CRYPTO_PAIRS`,
+    `crypto_pair`, `EXCHANGE_FRAMES`, `venue_view`). Each vendor's client and source classes are in
+    its plugin: `plugins/massive/client.py` (`MassiveClient`, `MassiveSource`), `plugins/alpaca/client.py`,
+    `plugins/tiingo/client.py`, and the exchanges' and Cboe's in their modules; `sources/massive.py`,
+    `alpaca.py` and `public.py` are gone, and Massive's base URL is its plugin's (`MASSIVE_BASE_URL`
+    only overrides it). No plugin imports another, and the app imports none by name
+    (`tests/test_plugin_boundary.py`).
   - **What a plugin may rely on (API 1.0)**, and nothing else of `massive_collate`:
     `sources.registry`: `PLUGIN_API`, `Provider`, `KeyVar`, `Scanned`, and `Report`, `Limits`,
     `Capability` for a `reporter`; the helpers `limiter`, `machine_caps`, `public_client`,
@@ -281,9 +294,10 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     and `Instrument` a source returns; `errors`: `SourceError`, `NotEntitled`, `Unauthorized`,
     `RateLimited`, `BudgetExhausted`. `config`: `Tier`, `ConfigError`, and `Settings` read only:
     `env` (the variables it declares), `offline`, `for_source(name)` and on that view `tier`,
-    `max_requests_per_run`, `max_requests_per_day`. The HTTP client the feeds' clients build on:
-    `sources.massive.MassiveClient` (retries, its limiter, the request budget, the rate-limit
-    headers seen) and its keyless form `sources.public.PublicClient` (`public_client`).
+    `max_requests_per_run`, `max_requests_per_day`. The HTTP client the feeds' clients build on
+    (1.6): `sources.http.HttpClient` (retries, its limiter, the request budget, the rate-limit
+    headers seen) and its keyless form `sources.http.PublicClient` (`public_client`); a public
+    feed's source base, `sources.archive.Archive`.
   - **The fields that matter across releases.** `name` is the feed's name everywhere (its database
     file, ledgers, watchlist rows, kept scans), so a release never renames it. `origin` is set by
     the registry, never by the plugin. `order` places it in lists (the built-in feeds 0-61, the
@@ -306,20 +320,21 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
 - **Splitting the built-ins into packages: the plan** (nothing split yet; the user decides first).
   1. *In this repository first*, so each plugin can leave without taking app code with it (each a
      minor of the API where it adds to the contract):
-     - the HTTP client every feed builds on out of `sources/massive.py` into the app
-       (`sources/http.py`, `MassiveClient` kept as its name), so Massive's plugin can leave alone;
+     - done (2026-10-31, API 1.6): the HTTP client every feed builds on out of `sources/massive.py`
+       into the app (`sources/http.py`: `HttpClient`, Massive's `MassiveClient` built on it), so
+       Massive's plugin can leave alone;
      - what the built-ins still reach outside the contract either into the contract or into the
        plugin: `config.PUBLIC_FEEDS` (each public feed's plan and caps, into its module),
        `ALPACA_TIERS` and `AlpacaSettings` (`settings.alpaca`, read from `settings.env` by the
        plugin), Massive's `TIERS`, `MASSIVE_CLASS_TIERS`, `asset_tier`, `tier_for`, `symbols.ASSETS`,
-       `sessions.ET`, `gov.FEDREG_URL`, `ratelimit.MachineLedger`, and Coinbase's `venue_view`,
-       which Bitfinex borrows (into `registry`);
-     - the app's own modules that still name a provider (some 40 lines on 2026-10-29: `live.py`'s
-       streams and Alpaca's trade parsing, `config.py`, `cli.py`'s Massive plan commands,
+       `sessions.ET`, `gov.FEDREG_URL`, `ratelimit.MachineLedger` (Coinbase's `venue_view`, which
+       Bitfinex borrowed: done, into `sources.archive`);
+     - the app's own modules that still name a provider (some 40 lines on 2026-10-29; `live.py`'s
+       streams and Alpaca's trade parsing done 2026-10-31, API 1.5: `config.py`, `cli.py`'s Massive plan commands,
        `gui/venues.py`, `gui/server.py`, `storage/directory.py`, `deps.py`, `freshness.py` ...) read it
        from the plugin's record instead (new fields, a minor each);
-     - each source class next to its plugin (`MassiveSource`, `sources/alpaca.py`, the public
-       venues' classes in `sources/public.py`), with its tests.
+     - done (2026-10-31, API 1.6): each source class next to its plugin (`MassiveSource`,
+       `sources/alpaca.py`, the public venues' classes in `sources/public.py`).
   2. *Then one repository and package per vendor*, its own version from 1.0.0 (tags `v1.0.0`), its
      own tests run against the app installed (the fakes it needs from `tests/conftest.py` copied
      in), its own changelog, depending on `massive-collate` from the release offering its API up to
@@ -446,7 +461,7 @@ sourcing` shows the reports and the plan (no requests).
 US stocks trade overnight on Blue Ocean ATS, 20:00-04:00 ET, Sunday to Thursday nights before a
 trading day; the consolidated tape (Massive, Alpaca's SIP) carries none of it.
 
-- **Its feed:** `boats` (sources/plugins/alpaca.py's `BOATS`, part of the Alpaca plugin; `BoatsSource`): Alpaca's market data with
+- **Its feed:** `boats` (sources/plugins/alpaca/'s `BOATS`, part of the Alpaca plugin; `BoatsSource`): Alpaca's market data with
   `feed=boats`, minute bars, on the free Basic plan up to 15 minutes ago. Its own market, one
   venue: ranked last in a chart of all feeds (live.PARTIAL_FEEDS, like IEX), so its bars show
   where no feed of the whole market has any: the nights. It uses Alpaca's keys and shares Alpaca's

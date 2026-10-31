@@ -9,7 +9,10 @@ from massive_collate.config import ALPACA_TIERS, PUBLIC_FEEDS, TIERS
 from massive_collate.coverage import FeedProfile, ms, plan
 from massive_collate.errors import NotEntitled
 from massive_collate.sources import supports
-from massive_collate.sources.public import BitstampSource, CboeSource, PublicClient, TiingoSource, split_adjust
+from massive_collate.sources.http import PublicClient
+from massive_collate.sources.plugins.bitstamp import BitstampSource
+from massive_collate.sources.plugins.cboe import CboeSource
+from massive_collate.sources.plugins.tiingo.client import TiingoSource, split_adjust
 from massive_collate.symbols import resolve
 
 from .conftest import FakeResponse, FakeSession, FakeSource
@@ -152,7 +155,8 @@ def test_closed_feeds_are_not_started_and_can_be_reopened(tmp_path, monkeypatch,
 
 
 def test_the_exchanges_send_five_minute_and_hourly_candles():
-    from massive_collate.sources.public import BitfinexSource, CoinbaseSource
+    from massive_collate.sources.plugins.bitfinex import BitfinexSource
+    from massive_collate.sources.plugins.coinbase import CoinbaseSource
 
     t0 = int(datetime(2024, 1, 1, tzinfo=timezone.utc).timestamp())
     lo, hi = datetime.fromtimestamp(t0, timezone.utc), datetime.fromtimestamp(t0 + 3600, timezone.utc)

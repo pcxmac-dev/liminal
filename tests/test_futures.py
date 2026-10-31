@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from massive_collate.futures import continuous, roll_schedule, session_dates
-from massive_collate.sources.massive import normalize_future_bar
+from massive_collate.sources.plugins.massive.client import normalize_future_bar
 
 ET = "America/New_York"
 

@@ -93,7 +93,7 @@ def test_a_reply_missing_many_listings_retires_none(store):
 
 
 def test_futures_products_are_asked_for_one_day():
-    from massive_collate.sources.massive import MassiveSource
+    from massive_collate.sources.plugins.massive.client import MassiveSource
 
     class Client:
         requests_made = 0

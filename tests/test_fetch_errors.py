@@ -15,8 +15,10 @@ from massive_collate.config import TIERS, load_settings
 from massive_collate.errors import BudgetExhausted, NotEntitled, Paused, SourceError
 from massive_collate.models import Instrument
 from massive_collate.sources import rate_window
-from massive_collate.sources.massive import MassiveClient
-from massive_collate.sources.public import CoinbaseSource, PublicClient, bitfinex_symbol
+from massive_collate.sources.plugins.massive.client import MassiveClient
+from massive_collate.sources.http import PublicClient
+from massive_collate.sources.plugins.bitfinex import bitfinex_symbol
+from massive_collate.sources.plugins.coinbase import CoinbaseSource
 from massive_collate.storage import Store
 
 from .conftest import FakeResponse, FakeSession, FakeSource

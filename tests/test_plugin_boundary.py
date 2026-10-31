@@ -17,10 +17,6 @@ FOR_PEOPLE = {
 }
 # still to move into their plugins (emptied piece by piece)
 STILL_TO_MOVE = {
-    ("config.py", "api.massive.com"),
-    ("sources/massive.py", "api.massive.com"),
-    ("sources/alpaca.py", "data.alpaca.markets"), ("sources/alpaca.py", "api.alpaca.markets"),
-    ("sources/alpaca.py", "paper-api.alpaca.markets"),
     ("gov.py", "www.federalregister.gov"),
 }
 
@@ -45,5 +41,43 @@ def test_the_datasets_and_the_live_streams_hosts_are_their_plugins():
     found = {h for _, h in hosts_named()}
     for host in ("mba.tuck.dartmouth.edu", "www.cftc.gov", "raw.githubusercontent.com",  # datasets (API 1.4)
                  "ws-feed.exchange.coinbase.com", "ws.bitstamp.net", "stream.data.alpaca.markets",  # streams (1.5)
-                 "api.tiingo.com"):
+                 "api.tiingo.com",
+                 "api.massive.com", "data.alpaca.markets", "api.alpaca.markets"):  # the vendors' clients (1.6)
         assert host not in found, host
+
+
+def _imports(path: Path) -> set[str]:
+    """The modules a file imports, relative imports resolved (massive_collate.sources.http ...)."""
+    import ast
+
+    rel = path.relative_to(SRC.parent).with_suffix("")
+    parts = list(rel.parts)
+    package = parts[:-1] if parts[-1] != "__init__" else parts[:-1]
+    out = set()
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            out |= {a.name for a in node.names}
+        elif isinstance(node, ast.ImportFrom):
+            base = package[:len(package) - (node.level - 1)] if node.level else []
+            mod = [*base, *(node.module.split(".") if node.module else [])]
+            out |= {".".join(mod)} | {".".join([*mod, a.name]) for a in node.names}
+    return out
+
+
+def _plugin_of(module: str) -> str | None:
+    bits = module.split(".")
+    return bits[3] if bits[:3] == ["massive_collate", "sources", "plugins"] and len(bits) > 3 else None
+
+
+def test_plugins_are_self_contained():
+    """Each plugin keeps to itself (memory: plugins move to their own repositories): it imports no
+    other plugin, and the app imports none by name (it reads them from the registry)."""
+    for path in SRC.rglob("*.py"):
+        rel = path.relative_to(SRC).as_posix()
+        mine = _plugin_of("massive_collate." + rel[:-3].replace("/", "."))
+        if rel.startswith("sources/plugins/") and rel != "sources/plugins/__init__.py":
+            others = {_plugin_of(m) for m in _imports(path)} - {None, mine}
+            assert not others, f"{rel} imports another plugin: {others}"
+        elif not rel.startswith("sources/plugins/"):
+            named = {m for m in _imports(path) if _plugin_of(m)}
+            assert not named, f"{rel} imports a plugin by name: {named}"

@@ -7,12 +7,12 @@ Its headlines are a publisher in this plugin (PUBLISHER, part_of="massive": list
 read by publications.py every 30 minutes), on this feed's key and limits."""
 from __future__ import annotations
 
-from ...config import MASSIVE_CLASS_TIERS, TIERS, asset_tier, tier_for
-from ...ratelimit import MachineLedger, RateLimiter
-from ...symbols import ASSETS
-from ..massive import PAGE_LIMIT, MassiveClient, MassiveSource
-from ..publisher import Feed, Policy, Publisher
-from ..registry import KeyVar, Provider, Scanned, limiter, machine_caps, minute_window
+from ....config import MASSIVE_CLASS_TIERS, TIERS, asset_tier, tier_for
+from ....ratelimit import MachineLedger, RateLimiter
+from ....symbols import ASSETS
+from ...publisher import Feed, Policy, Publisher
+from ...registry import KeyVar, Provider, Scanned, limiter, machine_caps, minute_window
+from .client import BASE_URL, PAGE_LIMIT, MassiveClient, MassiveSource
 
 # plan_reach's answers, and the plans that have each (config.tier_for)
 REACH = {"day_3y": "stock daily bars 3 years back (Starter and up)",
@@ -31,7 +31,7 @@ def build(settings, request_budget, max_retries: int = 4):
     key = settings.require_api_key()
     client = MassiveClient(
         key,
-        base_url=settings.base_url,
+        base_url=settings.base_url or BASE_URL,  # MASSIVE_BASE_URL, else its own
         rate_limiter=limiter("massive", settings, key),
         request_budget=request_budget,
         max_retries=max_retries,
@@ -57,7 +57,7 @@ def scan(source) -> Scanned:
 
 
 PLUGIN = Provider(
-    version="1.1.0", api="1.0",  # its own release (its headlines part of it), and the contract it was written for
+    version="1.2.0", api="1.6",  # its own release (its client in it), and the contract it needs (sources.http)
     name="massive", title="Massive", build=build, assets=frozenset(ASSETS), order=0,
     about="stocks, indices, currencies, crypto and futures: 1-second and minute bars, reference data, news",
     keys=(KeyVar("MASSIVE_API_KEY"),), signup="massive.com: your dashboard's API keys",
@@ -98,10 +98,10 @@ def read_headlines(ctx) -> int:
 
 
 PUBLISHER = Publisher(
-    version="1.1.0", api="1.3",  # the plugin's release, and the contract it needs (part_of a feed plugin)
+    version="1.2.0", api="1.3",  # the plugin's release, and the contract it needs (part_of a feed plugin)
     name="massive-news", title="Massive headlines", order=300, kind="vendor", account="massive", part_of="massive",
     about="news headlines for the News view and the globe's ticker, on Massive's key and limits",
-    feeds=(Feed("massive-news", "Massive", "Headlines", "https://api.massive.com/v2/reference/news", "headlines",
+    feeds=(Feed("massive-news", "Massive", "Headlines", f"{BASE_URL}/v2/reference/news", "headlines",
                 every_minutes=30, moments=False),),
     policy=Policy(min_minutes=30, per_day=60, terms="your Massive plan's terms; one request a read",
                   terms_url="https://massive.com/terms"),

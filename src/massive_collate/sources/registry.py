@@ -68,7 +68,10 @@ DEFAULT_PER_REQUEST = 1000  # bars a request returns, for a provider that does n
 # 1.5 (2026-10-31): Provider.live (sources/stream.py: Live), each live stream or poller declared by
 #   its plugin (Coinbase's, Bitstamp's, Alpaca's IEX, Tiingo's Blue Ocean nights); Provider.partial,
 #   a feed of one venue's share of the market (Alpaca's Blue Ocean).
-PLUGIN_API = "1.5"
+# 1.6 (2026-10-31): sources.http (HttpClient, PublicClient: the HTTP client every plugin's builds on)
+#   and sources.archive (Archive, a public feed's source, and what the exchanges share); each
+#   vendor's client in its plugin (Massive's, Alpaca's, Tiingo's, the exchanges' and Cboe's).
+PLUGIN_API = "1.6"
 
 
 def api_version(api) -> tuple[int, int]:
@@ -410,7 +413,7 @@ def machine_caps(client, name: str, settings: "Settings", key: str | None = None
 
 def public_client(name: str, base_url: str, settings: "Settings", request_budget: int | None):
     """A keyless public feed's client (its limits are per address: the machine's)."""
-    from .public import PublicClient
+    from .http import PublicClient
 
     client = PublicClient(base_url, rate_limiter=limiter(name, settings), request_budget=request_budget)
     return machine_caps(client, name, settings)

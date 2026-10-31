@@ -21,11 +21,11 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from ..errors import NotEntitled
-from ..models import Exchange, Instrument, Stock, country, exchange_mic
-from ..ratelimit import RateLimiter
-from .base import DataSource
-from .massive import MassiveClient
+from ....errors import NotEntitled
+from ....models import Exchange, Instrument, Stock, country, exchange_mic
+from ....ratelimit import RateLimiter
+from ...base import DataSource
+from ...http import HttpClient
 
 DATA_URL = "https://data.alpaca.markets"
 TRADING_URLS = {True: "https://paper-api.alpaca.markets", False: "https://api.alpaca.markets"}
@@ -50,17 +50,17 @@ TAPES = {"A": 1, "B": 2, "C": 3}
 DROPPED_UPDATES = {"canceled", "incorrect"}  # trades later withdrawn by the exchange
 
 
-class AlpacaClient(MassiveClient):
-    """Same caps, rate limiting and retries as Massive's client; Alpaca's key headers and
+class AlpacaClient(HttpClient):
+    """The app's HTTP client (its caps, rate limiting and retries) with Alpaca's key headers and
     page tokens. Links are only followed to Alpaca's own hosts."""
 
     def __init__(self, key_id: str | None, secret_key: str | None, trading_url: str = TRADING_URLS[True],
                  base_url: str = DATA_URL, rate_limiter: RateLimiter | None = None,
                  session: requests.Session | None = None, sleep: Callable[[float], None] = time.sleep,
                  request_budget: int | None = None):
-        super().__init__("", base_url=base_url, rate_limiter=rate_limiter, session=session, sleep=sleep,
+        super().__init__(base_url, {"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": secret_key}
+                         if key_id and secret_key else {}, rate_limiter=rate_limiter, session=session, sleep=sleep,
                          request_budget=request_budget)
-        self._headers = {"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": secret_key} if key_id and secret_key else {}
         self.has_keys = bool(self._headers)
         self.trading_url = trading_url.rstrip("/")
         self._hosts = {self._host, urlparse(self.trading_url).netloc}

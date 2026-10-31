@@ -114,7 +114,7 @@ def test_a_minute_cut_by_a_stopped_run_is_built_when_its_ticks_are_complete(stor
 
 
 def test_alpaca_crypto_ticks_need_no_key():
-    from massive_collate.sources.alpaca import AlpacaClient, AlpacaSource
+    from massive_collate.sources.plugins.alpaca.client import AlpacaClient, AlpacaSource
 
     session = FakeSession([FakeResponse(200, {"trades": {"BTC/USD": [
         {"i": 7, "p": 81658, "s": 0.0004, "t": "2026-10-22T12:00:00.200261576Z", "tks": "B"}]}, "next_page_token": None})])

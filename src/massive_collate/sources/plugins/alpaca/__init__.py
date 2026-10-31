@@ -16,10 +16,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field, replace
 
-from ...config import ALPACA_TIERS, ConfigError
-from ..alpaca import PAGE_LIMIT, TRADING_URLS, AlpacaClient, AlpacaSource, BoatsSource, normalize_trade
-from ..registry import KeyVar, Provider, Scanned, limiter, machine_caps
-from ..stream import PING, Live, Notice, Refused
+from ....config import ALPACA_TIERS, ConfigError
+from ...registry import KeyVar, Provider, Scanned, limiter, machine_caps
+from ...stream import PING, Live, Notice, Refused
+from .client import PAGE_LIMIT, TRADING_URLS, AlpacaClient, AlpacaSource, BoatsSource, normalize_trade
 
 IEX_FEED = "iex"  # its live stream's feed: IEX's trades, one venue's share (alpaca (iex))
 
@@ -142,7 +142,7 @@ def stream_keys(settings) -> tuple[str, str] | None:
 
 
 ALPACA = Provider(
-    version="1.2.0", api="1.5",  # its own release (its stream in it), and the contract it needs (Provider.live)
+    version="1.3.0", api="1.6",  # its own release (its stream and client in it), and the contract it needs
     name="alpaca", title="Alpaca", build=build, assets=frozenset({"stock", "crypto"}), order=10,
     about="US stocks (SIP from 2016, the session up to 15 min ago, IEX live; overnight on Blue Ocean) with keys; "
           "crypto without",
@@ -183,7 +183,7 @@ def boats_scan(source) -> list[tuple[str, bool, str]]:
 
 
 BOATS = Provider(
-    version="1.2.0", api="1.5",  # this plugin's release, and the contract it needs (part_of; partial)
+    version="1.3.0", api="1.6",  # this plugin's release, and the contract it needs (part_of; partial)
     name="boats", title="Blue Ocean", build=build_boats, assets=frozenset({"stock"}), order=15, account="alpaca",
     part_of="alpaca", partial=True,  # one venue's nights: never the whole market's
     about="US stocks overnight, 20:00-04:00 ET, Blue Ocean ATS through Alpaca (your Alpaca keys and limits)",

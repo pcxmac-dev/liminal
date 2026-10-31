@@ -10,7 +10,7 @@ Settings come from environment variables, optionally loaded from a `.env` file
                       (Massive sells one per class; default: free)
     MASSIVE_RPM       override the tier's requests-per-minute limit (0 = unlimited)
     MASSIVE_DB        path of the SQLite database (default: ~/MassiveData/massive.db)
-    MASSIVE_BASE_URL  API base URL (default: https://api.massive.com)
+    MASSIVE_BASE_URL  API base URL (default: Massive's own, its plugin's)
     MASSIVE_MAX_REQUESTS_PER_RUN   hard cap on API requests in one command (default: 250)
     MASSIVE_MAX_REQUESTS_PER_DAY   hard cap on API requests per day, all runs (default: 2000)
     MASSIVE_REFRESH_HOURS  extra minimum hours between refreshes of a backfilled symbol (default: 0;
@@ -71,7 +71,6 @@ from datetime import date
 from pathlib import Path
 from typing import Mapping, MutableMapping
 
-DEFAULT_BASE_URL = "https://api.massive.com"
 # Stock data lives on this machine, outside the repository, so it never ends up in git.
 DEFAULT_DB_PATH = Path.home() / "MassiveData" / "massive.db"
 
@@ -164,7 +163,7 @@ class Settings:
     api_key: str | None = field(repr=False)  # never in a repr (a log line, a traceback's locals)
     tier: Tier
     db_path: Path
-    base_url: str = DEFAULT_BASE_URL
+    base_url: str = ""  # MASSIVE_BASE_URL; empty: Massive's own (its plugin's)
     max_requests_per_run: int = 250
     max_requests_per_day: int = 2000
     refresh_hours: float = 0.0
@@ -412,7 +411,7 @@ def load_settings(
         api_key=_key(merged, "MASSIVE_API_KEY"),
         tier=tier,
         db_path=Path(merged["MASSIVE_DB"]).expanduser() if merged.get("MASSIVE_DB") else DEFAULT_DB_PATH,
-        base_url=(merged.get("MASSIVE_BASE_URL") or DEFAULT_BASE_URL).rstrip("/"),
+        base_url=(merged.get("MASSIVE_BASE_URL") or "").rstrip("/"),
         max_requests_per_run=250 if per_run is None else per_run,
         max_requests_per_day=2000 if per_day is None else per_day,
         refresh_hours=float(refresh or 0),

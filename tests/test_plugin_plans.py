@@ -14,7 +14,7 @@ from massive_collate import cli, collector, sourcing
 from massive_collate.config import Settings, TIERS, load_settings, with_detected
 from massive_collate.errors import NotEntitled
 from massive_collate.sources import build_source, feed_profiles, providers
-from massive_collate.sources.alpaca import AlpacaSource
+from massive_collate.sources.plugins.alpaca.client import AlpacaSource
 from massive_collate.sources.registry import Scanned
 from massive_collate.storage import Store
 
