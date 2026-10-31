@@ -10,7 +10,12 @@ import pytest
 import requests
 
 from massive_collate import datasets
-from massive_collate.datasets import DATASETS, due_files, fetch, parse_cot, parse_french, status
+from massive_collate.datasets import DATASETS, due_files, fetch, status
+from massive_collate.sources import dataset as sdk
+from massive_collate.sources.plugins import datahub, french
+from massive_collate.sources.plugins.federal import cftc
+from massive_collate.sources.plugins.federal.cftc import parse_cot
+from massive_collate.sources.plugins.french import parse_french
 from massive_collate.storage import Store
 
 TODAY = date(2026, 10, 23)
@@ -150,7 +155,7 @@ def test_fetch_keeps_each_provider_in_its_own_file(tmp_path):
         assert any("deacot2026.zip not published yet" in l for l in lines)
         files = store.dataset_files("cftc-cot-legacy")
         assert len(files) == 10 and all(f["closed"] for f in files.values())  # past years and the archive: final
-        assert not store.dataset_files("french-3-factors-daily")[datasets.FRENCH + "F-F_Research_Data_Factors_daily_CSV.zip"]["closed"]
+        assert not store.dataset_files("french-3-factors-daily")[french.FRENCH + "F-F_Research_Data_Factors_daily_CSV.zip"]["closed"]
         series = {r["series"]: r for r in store.dataset_series("cftc", "cftc-cot-legacy")}
         assert series["001602:open_interest"]["n"] == 10  # one value per year file
         assert store.dataset_values("french", "french-3-factors-daily", "SMB")["value"].tolist() == [-0.25, -0.33, 0.12]
@@ -167,7 +172,7 @@ def test_fetch_keeps_each_provider_in_its_own_file(tmp_path):
         again = _Session(_web)
         fetch(store, ["cftc-cot-legacy", "french-3-factors-daily"], today=TODAY + timedelta(days=3), session=again,
               log=lines.append)
-        assert again.calls == [datasets.CFTC + "deacot2026.zip"]  # the one never fetched
+        assert again.calls == [cftc.CFTC + "deacot2026.zip"]  # the one never fetched
         fetch(store, ["french-3-factors-daily"], today=TODAY + timedelta(days=31), session=again, log=lines.append)
         assert again.calls[-1].endswith("F-F_Research_Data_Factors_daily_CSV.zip")  # due after 30 days
 
@@ -193,13 +198,13 @@ def test_scheduled_refresh_never_starts_a_dataset(store):
 def test_due_files_force_skips_closed(store):
     ds = DATASETS["cftc-cot-legacy"]
     fetch(store, ["cftc-cot-legacy"], today=TODAY, session=_Session(_web), log=lambda *_: None)
-    assert due_files(store, ds, TODAY, force=True) == [(datasets.CFTC + "deacot2026.zip", False)]
+    assert due_files(store, ds, TODAY, force=True) == [(cftc.CFTC + "deacot2026.zip", False)]
     with pytest.raises(ValueError):
         store.save_dataset_version("../x", "x", datasets.Parsed(), 0, "test")
 
 
 def test_commodities_skip_missing_cells():
-    parsed = datasets.parse_commodities("c.csv", b"Date,All Commodity Price Index,Gold\n1980-02-01,nan,35.2\n"
+    parsed = datahub.parse_commodities("c.csv", b"Date,All Commodity Price Index,Gold\n1980-02-01,nan,35.2\n"
                                                  b"1980-03-01,101.5,\n")
     assert sorted((s, v) for s, _, v in parsed.values) == [("All Commodity Price Index", 101.5), ("Gold", 35.2)]
     assert parsed.series["Gold"][1] == "USD (nominal)" and parsed.series["All Commodity Price Index"][1] == "index (2005 = 100)"
@@ -288,13 +293,13 @@ def test_a_first_import_is_dated_by_the_publication_rule_never_after_the_file(st
 
 
 def test_publication_rules():
-    tue = datasets._at(date(2026, 10, 20))  # COT as of Tuesday 20 Oct
-    assert datetime.fromtimestamp(datasets._cot_published(tue) / 1000, datasets.ET) == datetime(
-        2026, 10, 23, 15, 30, tzinfo=datasets.ET)  # Friday 15:30 ET
-    aug = datasets._at(date(2026, 8, 17))
-    assert datasets._day_of(datasets._months_after(2, 15)(aug)) == date(2026, 10, 15)  # French: mid-month after next
-    dec = datasets._at(date(2026, 12, 1))
-    assert datasets._day_of(datasets._months_after(1, 2)(dec)) == date(2027, 1, 2)  # across the year
+    tue = sdk.at(date(2026, 10, 20))  # COT as of Tuesday 20 Oct
+    assert datetime.fromtimestamp(cftc.cot_published(tue) / 1000, sdk.ET) == datetime(
+        2026, 10, 23, 15, 30, tzinfo=sdk.ET)  # Friday 15:30 ET
+    aug = sdk.at(date(2026, 8, 17))
+    assert sdk.day_of(sdk.months_after(2, 15)(aug)) == date(2026, 10, 15)  # French: mid-month after next
+    dec = sdk.at(date(2026, 12, 1))
+    assert sdk.day_of(sdk.months_after(1, 2)(dec)) == date(2027, 1, 2)  # across the year
 
 
 def test_index_members_join_and_leave_point_in_time(store):
@@ -302,12 +307,12 @@ def test_index_members_join_and_leave_point_in_time(store):
         return datasets.Parsed(constituents=[{"index": "S&P 500", "ticker": t, "name": t, "sector": "Technology",
                                               "added": "2020-03-02" if t == "AAA" else None} for t in tickers])
 
-    store.save_dataset_version("sp500", "sp", members("AAA", "BBB"), datasets._at(date(2026, 1, 5)), "c1")
-    counts = store.save_dataset_version("sp500", "sp", members("AAA", "CCC"), datasets._at(date(2026, 6, 1)), "c2")
+    store.save_dataset_version("sp500", "sp", members("AAA", "BBB"), sdk.at(date(2026, 1, 5)), "c1")
+    counts = store.save_dataset_version("sp500", "sp", members("AAA", "CCC"), sdk.at(date(2026, 6, 1)), "c2")
     assert (counts["joined"], counts["left"]) == (1, 1)
     assert set(store.constituents("sp500", "S&P 500")) == {"AAA", "CCC"}
-    assert set(store.constituents("sp500", "S&P 500", as_of=datasets._at(date(2026, 3, 1)))) == {"AAA", "BBB"}
-    assert set(store.constituents("sp500", "S&P 500", as_of=datasets._at(date(2021, 1, 1)))) == {"AAA"}  # date added
+    assert set(store.constituents("sp500", "S&P 500", as_of=sdk.at(date(2026, 3, 1)))) == {"AAA", "BBB"}
+    assert set(store.constituents("sp500", "S&P 500", as_of=sdk.at(date(2021, 1, 1)))) == {"AAA"}  # date added
 
 
 def test_downloads_are_kept_with_their_checksum_and_dated_by_last_modified(tmp_path):
@@ -355,13 +360,13 @@ def test_a_github_dataset_is_imported_commit_by_commit(tmp_path, monkeypatch):
     with Store(tmp_path / "m.db") as store:
         done = fetch(store, ["shiller-us-market-monthly"], today=TODAY, log=lambda *_: None)
         assert done == {"shiller-us-market-monthly": 3}
-        name, jan24 = "shiller-us-market-monthly", datasets._at(date(2024, 1, 1))
+        name, jan24 = "shiller-us-market-monthly", sdk.at(date(2024, 1, 1))
         versions = store.dataset_versions("shiller", name, "PE10", jan24)
         assert [(v["value"], v["available_at"]) for v in versions] == [
-            (31.1, datasets._at(date(2024, 2, 2)) if datasets._at(date(2024, 2, 2)) < ms("2024-02-01T04:00:00+00:00")
+            (31.1, sdk.at(date(2024, 2, 2)) if sdk.at(date(2024, 2, 2)) < ms("2024-02-01T04:00:00+00:00")
              else ms("2024-02-01T04:00:00+00:00")),  # the first commit: the rule, capped at the commit
             (31.3, ms("2024-04-01T04:00:00+00:00"))]  # revised by the third commit, at its time
-        feb = store.dataset_versions("shiller", name, "SP500", datasets._at(date(2024, 2, 1)))
+        feb = store.dataset_versions("shiller", name, "SP500", sdk.at(date(2024, 2, 1)))
         assert [v["available_at"] for v in feb] == [ms("2024-03-01T04:00:00+00:00")]  # new in the second commit
         mid_march = store.dataset_values("shiller", name, "PE10", as_of=ms("2024-03-15T00:00:00+00:00"))
         assert mid_march["value"].tolist() == [17.05, 31.1, 32.2]  # February's value came on 1 March; 31.3 not yet
@@ -378,17 +383,17 @@ def test_values_stored_before_versioning_are_carried_over(tmp_path):
         c.execute("CREATE TABLE observations (dataset TEXT NOT NULL, series TEXT NOT NULL, ts INTEGER NOT NULL, "
                   "value REAL NOT NULL, PRIMARY KEY (dataset, series, ts)) WITHOUT ROWID")
         c.execute("INSERT INTO observations VALUES ('cftc-cot-legacy', '001602:open_interest', ?, 400000)",
-                  (datasets._at(date(2026, 10, 20)),))
+                  (sdk.at(date(2026, 10, 20)),))
     with Store(tmp_path / "m.db") as store:
         datasets.upgrade_legacy(store, log=lambda *_: None)
-        got = store.dataset_versions("cftc", "cftc-cot-legacy", "001602:open_interest", datasets._at(date(2026, 10, 20)))
+        got = store.dataset_versions("cftc", "cftc-cot-legacy", "001602:open_interest", sdk.at(date(2026, 10, 20)))
         assert [v["value"] for v in got] == [400000.0]
-        assert got[0]["available_at"] <= datasets._cot_published(datasets._at(date(2026, 10, 20)))
+        assert got[0]["available_at"] <= cftc.cot_published(sdk.at(date(2026, 10, 20)))
         assert store.dataset_legacy("cftc") == ([], [])
 
 
 def test_shiller_dates_in_every_format_the_files_have_used():
-    d = datasets._shiller_date
+    d = datahub.shiller_date
     assert [d("2026-09-01"), d("1871.01"), d("1871.1"), d("1871.04166"), d("1871.95833")] == [
         date(2026, 9, 1), date(1871, 1, 1), date(1871, 10, 1), date(1871, 1, 1), date(1871, 12, 1)]
 

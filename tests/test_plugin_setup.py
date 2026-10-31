@@ -50,7 +50,7 @@ def test_massive_headlines_are_part_of_the_massive_plugin():
     rows = {r["name"]: r for r in registry.menu()}
     assert [p["name"] for p in rows["massive"]["publishers"]] == ["massive-news"]
     assert all(r["publishers"] == [] for n, r in rows.items() if n != "massive")
-    assert [r["name"] for r in registry.publisher_menu()] == ["federal"]  # no longer a plugin of its own
+    assert "massive-news" not in [r["name"] for r in registry.publisher_menu()]  # no longer a plugin of its own
     view = {p["name"]: p for p in publications.view(GovDB(None), publishers=pubs)}
     assert view["massive-news"]["partOf"] == "massive" and view["fed"]["partOf"] == "federal"
 

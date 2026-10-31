@@ -61,7 +61,10 @@ DEFAULT_PER_REQUEST = 1000  # bars a request returns, for a provider that does n
 # 1.3 (2026-10-31): Publisher.keys and KeyVar.secret, KeyVar.hint: every variable a plugin reads
 #   declared by it, set from the Plugins view; Publisher.part_of may name a feed plugin (Massive's
 #   headlines, under Massive).
-PLUGIN_API = "1.3"
+# 1.4 (2026-10-31): Publisher.datasets holds the Dataset definitions themselves (sources/dataset.py:
+#   files, parser, publication rule), read only from its hosts and stopped by its pause; a library of
+#   datasets is a publisher with no feeds (Ken French's, Datahub's; the CFTC's in Federal).
+PLUGIN_API = "1.4"
 
 
 def api_version(api) -> tuple[int, int]:
@@ -593,7 +596,11 @@ def discover_all() -> tuple[dict[str, Provider], dict[str, Publisher], list[tupl
     out: dict[str, Provider] = {}
     pubs: dict[str, Publisher] = {}
     keys: dict[str, str] = {}  # a feed's key -> its publisher (keys name the state kept)
-    for p in sorted(found, key=lambda p: (p.order, p.name)):
+    sets: dict[str, str] = {}  # a dataset's name -> its publisher (names its state and versions)
+    files: dict[str, str] = {}  # a dataset's file (Dataset.provider: datasets/<provider>.db) -> its publisher
+    # the built-ins first, so an installed package never takes the name, a feed or a dataset of one
+    # (whatever its order); all listed in their order after
+    for p in sorted(found, key=lambda p: (p.origin != "built in", p.order, p.name)):
         mine = pubs if isinstance(p, Publisher) else out
         if p.name in out or p.name in pubs:
             first = (out.get(p.name) or pubs[p.name]).origin
@@ -605,9 +612,20 @@ def discover_all() -> tuple[dict[str, Provider], dict[str, Publisher], list[tupl
             if clash:
                 errors.append((p.origin, f"publisher {p.name!r}: feed {clash!r} is {keys[clash]!r}'s already"))
                 continue
+            clash = next((d.name for d in p.declared if d.name in sets), None)
+            if clash:
+                errors.append((p.origin, f"publisher {p.name!r}: dataset {clash!r} is {sets[clash]!r}'s already"))
+                continue
+            clash = next((d.provider for d in p.declared if files.get(d.provider, p.name) != p.name), None)
+            if clash:
+                errors.append((p.origin, f"publisher {p.name!r}: the datasets file {clash!r} is {files[clash]!r}'s"))
+                continue
             keys.update({f.key: p.name for f in p.feeds})
+            sets.update({d.name: p.name for d in p.declared})
+            files.update({d.provider: p.name for d in p.declared})
         mine[p.name] = p
-    return out, pubs, errors
+    in_order = lambda d: dict(sorted(d.items(), key=lambda kv: (kv[1].order, kv[0])))  # noqa: E731
+    return in_order(out), in_order(pubs), errors
 
 
 def providers() -> dict[str, Provider]:
@@ -748,7 +766,7 @@ def menu(settings: "Settings | None" = None) -> list[dict]:
 
 def _publisher_row(p: Publisher) -> dict:
     return {"name": p.name, "title": p.title, "about": p.about, "kind": p.kind, "account": p.account,
-            "origin": p.origin, "version": p.version, "api": p.api, "datasets": list(p.datasets),
+            "origin": p.origin, "version": p.version, "api": p.api, "datasets": list(p.dataset_names),
             "keys": [key_row(k) for k in p.keys]}
 
 

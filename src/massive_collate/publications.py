@@ -79,6 +79,19 @@ def blocked(host: str) -> bool:
     return any(host == b or host.endswith("." + b) for b in BLOCKED_HOSTS)
 
 
+def url_refusal(pub: Publisher, url: str) -> str | None:
+    """Why a URL may not be read for a publisher, its feeds or its datasets (None: it may): HTTPS
+    only, never a blocked site, and only the hosts it names."""
+    parts, host = urlsplit(url), host_of(url)
+    if parts.scheme != "https":
+        return f"not HTTPS ({parts.scheme or 'no scheme'})"
+    if blocked(host):
+        return f"{host}'s terms bar programs: never read"
+    if host not in pub.policy.hosts:
+        return f"{host or 'no host'} is not one of its hosts ({', '.join(pub.policy.hosts) or 'none'})"
+    return None
+
+
 def _header(r, name: str) -> str | None:
     """A response header by name, whatever its case (a plain dict in tests)."""
     return next((v for k, v in (getattr(r, "headers", None) or {}).items() if k.lower() == name.lower()), None)
@@ -460,14 +473,7 @@ class Reader:
 
     def refusal(self, pub: Publisher, url: str) -> str | None:
         """Why a URL may not be read by this publisher (None: it may)."""
-        parts, host = urlsplit(url), host_of(url)
-        if parts.scheme != "https":
-            return f"not HTTPS ({parts.scheme or 'no scheme'})"
-        if blocked(host):
-            return f"{host}'s terms bar programs: never read"
-        if host not in pub.policy.hosts:
-            return f"{host or 'no host'} is not one of its hosts ({', '.join(pub.policy.hosts) or 'none'})"
-        return None
+        return url_refusal(pub, url)
 
     def _headers(self, pub: Publisher) -> dict:
         # the contact goes only to the publishers that ask automated readers for one
@@ -701,7 +707,7 @@ def view(gdb: gov.GovDB, settings=None, store=None, now: datetime | None = None,
                                                  "termsUrl": pub.policy.terms_url, "blocked": list(BLOCKED_HOSTS)},
                         "floorMinutes": pub.policy.min_minutes, "requestsToday": 0, "feeds": [], "robots": [],
                         "recheck": None, "calendar": [], "moments": [], "partOf": pub.part_of,
-                        "datasets": list(pub.datasets), "parts": []})
+                        "datasets": list(pub.dataset_names), "parts": []})
     by = {p["name"]: p for p in out}
     from .sources import providers
     from .sources.registry import plugin_of
@@ -760,7 +766,7 @@ def _publisher_view(reader: Reader, gdb: gov.GovDB, pub: Publisher, now: datetim
         "feeds": feeds, "robots": robots, "recheck": gdb.recheck_get(pub.name),
         "calendar": _calendar(pub, now),
         "moments": [m.isoformat(timespec="seconds") for m in _today_moments(pub, now)],
-        "partOf": pub.part_of, "datasets": list(pub.datasets), "parts": []}
+        "partOf": pub.part_of, "datasets": list(pub.dataset_names), "parts": []}
 
 
 def _today_moments(pub: Publisher, now: datetime) -> list[datetime]:

@@ -1,10 +1,12 @@
-"""Publisher plugins: what an agency or a vendor publishes for programs (news, releases, rates),
-read on a schedule of its own by the recorder (publications.py), never behind a sync.
+"""Publisher plugins: what an agency, a vendor or a researcher publishes for programs (news,
+releases, rates), read on a schedule of its own by the recorder (publications.py), never behind a
+sync; and the datasets it puts out (sources/dataset.py), fetched by `datasets` (datasets.py).
 
 A module in `sources/plugins/` defines `PUBLISHER` (a Publisher; `PUBLISHERS` for several), beside
 or instead of a feed's `PLUGIN`: the federal agencies are parts of one plugin (plugins/federal/, a
-module each: fed.py, sec.py ...; `part_of`), and a vendor's headlines sit in its feed's module
-(massive.py), its requests on that feed's account.
+module each: fed.py, sec.py ...; `part_of`), a vendor's headlines sit in its feed's module
+(massive.py), its requests on that feed's account, and a library of datasets is a publisher with no
+feeds (french.py, datahub.py; the CFTC's in Federal).
 
 Each declares its scrape checks (`Policy`), which the reader enforces before every request:
 - only the hosts it names, over HTTPS, and never a blocked site (publications.BLOCKED_HOSTS: the
@@ -23,6 +25,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Callable
 
+from .dataset import Dataset
 from .keys import KeyVar
 
 
@@ -57,7 +60,9 @@ class Publisher:
     feeds: tuple[Feed, ...]
     policy: Policy
     order: int = 100
-    kind: str = "official"  # official (an agency) | vendor (a data vendor's headlines)
+    # official (an agency) | vendor (a data vendor's headlines, on its feed's account) | research (a
+    # researcher's own library: Ken French's) | mirror (someone else's data republished: Datahub's)
+    kind: str = "official"
     # a vendor's: the feed plugin whose key and limits its requests count against; that feed's
     # kill stops it, and it reads nothing without that feed's keys
     account: str = ""
@@ -72,9 +77,10 @@ class Publisher:
     # the plugin it is part of, when another publisher's (API 1.2; the Fed: Federal's): listed in it,
     # and stopped while that one is paused; its own scrape checks, state and pause still its own
     part_of: str = ""
-    # the datasets it publishes (datasets.py names; API 1.2; the CFTC's Commitments of Traders):
-    # fetched by `datasets`, shown with it
-    datasets: tuple[str, ...] = ()
+    # the datasets it publishes (the CFTC's Commitments of Traders): fetched by `datasets`, shown with
+    # it. API 1.4: each a Dataset (sources/dataset.py), declared here, its files only from its hosts and
+    # stopped by its pause; a name (API 1.2) lists one another plugin declares
+    datasets: tuple["Dataset | str", ...] = ()
     # what the user sets for it (API 1.3): a key, or a detail of theirs it sends where asked (the SEC:
     # GOV_CONTACT); user environment variables, set from the Plugins view or the key script
     keys: tuple[KeyVar, ...] = ()
@@ -85,3 +91,12 @@ class Publisher:
 
     def feed(self, key: str) -> Feed | None:
         return next((f for f in self.feeds if f.key == key), None)
+
+    @property
+    def dataset_names(self) -> tuple[str, ...]:
+        return tuple(d if isinstance(d, str) else d.name for d in self.datasets)
+
+    @property
+    def declared(self) -> tuple["Dataset", ...]:
+        """The datasets it declares itself (not those it only names)."""
+        return tuple(d for d in self.datasets if not isinstance(d, str))

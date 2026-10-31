@@ -144,6 +144,21 @@ def test_a_plugin_that_fails_to_load_is_left_out_and_reported(installed):
     assert any("a second provider named 'tiingo'" in w for w in why.values())
 
 
+def test_an_installed_package_never_replaces_a_built_in(installed):
+    from massive_collate.sources import publishers
+    from massive_collate.sources.publisher import Policy, Publisher
+
+    # named as a built-in and listed before it: the built-in is kept all the same
+    impostor = Provider(name="massive", title="Not Massive", build=lambda s, b: None, assets=frozenset(), order=-5)
+    rival = Publisher("federal", "Not Federal", "", (), Policy(), order=-5)
+    found = installed(("first", "impostor:PLUGIN", lambda: impostor), ("pub", "rival:PUBLISHER", lambda: rival))
+    assert list(found) == BUILT_IN and provider("massive").title == "Massive"
+    assert publishers()["federal"].title == "Federal"
+    why = dict(registry.errors())
+    assert "a second provider named 'massive': the first kept (built in)" in why["package: impostor:PLUGIN"]
+    assert "a second publisher named 'federal': the first kept (built in)" in why["package: rival:PUBLISHER"]
+
+
 def test_a_module_may_give_several_providers(installed):
     other = Provider(name="acme2", title="Acme Two", build=lambda s, b: None, assets=frozenset({"crypto"}), order=5)
     found = installed(("acme", "acme_feed", lambda: SimpleNamespace(PLUGINS=[ACME, other])))
@@ -166,15 +181,19 @@ def test_every_built_in_plugin_is_versioned_for_this_apps_contract():
     from massive_collate.sources import publishers
 
     plugins_ = [*providers().values(), *publishers().values()]
-    assert len(plugins_) == len(BUILT_IN) + 8  # the feeds, and Federal with its six agencies and Massive's headlines
-    # Alpaca's and Tiingo's two feeds are 1.1.0 for API 1.1 (part_of); Federal 1.1.0 for 1.3 (the SEC's
-    # GOV_CONTACT declared: Publisher.keys); Massive 1.1.0, its headlines for 1.3 (part of a feed plugin)
+    # the feeds; Federal with its six agencies, Massive's headlines, Ken French's and Datahub's datasets
+    assert len(plugins_) == len(BUILT_IN) + 10
+    # Alpaca's and Tiingo's two feeds are 1.1.0 for API 1.1 (part_of); Federal 1.2.0 for 1.4 (the SEC's
+    # GOV_CONTACT declared, the CFTC's dataset declared); Massive 1.1.0, its headlines for 1.3 (part of a
+    # feed plugin); the dataset libraries 1.0.0 for 1.4 (Publisher.datasets holding their definitions)
     for p in plugins_:
         want = (("1.1.0", "1.1") if p.name in ("alpaca", "boats", "tiingo", "tiingofx")
-                else ("1.1.0", "1.3") if p.name in ("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc", "massive-news")
+                else ("1.2.0", "1.4") if p.name in ("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc")
+                else ("1.1.0", "1.3") if p.name == "massive-news"
+                else ("1.0.0", "1.4") if p.name in ("french", "datahub")
                 else ("1.1.0", "1.0") if p.name == "massive" else ("1.0.0", "1.0"))
         assert (p.version, p.api) == want and registry.api_refusal(p.api) is None, p.name
-    assert registry.PLUGIN_API == "1.3"
+    assert registry.PLUGIN_API == "1.4"
 
 
 def test_a_plugin_for_another_major_is_left_out_and_reported_and_a_matching_one_loads(installed):
@@ -185,9 +204,11 @@ def test_a_plugin_for_another_major_is_left_out_and_reported_and_a_matching_one_
         return replace(ACME, name=name, title=name, keys=(), plan_vars=(), api=api, **kw)
 
     old_news = Publisher(name="old-news", title="Old news", about="", feeds=(), policy=Policy(), api="0.3")
+    major, minor = registry.api_version(registry.PLUGIN_API)
+    newer = f"{major}.{minor + 1}"  # a minor this app does not offer yet
     found = installed(("next", "acme_next:PLUGIN", lambda: acme("acme-next", "2.0")),
                       ("old", "acme_old:PLUGIN", lambda: acme("acme-old", "0.9")),
-                      ("newer", "acme_newer:PLUGIN", lambda: acme("acme-newer", "1.4")),
+                      ("newer", "acme_newer:PLUGIN", lambda: acme("acme-newer", newer)),
                       ("odd", "acme_odd:PLUGIN", lambda: acme("acme-odd", "latest")),
                       ("same", "acme_same:PLUGIN", lambda: acme("acme-same", "1.0", version="2.4.1")),
                       ("plain", "acme_plain:PLUGIN", lambda: acme("acme-plain", "1")),
@@ -198,11 +219,11 @@ def test_a_plugin_for_another_major_is_left_out_and_reported_and_a_matching_one_
     why = dict(registry.errors())
     assert set(why) == {"next (acme_next:PLUGIN)", "old (acme_old:PLUGIN)", "newer (acme_newer:PLUGIN)",
                         "odd (acme_odd:PLUGIN)", "news (old_news:PUBLISHER)"}
-    assert why["next (acme_next:PLUGIN)"] == ("acme-next: written for plugin API 2.0; this app offers 1.3: "
+    assert why["next (acme_next:PLUGIN)"] == (f"acme-next: written for plugin API 2.0; this app offers {registry.PLUGIN_API}: "
                                               "it needs a newer app")
     assert why["old (acme_old:PLUGIN)"].startswith("acme-old: written for plugin API 0.9") \
         and "needs a release for 1.x" in why["old (acme_old:PLUGIN)"]
-    assert "newer than this app's 1.3" in why["newer (acme_newer:PLUGIN)"]
+    assert f"newer than this app's {registry.PLUGIN_API}" in why["newer (acme_newer:PLUGIN)"]
     assert "not a contract version" in why["odd (acme_odd:PLUGIN)"]
     assert "old-news: written for plugin API 0.3" in why["news (old_news:PUBLISHER)"]
 
@@ -239,20 +260,22 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
     monkeypatch.setattr(config, "read_env_file", lambda path: {})
     assert cli.main(["plugins", "--json"]) == 0
     out = json.loads(capsys.readouterr().out)
-    assert out["api"] == "1.3" and out["errors"] == []
+    assert out["api"] == "1.4" and out["errors"] == []
     assert {(r["version"], r["api"], r["origin"]) for r in out["providers"]} == {
         ("1.0.0", "1.0", "built in"), ("1.1.0", "1.0", "built in"), ("1.1.0", "1.1", "built in")}
     pubs = {r["name"]: r for r in out["publishers"]}
-    assert set(pubs) == {"federal"}  # the agencies are Federal's parts; Massive's headlines are in Massive's row
+    # the agencies are Federal's parts; Massive's headlines are in Massive's row; the dataset libraries
+    assert list(pubs) == ["federal", "french", "datahub"]
     assert [r["name"] for r in pubs["federal"]["parts"]] == ["fed", "nyfed", "sec", "bls", "fedreg", "cftc"]
-    assert (pubs["federal"]["version"], pubs["federal"]["api"]) == ("1.1.0", "1.3")
+    assert (pubs["federal"]["version"], pubs["federal"]["api"]) == ("1.2.0", "1.4")
+    assert pubs["federal"]["parts"][-1]["datasets"] == ["cftc-cot-legacy"] and len(pubs["french"]["datasets"]) == 4
     assert [k["name"] for k in pubs["federal"]["keys"]] == ["GOV_CONTACT"]  # the SEC's, set for the plugin
     massive = next(r for r in out["providers"] if r["name"] == "massive")
     assert [(r["name"], r["version"], r["account"]) for r in massive["publishers"]] == [("massive-news", "1.1.0", "massive")]
     assert cli.main(["plugins"]) == 0
     text = capsys.readouterr().out
-    assert text.startswith("Plugin API 1.3") and "[1.0.0 for plugin API 1.0, built in]" in text
-    assert any(line.startswith("federal") and "[1.1.0 for plugin API 1.3, built in]" in line and "you set: GOV_CONTACT" in line
+    assert text.startswith("Plugin API 1.4") and "[1.0.0 for plugin API 1.0, built in]" in text
+    assert any(line.startswith("federal") and "[1.2.0 for plugin API 1.4, built in]" in line and "you set: GOV_CONTACT" in line
                for line in text.splitlines())
     assert any(line.strip().startswith("and Federal Reserve (fed):") for line in text.splitlines())
     assert "[1.1.0 for plugin API 1.1, built in]" in text
@@ -266,10 +289,10 @@ def test_the_plugins_view_shows_each_plugins_version_and_origin(tmp_path):
 
     with Store(tmp_path / "m.db") as store:
         out = ChartApp(store, settings=load_settings(env={}, env_file=None)).plugins()
-    assert out["api"] == "1.3"
+    assert out["api"] == "1.4"
     assert {(p["version"], p["api"], p["origin"]) for p in out["plugins"]} == {
         ("1.0.0", "1.0", "built in"), ("1.1.0", "1.0", "built in"), ("1.1.0", "1.1", "built in")}
-    assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.1.0", "1.3")}
+    assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.2.0", "1.4"), ("1.1.0", "1.3"), ("1.0.0", "1.4")}
 
 
 def test_unknown_providers_are_refused_by_name():

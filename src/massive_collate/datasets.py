@@ -8,17 +8,17 @@ once they have been fetched the first time with `datasets fetch`). Each provider
 in a file of their own (datasets/<provider>.db), and each dataset has a quality prior by provenance
 (an official publisher, the researcher's own library, or a mirror of someone else's data).
 
-- S&P 500 constituents with GICS sector and sub-industry (datasets/s-and-p-500-companies, ODC
-  PDDL): the market map's sectors for S&P 500 members.
-- Kenneth R. French Data Library (Tuck, Dartmouth): Fama/French 3 and 5 factors, 49 industry
+Every dataset is declared by the publisher plugin that puts it out (Publisher.datasets, a
+sources.dataset.Dataset: its files, parser and publication rule), so a new one is a plugin's:
+- Ken French's Data Library (plugins/french.py): Fama/French 3 and 5 factors, 49 industry
   portfolios; daily and monthly, from 1926 (1963 for 5 factors). Returns in percent.
-- Robert J. Shiller's US stock market data (S&P composite, dividends, earnings, CPI, rates, CAPE),
-  monthly from 1871, via the datasets/s-and-p-500 CSV (ODC PDDL).
-- IMF primary commodity prices (53 commodities, 10 indexes, 2005 = 100), monthly 1980-2017, via
-  datasets/commodity-prices: a mirror frozen since 2017, so an archive (closed once imported). IMF
-  terms: personal, non-commercial use.
-- CFTC Commitments of Traders, legacy futures-only report, weekly from 1986: open interest and
-  commercial / non-commercial / small trader positions for every market.
+- Datahub's core datasets on GitHub (plugins/datahub.py): the S&P 500's members with GICS sector and
+  sub-industry (the market map's sectors), Robert J. Shiller's US stock market data from 1871, and
+  the IMF's primary commodity prices 1980-2017 (a frozen mirror: an archive, closed once imported).
+- The CFTC's Commitments of Traders (Federal, plugins/federal/cftc.py): the legacy futures-only
+  report, weekly from 1986: open interest and commercial / non-commercial / small trader positions.
+A dataset's files are read only from its publisher's hosts (Policy.hosts; never a blocked site),
+and nothing of it is fetched while its plugin is paused (the Plugins view).
 
 Not included: Norgate and CRSP (paid / licensed), Kaggle datasets (need a Kaggle login).
 
@@ -36,278 +36,80 @@ from __future__ import annotations
 import csv
 import email.utils
 import hashlib
-import io
-import math
 import os
-import re
 import subprocess
 import zipfile
-from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from collections.abc import Mapping
+from dataclasses import replace
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Callable
-from zoneinfo import ZoneInfo
+from typing import Iterator
 
 import requests
 
-ET = ZoneInfo("America/New_York")
+from .sources.dataset import ET, Dataset, Parsed  # noqa: F401 - Parsed: the stores' and tests' import
+
 USER_AGENT = "massive-collate/1 (personal research; historical archive)"
-FRENCH = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/"
-CFTC = "https://www.cftc.gov/files/dea/history/"
 # The git submodules of GitHub-hosted datasets: <repository root>/data/github/<owner>/<repo>.
 REPOS = Path(os.environ.get("MASSIVE_DATA_REPOS") or Path(__file__).resolve().parents[2] / "data" / "github")
+GIT_HOST = "github.com"  # a dataset's git submodule is fetched from here: its publisher names it as a host
 
 
-@dataclass
-class Parsed:
-    values: list[tuple[str, int, float]] = field(default_factory=list)  # (series, ts ms, value)
-    series: dict[str, tuple[str, str, str]] = field(default_factory=dict)  # series -> (title, unit, freq)
-    constituents: list[dict] = field(default_factory=list)
+def declared() -> dict[str, Dataset]:
+    """Every dataset the publisher plugins declare, by name, in the plugins' order, each with the
+    publisher declaring it (Dataset.publisher)."""
+    from .sources import publishers
 
-
-@dataclass(frozen=True)
-class Dataset:
-    name: str
-    title: str
-    licence: str
-    files: Callable[[date], list[tuple[str, bool]]]  # today -> [(url, final: closes once imported)]
-    parse: Callable[[str, bytes], Parsed]
-    refresh_days: int  # how often the files that are not final are fetched again
-    provider: str      # whose data it is: names its file, datasets/<provider>.db
-    kind: str          # provenance for the quality prior (composite.PRIORS): official | research | mirror
-    # When a value of the period starting at ts (ms) was first published, by the source's schedule:
-    # dates the history in a file's first import. None: the file's own time (or members' 'date added').
-    published: Callable[[int], int] | None = None
-    git: tuple[str, str] | None = None  # (owner/repo, path of the file in it): a git submodule
-
-
-def _ms(d: date) -> int:
-    return int(datetime(d.year, d.month, d.day, tzinfo=ET).timestamp() * 1000)
-
-
-def _day_of(ts: int) -> date:
-    return datetime.fromtimestamp(ts / 1000, ET).date()
-
-
-def _at(d: date, hour: int = 0, minute: int = 0) -> int:
-    return int(datetime(d.year, d.month, d.day, hour, minute, tzinfo=ET).timestamp() * 1000)
-
-
-def _months_after(months: int, day: int) -> Callable[[int], int]:
-    """Published on `day` of the month `months` after the period's month (US/Eastern midnight)."""
-    def rule(ts: int) -> int:
-        d = _day_of(ts)
-        m = d.month - 1 + months
-        return _at(date(d.year + m // 12, m % 12 + 1, day))
-    return rule
-
-
-def _cot_published(ts: int) -> int:
-    """The COT report as of a Tuesday is released that Friday at 15:30 ET (a holiday week a day or
-    two later)."""
-    d = _day_of(ts)
-    return _at(d + timedelta(days=(4 - d.weekday()) % 7), 15, 30)
-
-
-def _num(cell) -> float | None:
-    """A finite number from a cell, else None (blank, 'nan', text)."""
-    try:
-        v = float(cell)
-    except (TypeError, ValueError):
-        return None
-    return v if math.isfinite(v) else None
-
-
-def _text(blob: bytes, url: str) -> str:
-    if url.endswith(".zip"):
-        with zipfile.ZipFile(io.BytesIO(blob)) as z:
-            return z.read(z.namelist()[0]).decode("latin-1")
-    return blob.decode("utf-8-sig", errors="replace")
-
-
-# -- parsers --------------------------------------------------------------------------------
-
-def parse_french(url: str, blob: bytes, section: str | None = None, unit: str = "%") -> Parsed:
-    """A French data library CSV: the first table (or the one after a heading containing
-    `section`): a header row then rows of YYYYMMDD / YYYYMM and values in percent."""
-    lines = _text(blob, url).splitlines()
-    out = Parsed()
-    start = 0
-    if section:
-        start = next((i for i, l in enumerate(lines) if section.lower() in l.lower()), 0)
-    header, freq = None, None
-    for line in lines[start:]:
-        cells = [c.strip() for c in line.split(",")]
-        if header is None:
-            if len(cells) > 1 and cells[0] == "" and any(cells[1:]):
-                header = cells
-            continue
-        if not cells[0].isdigit():
-            if out.values:
-                break  # the end of the first table
-            continue
-        key = cells[0]
-        if len(key) == 8:
-            d, freq = date(int(key[:4]), int(key[4:6]), int(key[6:])), "day"
-        elif len(key) == 6:
-            d, freq = date(int(key[:4]), int(key[4:]), 1), "month"
-        else:
-            break  # the annual table that follows the monthly one
-        for name, cell in zip(header[1:], cells[1:]):
-            v = _num(cell)
-            if v is None or v in (-99.99, -999):
-                continue  # the library's missing-value markers
-            out.values.append((name, _ms(d), v))
-    for name in (header or [])[1:]:
-        out.series[name] = (name, unit, freq or "")
+    out: dict[str, Dataset] = {}
+    for pub in publishers().values():
+        for ds in pub.declared:
+            out.setdefault(ds.name, replace(ds, publisher=pub.name))
     return out
 
 
-def _shiller_date(raw: str) -> date:
-    """A Shiller date: ISO (2026-09-01), year.month as in Shiller's own sheet (1871.01, 1871.1 for
-    October) or a decimal year at mid-month as in the mirror's first versions (1871.04166 = January)."""
-    raw = raw.strip()
-    if "-" in raw:
-        return date.fromisoformat(raw[:10])
-    year, _, frac = raw.partition(".")
-    if len(frac) == 2:
-        month = int(frac)
-    elif len(frac) == 1:
-        month = int(frac) * 10
-    else:
-        month = min(12, int(float("0." + (frac or "0")) * 12) + 1)
-    return date(int(year), month, 1)
+class _Declared(Mapping):
+    """DATASETS: the declared datasets by name, read from the plugins each time (a plugin installed or
+    reloaded shows)."""
+
+    def __getitem__(self, name: str) -> Dataset:
+        return declared()[name]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(declared())
+
+    def __len__(self) -> int:
+        return len(declared())
 
 
-def parse_shiller(url: str, blob: bytes) -> Parsed:
-    """The mirror writes 0 where Shiller has no value yet (recent dividends, earnings, CPI; CAPE's
-    first ten years): none of these series is ever really 0, so a 0 is left out as missing."""
-    out = Parsed()
-    rows = csv.DictReader(io.StringIO(_text(blob, url)))
-    for r in rows:
-        d = _shiller_date(r.pop("Date"))
-        for k, v in r.items():
-            if (x := _num(v)) is not None and x != 0:
-                out.values.append((k, _ms(d), x))
-    units = {"SP500": "index", "Dividend": "USD", "Earnings": "USD", "Consumer Price Index": "index",
-             "Long Interest Rate": "%", "Real Price": "USD", "Real Dividend": "USD", "Real Earnings": "USD",
-             "PE10": "ratio"}
-    for k in {s for s, _, _ in out.values}:
-        out.series[k] = (k, units.get(k, ""), "month")
-    return out
+DATASETS: Mapping[str, Dataset] = _Declared()
 
 
-def parse_commodities(url: str, blob: bytes) -> Parsed:
-    out = Parsed()
-    for r in csv.DictReader(io.StringIO(_text(blob, url))):
-        raw = r.pop("Date", None) or r.pop("date", None)
-        if not raw:
-            continue
-        d = date.fromisoformat(raw[:10]) if "-" in raw else date(int(raw[:4]), int(raw[5:7] or 1), 1)
-        for k, v in r.items():
-            if (x := _num(v)) is not None:
-                out.values.append((k, _ms(d), x))
-    for k in {s for s, _, _ in out.values}:
-        out.series[k] = (k, "index (2005 = 100)" if "Index" in k else "USD (nominal)", "month")
-    return out
+def refusal(ds: Dataset, url: str) -> str | None:
+    """Why a dataset may not read this URL (None: it may): HTTPS, never a blocked site, and only its
+    publisher's hosts (publications.url_refusal)."""
+    from .publications import url_refusal
+    from .sources import publishers
+
+    pub = publishers().get(ds.publisher)
+    if pub is None:
+        return f"no plugin declares {ds.name} here"
+    return url_refusal(pub, url)
 
 
-COT_FIELDS = {
-    "Open Interest (All)": "open_interest",
-    "Noncommercial Positions-Long (All)": "noncommercial_long",
-    "Noncommercial Positions-Short (All)": "noncommercial_short",
-    "Noncommercial Positions-Spreading (All)": "noncommercial_spreading",
-    "Commercial Positions-Long (All)": "commercial_long",
-    "Commercial Positions-Short (All)": "commercial_short",
-    "Nonreportable Positions-Long (All)": "small_long",
-    "Nonreportable Positions-Short (All)": "small_short",
-}
+def stopped(store, ds: Dataset, now: datetime | None = None) -> str | None:
+    """Why nothing of a dataset is fetched now (None: it may be): its publisher paused or killed, or
+    the plugin it is part of (Federal, for the CFTC's)."""
+    from . import killswitch
+    from .sources import publishers
 
-
-def parse_cot(url: str, blob: bytes) -> Parsed:
-    """CFTC legacy futures-only report: one series per market code and field ('067651:open_interest')."""
-    out = Parsed()
-    for r in csv.DictReader(io.StringIO(_text(blob, url))):
-        code = (r.get("CFTC Contract Market Code") or "").strip()
-        raw = (r.get("As of Date in Form YYYY-MM-DD") or "").strip()
-        if not code or not raw:
-            continue
-        d = date.fromisoformat(raw)
-        name = (r.get("Market and Exchange Names") or code).strip()
-        for col, key in COT_FIELDS.items():
-            v = _num((r.get(col) or "").strip())
-            if v is not None:
-                series = f"{code}:{key}"
-                out.values.append((series, _ms(d), v))
-                out.series.setdefault(series, (f"{name}: {key.replace('_', ' ')}", "contracts", "week"))
-    return out
-
-
-GICS_TO_MAP = {"Information Technology": "Technology", "Consumer Discretionary": "Consumer Cyclical",
-               "Consumer Staples": "Consumer Defensive", "Financials": "Financial", "Health Care": "Healthcare",
-               "Materials": "Basic Materials"}
-
-
-def parse_constituents(url: str, blob: bytes) -> Parsed:
-    out = Parsed()
-    for r in csv.DictReader(io.StringIO(_text(blob, url))):
-        t = (r.get("Symbol") or "").strip().upper()
-        if not t:
-            continue
-        sector = (r.get("GICS Sector") or r.get("Sector") or "").strip()  # older versions: Name, Sector
-        out.constituents.append({"index": "S&P 500", "ticker": t, "name": (r.get("Security") or r.get("Name") or "").strip(),
-                                 "sector": GICS_TO_MAP.get(sector, sector),
-                                 "industry": (r.get("GICS Sub-Industry") or "").strip(),
-                                 "added": (r.get("Date added") or "").strip() or None,
-                                 "cik": (r.get("CIK") or "").strip() or None})
-    return out
-
-
-# A year's COT file is final only from this day of the next January: its last Tuesday's report
-# comes out the Friday after (in January when the year ends late in the week, later still after a
-# holiday), and a file closed before it is in would never have it.
-COT_FINAL_FROM = (1, 15)
-
-
-def _cot_files(today: date) -> list[tuple[str, bool]]:
-    # 1986-2016 in one archive, then a file a year; a past year's file is final once its last report is out
-    return [(CFTC + "deacot1986_2016.zip", True)] + [
-        (f"{CFTC}deacot{y}.zip", today >= date(y + 1, *COT_FINAL_FROM)) for y in range(2017, today.year + 1)]
-
-
-DATASETS: dict[str, Dataset] = {d.name: d for d in (
-    Dataset("sp500-constituents", "S&P 500 members with GICS sector and sub-industry",
-            "ODC PDDL (datasets/s-and-p-500-companies)",
-            lambda t: [("https://raw.githubusercontent.com/datasets/s-and-p-500-companies/main/data/constituents.csv", False)],
-            parse_constituents, 7, "sp500", "mirror",
-            git=("datasets/s-and-p-500-companies", "data/constituents.csv")),
-    Dataset("french-3-factors-daily", "Fama/French 3 factors, daily (from 1926)", "Kenneth R. French Data Library",
-            lambda t: [(FRENCH + "F-F_Research_Data_Factors_daily_CSV.zip", False)], parse_french, 30,
-            "french", "research", published=_months_after(2, 15)),
-    Dataset("french-3-factors-monthly", "Fama/French 3 factors, monthly (from 1926)", "Kenneth R. French Data Library",
-            lambda t: [(FRENCH + "F-F_Research_Data_Factors_CSV.zip", False)], parse_french, 30,
-            "french", "research", published=_months_after(2, 15)),
-    Dataset("french-5-factors-daily", "Fama/French 5 factors (2x3), daily (from 1963)", "Kenneth R. French Data Library",
-            lambda t: [(FRENCH + "F-F_Research_Data_5_Factors_2x3_daily_CSV.zip", False)], parse_french, 30,
-            "french", "research", published=_months_after(2, 15)),
-    Dataset("french-49-industries-daily", "49 industry portfolios, value-weighted daily returns (from 1926)",
-            "Kenneth R. French Data Library",
-            lambda t: [(FRENCH + "49_Industry_Portfolios_daily_CSV.zip", False)],
-            lambda url, blob: parse_french(url, blob, section="Average Value Weighted Returns"), 30,
-            "french", "research", published=_months_after(2, 15)),
-    Dataset("shiller-us-market-monthly", "Shiller: S&P composite, dividends, earnings, CPI, rates, CAPE (from 1871)",
-            "Robert J. Shiller (shillerdata.com) via datasets/s-and-p-500, ODC PDDL",
-            lambda t: [("https://raw.githubusercontent.com/datasets/s-and-p-500/main/data/data.csv", False)],
-            parse_shiller, 30, "shiller", "mirror", published=_months_after(1, 2),
-            git=("datasets/s-and-p-500", "data/data.csv")),
-    Dataset("imf-commodities-monthly", "IMF primary commodity prices and indexes, monthly 1980-2017 (frozen mirror)",
-            "IMF terms (personal, non-commercial use) via datasets/commodity-prices",
-            lambda t: [("https://raw.githubusercontent.com/datasets/commodity-prices/main/data/commodity-prices.csv", True)],
-            parse_commodities, 30, "imf", "mirror", published=_months_after(1, 5),
-            git=("datasets/commodity-prices", "data/commodity-prices.csv")),
-    Dataset("cftc-cot-legacy", "CFTC Commitments of Traders, legacy futures-only, weekly (from 1986)",
-            "CFTC (public domain)", _cot_files, parse_cot, 7, "cftc", "official", published=_cot_published),
-)}
+    pub = publishers().get(ds.publisher)
+    if pub is None:
+        return f"no plugin declares {ds.name} here"
+    for name in dict.fromkeys(n for n in (pub.name, pub.part_of) if n):
+        k = killswitch.killed(store, name, "fetch", now)
+        if k:
+            return f"{name} is paused" if k.get("by") == "user" else f"{name} is stopped: {k.get('why') or 'killed'}"
+    return None
 
 
 def due_files(store, ds: Dataset, today: date, force: bool = False) -> list[tuple[str, bool]]:
@@ -333,12 +135,17 @@ def fetch(store, names: list[str] | None = None, today: date | None = None, forc
     Returns {name: versions stored}."""
     today = today or datetime.now(ET).date()
     session = session or requests.Session()
-    started = {n for n in DATASETS if store.dataset_files(n)}
+    started = {n for n in declared() if store.dataset_files(n)}
     upgrade_legacy(store, log)
     done = {}
-    for name in names or list(DATASETS):
-        ds = DATASETS[name]
+    known = declared()
+    for name in names or list(known):
+        ds = known[name]
         if only_started and name not in started:
+            continue
+        why = stopped(store, ds)
+        if why:
+            log(f"{name}: not fetched ({why})")
             continue
         if ds.git and _repo(ds) is not None:
             done[name] = fetch_git(store, ds, today, force, log)
@@ -398,6 +205,10 @@ def _fetch_files(store, ds: Dataset, today: date, force: bool, session, log) -> 
     single = len(ds.files(today)) == 1  # a file holding the whole dataset: what it drops is withdrawn
     for url, final in due_files(store, ds, today, force):
         file = url.rsplit("/", 1)[-1]
+        why = refusal(ds, url)
+        if why:
+            log(f"{name}: {file} not fetched ({why})")
+            continue
         try:
             resp = session.get(url, headers={"User-Agent": USER_AGENT}, timeout=120)
             if resp.status_code == 404 and not final:
@@ -471,7 +282,10 @@ def fetch_git(store, ds: Dataset, today: date, force: bool = False, log=print, u
     git_files = {u: f for u, f in files.items() if u.startswith("git:")}
     if git_files and not force and (today - max(f["fetched_at"] for f in git_files.values()).date()).days < ds.refresh_days:
         return 0
-    if update:
+    why = refusal(ds, f"https://{GIT_HOST}/{ds.git[0]}") if update else None
+    if why:
+        log(f"{ds.name}: not updated from {GIT_HOST} ({why}); using the commits already here")
+    elif update:
         try:
             _git(repo, "fetch", "--quiet", "origin")
         except GitError as e:
@@ -519,7 +333,7 @@ def upgrade_legacy(store, log=print) -> None:
         obs, members = store.dataset_legacy(provider)
         if not obs and not members:
             continue
-        for ds in (d for d in DATASETS.values() if d.provider == provider):
+        for ds in (d for d in declared().values() if d.provider == provider):
             if _repo(ds) is not None:
                 store.clear_dataset_files(ds.name)  # the next fetch imports the commits
                 continue
@@ -528,7 +342,7 @@ def upgrade_legacy(store, log=print) -> None:
             parsed = Parsed(values=[(s_, ts, v) for d, s_, ts, v in obs if d == ds.name],
                             constituents=[{"index": i, "ticker": t, "name": n, "sector": se, "industry": ind,
                                            "added": a, "cik": c} for i, t, n, se, ind, a, c in members]
-                            if ds.parse is parse_constituents else [])
+                            if ds.index else [])
             if parsed.values or parsed.constituents:
                 store.save_dataset_version(provider, ds.name, parsed, _ms_dt(when), "before-versioning",
                                            first_rule=ds.published)
@@ -587,13 +401,17 @@ def status(store, today: date | None = None) -> list[dict]:
     """Every dataset: files fetched and closed, values, series, span, last fetch, files due, quality."""
     today = today or datetime.now(ET).date()
     out = []
-    for ds in DATASETS.values():
+    from .sources import publishers
+
+    pubs = publishers()
+    for ds in declared().values():
         files = store.dataset_files(ds.name)
         series = [x for x in store.dataset_series(ds.provider, ds.name) if x["n"]] if files else []  # withdrawn left out
-        members = len(store.constituents(ds.provider, "S&P 500")) if files and ds.parse is parse_constituents else 0
+        members = len(store.constituents(ds.provider, ds.index)) if files and ds.index else 0
         q = store.quality(ds.name, "dataset")
         out.append({
             "name": ds.name, "title": ds.title, "provider": ds.provider, "kind": ds.kind, "licence": ds.licence,
+            "plugin": ds.publisher, "pluginTitle": pubs[ds.publisher].title if ds.publisher in pubs else ds.publisher,
             "files": len(files), "closed": sum(f["closed"] for f in files.values()),
             "bytes": sum(f["bytes"] or 0 for f in files.values()),
             "values": sum(s["n"] or 0 for s in series), "series": len(series), "members": members,

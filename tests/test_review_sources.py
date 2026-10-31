@@ -423,11 +423,12 @@ def test_a_lock_is_never_seen_empty_and_one_being_written_is_held(tmp_path):
 
 def test_a_years_cot_file_closes_only_once_its_last_report_can_be_out(tmp_path, monkeypatch):
     from massive_collate import datasets
+    from massive_collate.sources.plugins.federal import cftc
     from massive_collate.storage import datasets as stored
 
     from .test_datasets import _Resp, _Session, _cot, _zip
 
-    ds, url = datasets.DATASETS["cftc-cot-legacy"], datasets.CFTC + "deacot2026.zip"
+    ds, url = datasets.DATASETS["cftc-cot-legacy"], cftc.CFTC + "deacot2026.zip"
     assert dict(ds.files(date(2026, 12, 31)))[url] is False
     assert dict(ds.files(date(2027, 1, 5)))[url] is False  # the year's last Tuesday may not be published yet
     assert dict(ds.files(date(2027, 1, 15)))[url] is True

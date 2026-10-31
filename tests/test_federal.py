@@ -29,7 +29,7 @@ def test_the_federal_agencies_are_parts_of_one_plugin():
         assert importlib.util.find_spec(f"massive_collate.sources.plugins.{gone}") is None, gone
     pubs = publishers()
     assert list(pubs)[:7] == ["federal", *AGENCIES]  # the plugin's record first, its agencies after it
-    assert all(pubs[n].part_of == "federal" and (pubs[n].version, pubs[n].api) == ("1.1.0", "1.3") for n in AGENCIES)
+    assert all(pubs[n].part_of == "federal" and (pubs[n].version, pubs[n].api) == ("1.2.0", "1.4") for n in AGENCIES)
     assert pubs["federal"].feeds == () and pubs["federal"].part_of == ""
     assert registry.publisher_parts("federal") == AGENCIES and registry.publisher_of("sec") == "federal"
     assert registry.publisher_of("massive-news") == "massive" and registry.publisher_parts("massive-news") == []
@@ -40,10 +40,10 @@ def test_the_federal_agencies_are_parts_of_one_plugin():
     assert [f.key for f in pubs["fed"].feeds] == ["fed-press", "fed-speeches"] and pubs["sec"].policy.contact
     assert pubs["fed"].calendar is not None and pubs["nyfed"].moments is not None
     # the CFTC: its Commitments of Traders, a dataset; nothing of its own to read (its feeds are off)
-    assert pubs["cftc"].feeds == () and pubs["cftc"].datasets == ("cftc-cot-legacy",)
+    assert pubs["cftc"].feeds == () and pubs["cftc"].dataset_names == ("cftc-cot-legacy",)
     from massive_collate import datasets
 
-    assert pubs["cftc"].datasets[0] in datasets.DATASETS
+    assert datasets.DATASETS["cftc-cot-legacy"].publisher == "cftc"  # declared by it (API 1.4)
 
 
 def test_a_publisher_part_of_none_here_is_one_of_its_own(monkeypatch):
@@ -109,7 +109,7 @@ def test_the_plugins_view_lists_federal_once_with_its_agencies_and_the_cftcs_dat
 
 def test_the_page_shows_federal_with_its_agencies_beneath_and_the_gov_view_is_named_federal():
     js = (STATIC / "plugins.js").read_text(encoding="utf-8")
-    assert "(data.publishers || []).filter((p) => !p.partOf).map((p) => pubButton(p, false)" in js
+    assert "top.filter((p) => !setsOnly(p)).map((p) => pubButton(p, false) + partsOf(p.name))" in js
     assert "filter((q) => q.partOf === name).map((q) => pubButton(q, true))" in js and "pubButton(p, false) + partsOf(p.name)" in js
     assert "if (p.parts.length) return `${(p.keys || []).length ? pubSetupHtml(p) : ''}${partsHtml(p)}`;" in js
     assert "function datasetsHtml(p)" in js

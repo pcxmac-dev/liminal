@@ -699,7 +699,7 @@
     $('dsTable').classList.toggle('on', st.table);
     $('dsTable').setAttribute('aria-pressed', String(st.table));
     const d = st.status.find((x) => x.name === st.name);
-    $('dsSource').textContent = d ? `${d.provider} (${d.kind}) · ${d.licence} · quality ${d.quality == null ? '–' : d.quality.toFixed(2)}`
+    $('dsSource').textContent = d ? `${d.pluginTitle || d.provider} plugin (${d.kind}) · ${d.licence} · quality ${d.quality == null ? '–' : d.quality.toFixed(2)}`
       + (d.fetched ? ` · fetched ${new Date(d.fetched).toLocaleDateString('en-CA')}` : '') : '';
     const tf = transform();
     const extra = tf === 'growth' ? 'Growth of $1: each return compounded from the start of the range, so lines start together. '

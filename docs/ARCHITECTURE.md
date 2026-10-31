@@ -199,7 +199,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     An unknown value is Starter.
 - **The plugin contract, versioned** (2026-10-29; the user: "eventually plugins will need to be in
   their own repo with their own version"). The app offers `registry.PLUGIN_API` (major.minor, now
-  1.3). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
+  1.4). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
   major.minor.patch) and the contract it was written for (`api`: a literal such as `"1.0"`, never
   `PLUGIN_API` itself, which would always match). At discovery a plugin written for another major,
   or for a newer minor than the app offers, is left out and reported with the ones that fail to
@@ -244,10 +244,26 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     headlines (`massive-news`, `part_of="massive"`; the user: "massive headlines needs to be rolled
     in to Massive") are listed under Massive (`menu()`'s `publishers`, the Plugins view), on its key
     and limits; Massive's kill stops them as its account's.
+  - **1.4** (2026-10-31) lets `Publisher.datasets` hold the `Dataset` definitions themselves
+    (`sources/dataset.py`: its files, parser, publication rule, the file it is kept in; a name, as in
+    1.2, still lists one another plugin declares). Every external data provider is in a plugin (the
+    user: "lets add all the different data sources to plugins, respective of their source"; "every
+    external data provider must be in a plugin structure"): `datasets.py` declares none of its own
+    (`datasets.DATASETS` reads them from the plugins), and a library of datasets is a publisher with
+    no feeds: Ken French's Data Library (`french`), Datahub's core datasets on GitHub (`datahub`: the
+    S&P 500's members, Shiller's market data, the IMF's commodity prices), the CFTC's Commitments
+    of Traders in Federal. A dataset's files are read only from its publisher's hosts over HTTPS,
+    never a blocked site (`publications.url_refusal`; a GitHub submodule's from `github.com`), and
+    none while its plugin is paused (`datasets.stopped`). A dataset's name and its file are one
+    plugin's: a second plugin declaring either is left out and reported. Each keeps the file it
+    always had (`datasets/<provider>.db`): no stored data moves. `tests/test_plugin_boundary.py`
+    holds the app to it: no provider's host named outside `sources/plugins/` but links people follow.
   - **What a plugin may rely on (API 1.0)**, and nothing else of `massive_collate`:
     `sources.registry`: `PLUGIN_API`, `Provider`, `KeyVar`, `Scanned`, and `Report`, `Limits`,
     `Capability` for a `reporter`; the helpers `limiter`, `machine_caps`, `public_client`,
-    `minute_window`. `sources.publisher`: `Publisher`, `Feed`, `Policy`. `sources.base`:
+    `minute_window`. `sources.publisher`: `Publisher`, `Feed`, `Policy`. `sources.dataset` (1.4):
+    `Dataset`, `Parsed` and the parsers' helpers (`ms`, `day_of`, `at`, `months_after`, `num`,
+    `text`). `sources.base`:
     `DataSource` (what `build` returns), `Page`, `RESOLUTIONS_BY_ASSET`; `models`: the `Exchange`
     and `Instrument` a source returns; `errors`: `SourceError`, `NotEntitled`, `Unauthorized`,
     `RateLimited`, `BudgetExhausted`. `config`: `Tier`, `ConfigError`, and `Settings` read only:
@@ -258,8 +274,9 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
   - **The fields that matter across releases.** `name` is the feed's name everywhere (its database
     file, ledgers, watchlist rows, kept scans), so a release never renames it. `origin` is set by
     the registry, never by the plugin. `order` places it in lists (the built-in feeds 0-61, the
-    publishers 200-300, a package's 100 unless it says). Of two plugins of one name the first by
-    order is kept and the other reported. What each other field gives: the bullets above and the
+    publishers 200-300, the dataset libraries 400-410, a package's 100 unless it says). Of two
+    plugins of one name a built-in is always kept (an installed package never replaces one, whatever
+    its order), between packages the first by order; the other is reported. What each other field gives: the bullets above and the
     docstrings of `sources/registry.py` and `sources/publisher.py`.
   - **A package registers** under the entry point group `massive_collate.providers`, naming a
     module that defines `PLUGIN`/`PLUGINS` and/or `PUBLISHER`/`PUBLISHERS`, or one record:

@@ -60,6 +60,11 @@
   const tierOf = (p) => p.plan.vars.find((v) => v.choices.length) || null;
   // a plugin's version, the plugin API it was written for and where it came from
   const release = (p) => `<div class="p-muted small pl-release">Version ${esc(p.version || 'unversioned')} · plugin API ${esc(p.api)} · ${esc(p.origin)}</div>`;
+  // a publisher that puts out datasets only (Ken French's library, Datahub's mirrors; the CFTC)
+  const setsOnly = (p) => !p.feeds.length && !p.parts.length && p.datasets.length > 0;
+  const SOURCE = { research: "a researcher's own datasets", mirror: 'datasets mirrored from their sources', official: "an agency's datasets" };
+  const pubKind = (p) => (p.kind === 'vendor' ? `a vendor's headlines, on ${p.account}'s key`
+    : setsOnly(p) ? SOURCE[p.kind] || `${p.kind} datasets` : 'official feeds');
   // what a publisher reads: a plugin of several (Federal) its agencies, a vendor's on its feed's key, its feeds, its datasets
   const pubCount = (p) => (p.parts.length ? `${p.parts.length} agencies`
     : p.kind === 'vendor' ? `on ${p.account}'s key · every ${every(Math.min(...p.feeds.map((f) => f.every)))}`
@@ -170,8 +175,11 @@
           <span class="ex-count">${esc(plan)}${p.feeds.length > 1 ? ` · ${p.feeds.length} feeds` : ''}</span></button>${partsOf(p.name)}`;
       }).join('');
     }).join('');
-    const pubs = (data.publishers || []).filter((p) => !p.partOf).map((p) => pubButton(p, false) + partsOf(p.name)).join('');
-    const news = pubs ? `<h4 class="ex-group">News and publications</h4>${pubs}` : '';
+    const top = (data.publishers || []).filter((p) => !p.partOf);
+    const pubs = top.filter((p) => !setsOnly(p)).map((p) => pubButton(p, false) + partsOf(p.name)).join('');
+    const sets = top.filter(setsOnly).map((p) => pubButton(p, false)).join('');
+    const news = (pubs ? `<h4 class="ex-group">News and publications</h4>${pubs}` : '')
+      + (sets ? `<h4 class="ex-group">Datasets</h4>${sets}` : '');
     const left = data.errors.length ? `<h4 class="ex-group">Left out</h4>${data.errors.map((e) => `
       <div class="pl-error"><b>${esc(e.where)}</b><div class="p-muted small">${esc(e.why)}</div></div>`).join('')}` : '';
     return groups + news + left;
@@ -291,7 +299,8 @@
     return `<h4>Datasets</h4><table class="act-table ex-mini"><thead><tr><th>Dataset</th><th class="num">Values</th><th>Fetched</th><th>Files due</th></tr></thead><tbody>
       ${p.datasets.map((n) => rows.find((r) => r.name === n) || { name: n, title: n }).map((d) => `<tr><td><b>${esc(d.title)}</b><div class="p-muted small">${esc(d.licence || '')}</div></td>
         <td class="num">${d.values != null ? num(d.values) : '–'}</td><td>${d.fetched ? ago(d.fetched) : 'not yet'}</td><td>${d.due != null ? num(d.due) : '–'}</td></tr>`).join('')}</tbody></table>
-      <div class="p-muted small">Fetched with the datasets (<code>datasets fetch</code>, then on their own cadence) and shown in the Datasets view.</div>`;
+      <div class="p-muted small">Fetched with the datasets (<code>datasets fetch</code>, then on their own cadence) and shown in the Datasets view;
+        their files only from ${p.policy.hosts.map((h) => `<code>${esc(h)}</code>`).join(', ') || 'its hosts'}, over HTTPS.</div>`;
   }
 
   // where a publisher sits: the publisher it is part of (Federal) or the feed plugin (Massive): {id, title}
@@ -373,22 +382,29 @@
       : `Stopped until ${until(p.kill.until)} UTC: ${esc(p.kill.why)}`;
     const used = p.policy.perDay ? Math.min(100, (p.requestsToday / p.policy.perDay) * 100) : 0;
     const all = p.parts.length > 0;  // a plugin of several: its pause is theirs too
+    const sets = setsOnly(p) ? (p.datasetRows || []) : null;  // a library of datasets: what it holds here
+    const fetched = sets && sets.map((d) => d.fetched).filter(Boolean).sort().pop();
+    const tiles = sets ? `${tile('Datasets', num(p.datasets.length), 'fetched with datasets fetch')}
+        ${tile('Values', num(sets.reduce((n, d) => n + (d.values || 0), 0)), 'kept here')}
+        ${tile('Fetched', fetched ? ago(fetched) : 'not yet', 'then on their own cadence')}`
+      : `${tile('Requests today', num(p.requestsToday), all ? 'its agencies together' : `of ${num(p.policy.perDay)} a day`)}
+        ${all ? tile('Agencies', num(p.parts.length), 'each a part of it') : tile('Floor', every(p.floorMinutes), 'between reads of a feed')}
+        ${tile('Feeds', num(all ? data.publishers.filter((q) => q.partOf === p.name).reduce((n, q) => n + q.feeds.length, 0) : p.feeds.length),
+          p.kind === 'vendor' ? `on ${esc(p.account)}'s key` : 'official, keyless')}
+        ${all ? '' : tile('Verified', p.recheck ? ago(p.recheck.at) : 'never', 'its limits')}`;
     return `<h3>${esc(p.title)} ${chip(p.state)}</h3>
       <div class="p-muted small">${esc(p.about)}</div>${release(p)}
       ${plugin ? `<div class="p-muted small">Part of the <button type="button" class="pl-link" data-plugin="${esc(plugin.id)}">${esc(plugin.title)}</button> plugin.</div>` : ''}
       ${stop ? `<div class="pl-warn">${stop}</div>` : ''}
       ${p.held ? `<div class="pl-warn">Nothing sent until ${until(p.held.until)} UTC: ${esc(p.held.why)}</div>` : ''}
       <div class="tiles ex-tiles">
-        ${tile('Requests today', num(p.requestsToday), all ? 'its agencies together' : `of ${num(p.policy.perDay)} a day`)}
-        ${all ? tile('Agencies', num(p.parts.length), 'each a part of it') : tile('Floor', every(p.floorMinutes), 'between reads of a feed')}
-        ${tile('Feeds', num(all ? data.publishers.filter((q) => q.partOf === p.name).reduce((n, q) => n + q.feeds.length, 0) : p.feeds.length),
-          p.kind === 'vendor' ? `on ${esc(p.account)}'s key` : 'official, keyless')}
-        ${all ? '' : tile('Verified', p.recheck ? ago(p.recheck.at) : 'never', 'its limits')}
+        ${tiles}
       </div>
-      ${all ? '' : `<div class="pl-usage" title="${num(p.requestsToday)} of ${num(p.policy.perDay)} requests today"><i style="width:${used.toFixed(1)}%"></i></div>`}
-      <h4>Reading</h4>
+      ${all || sets ? '' : `<div class="pl-usage" title="${num(p.requestsToday)} of ${num(p.policy.perDay)} requests today"><i style="width:${used.toFixed(1)}%"></i></div>`}
+      <h4>${sets ? 'Fetching' : 'Reading'}</h4>
       <button type="button" data-pause="${esc(p.name)}" data-on="${paused ? '0' : '1'}"${data.offline || (p.kill && !paused) ? ' disabled' : ''}>${paused ? (all ? 'Resume all' : 'Resume') : (all ? 'Pause all' : 'Pause')}</button>
-      <div class="p-muted small">${paused ? 'Nothing is read until you resume it.' : all ? 'Pausing it stops every agency in it until you resume it.' : 'Pausing stops its reads until you resume it.'}</div>
+      <div class="p-muted small">${paused ? `Nothing is ${sets ? 'fetched' : 'read'} until you resume it.` : all ? 'Pausing it stops every agency in it until you resume it.'
+        : sets ? 'Pausing stops its datasets being fetched until you resume it.' : 'Pausing stops its reads until you resume it.'}</div>
       ${p.policy.terms ? `<h4>Terms</h4><div class="small">${esc(p.policy.terms)}</div>` : ''}
       ${safeUrl(p.policy.termsUrl) ? `<div class="p-muted small"><a href="${esc(safeUrl(p.policy.termsUrl))}" target="_blank" rel="noopener noreferrer">${esc(p.policy.termsUrl.replace(/^https:\/\//, ''))}</a></div>` : ''}`;
   }
@@ -439,7 +455,7 @@
     const typed = [...box.querySelectorAll('input.pl-key')].filter((i) => i.value).map((i) => [i.dataset.var, i.value]);
     const focused = document.activeElement?.matches?.('input.pl-key') ? document.activeElement.dataset.var : null;
     const setUp = data.plugins.filter((x) => x.configured && x.state !== 'no key').length;
-    const head = pub ? `publisher · ${pub.kind === 'vendor' ? `a vendor's headlines, on ${pub.account}'s key` : 'official feeds'} · ${pubCount(pub)}`
+    const head = pub ? `publisher · ${pubKind(pub)} · ${pubCount(pub)}`
       : p ? `${p.archive ? 'closed archive' : 'feed'} · ${p.kind} data · ${p.assets.join(', ')}` : '';
     box.innerHTML = `
       <div class="ex-venues"><div class="view-head"><div><h2>Plugins</h2>
