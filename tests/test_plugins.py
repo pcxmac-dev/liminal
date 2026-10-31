@@ -15,6 +15,8 @@ from massive_collate.sources import (build_source, feed_profiles, is_archive, ma
                                      rate_window, registry, supports)
 from massive_collate.sources.registry import KeyVar, Provider
 from massive_collate.symbols import resolve
+from massive_collate.sources.plugins.tiingo import TIINGO_BOATS
+from massive_collate.sources.plugins.alpaca import IEX_FEED
 
 from .conftest import FakeSource
 
@@ -183,17 +185,19 @@ def test_every_built_in_plugin_is_versioned_for_this_apps_contract():
     plugins_ = [*providers().values(), *publishers().values()]
     # the feeds; Federal with its six agencies, Massive's headlines, Ken French's and Datahub's datasets
     assert len(plugins_) == len(BUILT_IN) + 10
-    # Alpaca's and Tiingo's two feeds are 1.1.0 for API 1.1 (part_of); Federal 1.2.0 for 1.4 (the SEC's
-    # GOV_CONTACT declared, the CFTC's dataset declared); Massive 1.1.0, its headlines for 1.3 (part of a
-    # feed plugin); the dataset libraries 1.0.0 for 1.4 (Publisher.datasets holding their definitions)
+    # Alpaca's and Tiingo's two feeds are 1.2.0 for API 1.5 (part_of; their live stream and poller in
+    # them: Provider.live), Coinbase and Bitstamp 1.1.0 for 1.5 (their streams); Federal 1.2.0 for 1.4
+    # (the SEC's GOV_CONTACT declared, the CFTC's dataset declared); Massive 1.1.0, its headlines for 1.3
+    # (part of a feed plugin); the dataset libraries 1.0.0 for 1.4 (Publisher.datasets holding their definitions)
     for p in plugins_:
-        want = (("1.1.0", "1.1") if p.name in ("alpaca", "boats", "tiingo", "tiingofx")
+        want = (("1.2.0", "1.5") if p.name in ("alpaca", "boats", "tiingo", "tiingofx")
+                else ("1.1.0", "1.5") if p.name in ("coinbase", "bitstamp")
                 else ("1.2.0", "1.4") if p.name in ("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc")
                 else ("1.1.0", "1.3") if p.name == "massive-news"
                 else ("1.0.0", "1.4") if p.name in ("french", "datahub")
                 else ("1.1.0", "1.0") if p.name == "massive" else ("1.0.0", "1.0"))
         assert (p.version, p.api) == want and registry.api_refusal(p.api) is None, p.name
-    assert registry.PLUGIN_API == "1.4"
+    assert registry.PLUGIN_API == "1.5"
 
 
 def test_a_plugin_for_another_major_is_left_out_and_reported_and_a_matching_one_loads(installed):
@@ -260,9 +264,10 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
     monkeypatch.setattr(config, "read_env_file", lambda path: {})
     assert cli.main(["plugins", "--json"]) == 0
     out = json.loads(capsys.readouterr().out)
-    assert out["api"] == "1.4" and out["errors"] == []
+    assert out["api"] == registry.PLUGIN_API and out["errors"] == []
     assert {(r["version"], r["api"], r["origin"]) for r in out["providers"]} == {
-        ("1.0.0", "1.0", "built in"), ("1.1.0", "1.0", "built in"), ("1.1.0", "1.1", "built in")}
+        ("1.0.0", "1.0", "built in"), ("1.1.0", "1.0", "built in"), ("1.1.0", "1.5", "built in"),
+        ("1.2.0", "1.5", "built in")}
     pubs = {r["name"]: r for r in out["publishers"]}
     # the agencies are Federal's parts; Massive's headlines are in Massive's row; the dataset libraries
     assert list(pubs) == ["federal", "french", "datahub"]
@@ -274,11 +279,11 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
     assert [(r["name"], r["version"], r["account"]) for r in massive["publishers"]] == [("massive-news", "1.1.0", "massive")]
     assert cli.main(["plugins"]) == 0
     text = capsys.readouterr().out
-    assert text.startswith("Plugin API 1.4") and "[1.0.0 for plugin API 1.0, built in]" in text
+    assert text.startswith(f"Plugin API {registry.PLUGIN_API}") and "[1.0.0 for plugin API 1.0, built in]" in text
     assert any(line.startswith("federal") and "[1.2.0 for plugin API 1.4, built in]" in line and "you set: GOV_CONTACT" in line
                for line in text.splitlines())
     assert any(line.strip().startswith("and Federal Reserve (fed):") for line in text.splitlines())
-    assert "[1.1.0 for plugin API 1.1, built in]" in text
+    assert "[1.2.0 for plugin API 1.5, built in]" in text
     assert any(line.strip().startswith("and Massive headlines (publisher massive-news):") for line in text.splitlines())
     assert not any(line.startswith("massive-news") for line in text.splitlines())
 
@@ -289,9 +294,10 @@ def test_the_plugins_view_shows_each_plugins_version_and_origin(tmp_path):
 
     with Store(tmp_path / "m.db") as store:
         out = ChartApp(store, settings=load_settings(env={}, env_file=None)).plugins()
-    assert out["api"] == "1.4"
+    assert out["api"] == registry.PLUGIN_API
     assert {(p["version"], p["api"], p["origin"]) for p in out["plugins"]} == {
-        ("1.0.0", "1.0", "built in"), ("1.1.0", "1.0", "built in"), ("1.1.0", "1.1", "built in")}
+        ("1.0.0", "1.0", "built in"), ("1.1.0", "1.0", "built in"), ("1.1.0", "1.5", "built in"),
+        ("1.2.0", "1.5", "built in")}
     assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.2.0", "1.4"), ("1.1.0", "1.3"), ("1.0.0", "1.4")}
 
 
@@ -523,6 +529,6 @@ def test_a_feed_on_a_plugins_keys_is_named_by_that_plugin_never_as_a_source_of_i
     assert registry.label("tiingofx") == "tiingo (forex)" and registry.label("massive") == "massive"
     assert registry.label("nope") == "nope"  # a name no provider has: as it is
     labels = feed_labels()
-    assert set(labels) >= set(providers()) | {live.IEX_FEED, live.TIINGO_BOATS}
+    assert set(labels) >= set(providers()) | {IEX_FEED, TIINGO_BOATS}
     assert labels["iex"] == "alpaca (iex)" and labels["tiingoboats"] == "tiingo (blue ocean)"
     assert not any("ocean" in v and not v.startswith(("alpaca", "tiingo")) for v in labels.values())

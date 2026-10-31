@@ -46,6 +46,7 @@ from typing import TYPE_CHECKING, Callable, Iterable, Mapping
 from ..ratelimit import MachineLedger, RateLimiter
 from .keys import KeyVar  # noqa: F401 - plugins import it from here
 from .publisher import Publisher
+from .stream import Live
 
 if TYPE_CHECKING:
     from ..config import Settings, Tier
@@ -64,7 +65,10 @@ DEFAULT_PER_REQUEST = 1000  # bars a request returns, for a provider that does n
 # 1.4 (2026-10-31): Publisher.datasets holds the Dataset definitions themselves (sources/dataset.py:
 #   files, parser, publication rule), read only from its hosts and stopped by its pause; a library of
 #   datasets is a publisher with no feeds (Ken French's, Datahub's; the CFTC's in Federal).
-PLUGIN_API = "1.4"
+# 1.5 (2026-10-31): Provider.live (sources/stream.py: Live), each live stream or poller declared by
+#   its plugin (Coinbase's, Bitstamp's, Alpaca's IEX, Tiingo's Blue Ocean nights); Provider.partial,
+#   a feed of one venue's share of the market (Alpaca's Blue Ocean).
+PLUGIN_API = "1.5"
 
 
 def api_version(api) -> tuple[int, int]:
@@ -218,6 +222,12 @@ class Provider:
     provides: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     per_request: Mapping[str, int | None] = field(default_factory=dict)
     streams: Mapping[str, str] = field(default_factory=dict)  # asset class -> what its stream is
+    # its live feeds for the recorder (API 1.5; sources/stream.py): a stream's class or a poller each,
+    # with its own feed name (Coinbase's "coinbase", Alpaca's "iex")
+    live: tuple[Live, ...] = ()
+    # its bars are one venue's share of the market (API 1.5; Blue Ocean's nights): a chart of all
+    # feeds uses them only where no feed of the whole market has the span, never for days
+    partial: bool = False
     # Callbacks (None: the default described at each method).
     view: Callable[["Settings"], "Settings"] | None = None
     rate: Callable[["Settings"], tuple[int | None, float]] | None = None
@@ -597,6 +607,7 @@ def discover_all() -> tuple[dict[str, Provider], dict[str, Publisher], list[tupl
     pubs: dict[str, Publisher] = {}
     keys: dict[str, str] = {}  # a feed's key -> its publisher (keys name the state kept)
     sets: dict[str, str] = {}  # a dataset's name -> its publisher (names its state and versions)
+    lives: dict[str, str] = {}  # a live feed's name -> its provider (names its bars, status and kills)
     files: dict[str, str] = {}  # a dataset's file (Dataset.provider: datasets/<provider>.db) -> its publisher
     # the built-ins first, so an installed package never takes the name, a feed or a dataset of one
     # (whatever its order); all listed in their order after
@@ -623,6 +634,14 @@ def discover_all() -> tuple[dict[str, Provider], dict[str, Publisher], list[tupl
             keys.update({f.key: p.name for f in p.feeds})
             sets.update({d.name: p.name for d in p.declared})
             files.update({d.provider: p.name for d in p.declared})
+        else:
+            # a live feed's name is its own provider's, or a name no other provider has
+            clash = next((x.name for x in p.live if lives.get(x.name, p.name) != p.name
+                          or (x.name != p.name and x.name in {q.name for q in found if isinstance(q, Provider)})), None)
+            if clash:
+                errors.append((p.origin, f"provider {p.name!r}: live feed {clash!r} is {lives.get(clash, clash)!r}'s"))
+                continue
+            lives.update({x.name: p.name for x in p.live})
         mine[p.name] = p
     in_order = lambda d: dict(sorted(d.items(), key=lambda kv: (kv[1].order, kv[0])))  # noqa: E731
     return in_order(out), in_order(pubs), errors
@@ -711,6 +730,18 @@ def label(name: str) -> str:
     w/ blue ocean"): alpaca (blue ocean), tiingo (forex). A name no provider has stays as it is."""
     owner = plugin_of(name)
     return f"{owner} ({providers()[name].title.lower()})" if owner != name else name
+
+
+def live_feeds() -> dict[str, tuple[Provider, Live]]:
+    """Every live feed the plugins declare, by its name: (its provider, the feed), in their order."""
+    return {x.name: (p, x) for p in providers().values() for x in p.live}
+
+
+def partial_feeds() -> frozenset:
+    """The feeds of one venue's share of the market (Provider.partial, Live.partial): a chart of all
+    feeds uses them only where no feed of the whole market has the span, never for days."""
+    return frozenset({n for n, p in providers().items() if p.partial}
+                     | {n for n, (_, x) in live_feeds().items() if x.partial})
 
 
 def errors() -> list[tuple[str, str]]:

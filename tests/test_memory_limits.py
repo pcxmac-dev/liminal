@@ -15,6 +15,7 @@ from massive_collate.gui import server
 from massive_collate.gui.bars import CACHE_SHARES, CHART_CACHE_BYTES, BarEngine
 from massive_collate.gui.window import WindowReader
 from massive_collate.storage import Store
+from massive_collate.sources import stream
 
 MB = 2**20
 
@@ -90,7 +91,7 @@ def test_busy_is_answered_503_and_the_live_tail_takes_no_turn():
 def test_the_recorders_backlog_is_a_byte_budget():
     assert live.MAX_BUFFERED_BYTES == 64 * MB
     assert 100_000 < live.MAX_BUFFERED_BYTES // live.TRADE_BYTES < 120_000  # was 500,000 trades: about 300 MB
-    t = live._trade(1_792_825_200_000_000_000, 1, 81000.5, 0.1, 7)
+    t = stream.trade(1_792_825_200_000_000_000, 1, 81000.5, 0.1, 7)
     weight = sys.getsizeof(t) + sum(sys.getsizeof(v) for v in t.values())  # its keys are shared
     assert weight <= live.TRADE_BYTES
 

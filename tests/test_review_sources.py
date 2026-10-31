@@ -15,6 +15,7 @@ from massive_collate.errors import NotEntitled, Paused, RateLimited, SourceError
 from massive_collate.sources.alpaca import AlpacaClient
 from massive_collate.sources.massive import RETRY_WAIT_MAX, MassiveClient, MassiveSource, SameHostSession, _retry_delay
 from massive_collate.storage import Store
+from massive_collate.sources import stream
 
 from .conftest import FakeResponse, FakeSession
 
@@ -524,7 +525,7 @@ def test_live_derivations_are_kept_per_day_of_the_bars_and_per_rules(tmp_path):
     midnight = 1_792_800_000_000  # 2026-10-24 00:00 UTC
     rec._since["coinbase"] = midnight - 10_000
     for i, ms in enumerate((midnight - 2_000, midnight + 1_000)):  # one batch over midnight
-        rec._buffer[("coinbase", "BTCUSD")].append(live._trade(ms * 1_000_000, i, 81000 + i, 0.1, i))
+        rec._buffer[("coinbase", "BTCUSD")].append(stream.trade(ms * 1_000_000, i, 81000 + i, 0.1, i))
     with Store(tmp_path / "m.db") as store:
         rec.flush(store, now_ms=midnight + 5_000)
         (d,) = store.derivations(kind="bars-from-ticks")  # the same settings: one record, as wide as its bars

@@ -9,6 +9,9 @@ import threading
 from massive_collate import live
 from massive_collate.storage import Store
 from massive_collate.wsclient import OP_PING, OP_PONG, OP_TEXT, WebSocket, encode_frame
+from massive_collate.sources.plugins.coinbase import CoinbaseStream
+from massive_collate.sources.plugins.bitstamp import BitstampStream
+from massive_collate.sources import stream
 
 
 def _server_frame(opcode: int, payload: bytes, fin: bool = True) -> bytes:
@@ -51,22 +54,22 @@ def test_frames_reassemble_and_pings_are_answered():
 
 
 def test_exchange_messages_become_trades():
-    cb = live.CoinbaseStream().parse({"type": "match", "trade_id": 7, "product_id": "ETH-USD", "price": "2500.10",
+    cb = CoinbaseStream().parse({"type": "match", "trade_id": 7, "product_id": "ETH-USD", "price": "2500.10",
                                       "size": "0.5", "time": "2026-10-24T07:00:00.123456Z"})
     assert cb == [("ETHUSD", {"sip_timestamp": 1_792_825_200_123_456_000, "sequence_number": 7, "price": 2500.1,
                               "size": 0.5, "exchange": None, "conditions": [], "id": "7", "tape": None})]
-    assert live.CoinbaseStream().parse({"type": "heartbeat"}) == []
-    bs = live.BitstampStream().parse({"event": "trade", "channel": "live_trades_btcusd", "data": {
+    assert CoinbaseStream().parse({"type": "heartbeat"}) == []
+    bs = BitstampStream().parse({"event": "trade", "channel": "live_trades_btcusd", "data": {
         "id": 9, "microtimestamp": "1792825200123456", "price": 81000, "price_str": "81000.5", "amount": 0.1,
         "amount_str": "0.1"}})
     assert bs[0][0] == "BTCUSD" and bs[0][1]["sip_timestamp"] == 1_792_825_200_123_456_000 and bs[0][1]["price"] == 81000.5
     try:
-        live.BitstampStream().parse({"event": "bts:request_reconnect"})
-    except live.Reconnect:
+        BitstampStream().parse({"event": "bts:request_reconnect"})
+    except stream.Reconnect:
         pass
     else:
         raise AssertionError("a reconnect request must end the connection")
-    subs = [json.loads(m) for m in live.BitstampStream().subscribe(("BTC", "ETH"))]
+    subs = [json.loads(m) for m in BitstampStream().subscribe(("BTC", "ETH"))]
     assert [s["data"]["channel"] for s in subs] == ["live_trades_btcusd", "live_trades_ethusd"]
 
 
@@ -77,7 +80,7 @@ def test_the_recorder_stores_ticks_builds_bars_and_beats(tmp_path):
     rec._since["coinbase"] = t0
     with rec._lock:
         for i in range(4):
-            rec._buffer[("coinbase", "BTCUSD")].append(live._trade((t0 + i * 400) * 1_000_000, i, 81000 + i, 0.1, i))
+            rec._buffer[("coinbase", "BTCUSD")].append(stream.trade((t0 + i * 400) * 1_000_000, i, 81000 + i, 0.1, i))
     with Store(tmp_path / "m.db") as store:
         assert rec.flush(store, now_ms=t0 + 5_000) == 4
         assert store.trade_edges("coinbase", "BTCUSD") == (t0 * 1_000_000, (t0 + 1200) * 1_000_000)

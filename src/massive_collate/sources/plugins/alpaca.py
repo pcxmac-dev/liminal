@@ -13,11 +13,15 @@ both feeds, so together they stay within the free Basic plan. (Tiingo has it too
 tiingo.py's scan reports it.)"""
 from __future__ import annotations
 
-from dataclasses import replace
+import json
+from dataclasses import dataclass, field, replace
 
 from ...config import ALPACA_TIERS, ConfigError
-from ..alpaca import PAGE_LIMIT, TRADING_URLS, AlpacaClient, AlpacaSource, BoatsSource
+from ..alpaca import PAGE_LIMIT, TRADING_URLS, AlpacaClient, AlpacaSource, BoatsSource, normalize_trade
 from ..registry import KeyVar, Provider, Scanned, limiter, machine_caps
+from ..stream import PING, Live, Notice, Refused
+
+IEX_FEED = "iex"  # its live stream's feed: IEX's trades, one venue's share (alpaca (iex))
 
 
 def build(settings, request_budget):
@@ -62,8 +66,83 @@ def scan(source) -> list[tuple[str, bool, str]] | Scanned:
     return Scanned(tuple(rows), {"ALPACA_PLAN": plan})
 
 
+# Alpaca stream errors that end the session, and the seconds to wait before connecting again:
+# 401 not authenticated, 402 auth failed, 404 auth timeout, 406 connection limit exceeded (another
+# connection on the account), 407 slow client, 409 insufficient subscription, 500 internal error.
+ALPACA_REFUSALS = {401: 60, 402: 600, 404: 60, 406: 120, 407: 60, 409: 3600, 500: 60}
+
+
+@dataclass
+class AlpacaIexStream:
+    """Alpaca's free real-time stock stream (v2/iex): every trade on IEX, with cancels and
+    corrections (the trades they withdraw are marked `withdrawn`). The keys go in the auth
+    message only, never in a log. Its symbols change while it is connected (`change`), once the
+    server has accepted the keys; `confirmed` holds those the server says it streams."""
+    key_id: str = field(default="", repr=False)
+    secret_key: str = field(default="", repr=False)
+    source: str = IEX_FEED
+    url: str = "wss://stream.data.alpaca.markets/v2/iex"
+    keepalive: str | None = PING
+    dynamic: bool = True  # symbols from the charts (and watchlists: wanted_stocks), not LIVE_COINS
+    asset: str = "stock"
+    tape_rules: bool = True  # bars by the consolidated tape's rules per trade condition (ticks.py)
+    method: str = ("IEX's trades from Alpaca's real-time stream: one exchange, a few per cent of US volume; "
+                   "bars rebuilt as trades arrive (a forming bar changes until it closes), by the consolidated "
+                   "tape's rules per trade condition; a feed of the whole market (SIP) ranks above them")
+    authed: bool = False
+    confirmed: frozenset = frozenset()
+
+    def subscribe(self, symbols) -> list[str]:
+        """The first messages on a new connection: the keys (symbols follow once accepted)."""
+        self.authed, self.confirmed = False, frozenset()
+        return [json.dumps({"action": "auth", "key": self.key_id, "secret": self.secret_key})]
+
+    def change(self, add, drop) -> list[str]:
+        out = []
+        if drop:
+            out.append(json.dumps({"action": "unsubscribe", "trades": sorted(drop)}))
+        if add:
+            out.append(json.dumps({"action": "subscribe", "trades": sorted(add)}))
+        return out
+
+    def parse(self, msg) -> list[tuple[str, dict]]:
+        out = []
+        for m in msg if isinstance(msg, list) else [msg]:
+            kind = m.get("T")
+            if kind == "t":
+                t = normalize_trade(m)
+                if t:
+                    out.append((m["S"], t))
+            elif kind == "x":  # a trade withdrawn: canceled, or an error
+                out.append((m["S"], {**normalize_trade(m), "withdrawn": True}))
+            elif kind == "c":  # a correction: the original trade withdrawn, the corrected one in its place
+                base = {"x": m["x"], "t": m["t"], "z": m.get("z")}
+                was = normalize_trade({**base, "i": m["oi"], "p": m["op"], "s": m["os"], "c": m.get("oc")})
+                out.append((m["S"], {**was, "withdrawn": True}))
+                out.append((m["S"], normalize_trade({**base, "i": m["ci"], "p": m["cp"], "s": m["cs"], "c": m.get("cc")})))
+            elif kind == "subscription":
+                self.confirmed = frozenset(m.get("trades") or [])
+            elif kind == "success" and m.get("msg") == "authenticated":
+                self.authed = True
+            elif kind == "error":
+                code = int(m.get("code") or 0)
+                text = f"alpaca {code}: {m.get('msg')}"
+                if code in ALPACA_REFUSALS:
+                    raise Refused(text, ALPACA_REFUSALS[code])
+                raise Notice(text)
+        return out
+
+
+def stream_keys(settings) -> tuple[str, str] | None:
+    """Alpaca's keys for the IEX stream: None without keys, with LIVE_STOCKS=off, or offline."""
+    a = settings.alpaca
+    if settings.offline or not settings.live_stocks or not (a and a.has_keys):
+        return None
+    return a.key_id, a.secret_key
+
+
 ALPACA = Provider(
-    version="1.1.0", api="1.1",  # its own release, and the plugin contract it was written for
+    version="1.2.0", api="1.5",  # its own release (its stream in it), and the contract it needs (Provider.live)
     name="alpaca", title="Alpaca", build=build, assets=frozenset({"stock", "crypto"}), order=10,
     about="US stocks (SIP from 2016, the session up to 15 min ago, IEX live; overnight on Blue Ocean) with keys; "
           "crypto without",
@@ -77,6 +156,8 @@ ALPACA = Provider(
     provides={"stock": ("day", "minute"), "crypto": ("day", "minute")},  # no 1-second bars
     per_request={"day": 10_000, "minute": 10_000},  # PAGE_LIMIT
     streams={"stock": "real time, IEX's trades only (a few per cent of US volume), symbols open on a chart"},
+    live=(Live(IEX_FEED, "stock", stream=AlpacaIexStream, credentials=stream_keys, label="alpaca (iex)",
+               partial=True),),
     missing_keys_note="keys not set: US stocks (SIP from 2016, IEX live), options and news wait for "
                       "ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY; crypto needs no key and is collected",
     missing_keys_chip="stocks need keys",
@@ -102,9 +183,9 @@ def boats_scan(source) -> list[tuple[str, bool, str]]:
 
 
 BOATS = Provider(
-    version="1.1.0", api="1.1",  # this plugin's release (its second feed), and the contract it needs (part_of)
+    version="1.2.0", api="1.5",  # this plugin's release, and the contract it needs (part_of; partial)
     name="boats", title="Blue Ocean", build=build_boats, assets=frozenset({"stock"}), order=15, account="alpaca",
-    part_of="alpaca",
+    part_of="alpaca", partial=True,  # one venue's nights: never the whole market's
     about="US stocks overnight, 20:00-04:00 ET, Blue Ocean ATS through Alpaca (your Alpaca keys and limits)",
     keys=ALPACA.keys, signup=ALPACA.signup, kind="exchange",
     provides={"stock": ("minute",)}, per_request={"minute": PAGE_LIMIT},

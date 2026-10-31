@@ -11,6 +11,8 @@ from massive_collate.config import load_settings
 from massive_collate.gui.bars import BarEngine
 from massive_collate.gui.server import ChartApp
 from massive_collate.storage import Store
+from massive_collate.sources.plugins.alpaca import AlpacaIexStream
+from massive_collate.sources import stream
 
 T0 = 1_792_764_000_000  # 2026-10-23 14:00 UTC (10:00 in New York), ms
 
@@ -19,8 +21,8 @@ def _trade(i: int, price: float, size: int, iso: str) -> dict:
     return {"T": "t", "S": "AAPL", "i": i, "x": "V", "p": price, "s": size, "c": ["@"], "t": iso, "z": "C"}
 
 
-def _iex() -> live.AlpacaIexStream:
-    return live.AlpacaIexStream("PKTESTKEY", "test-secret")
+def _iex() -> AlpacaIexStream:
+    return AlpacaIexStream("PKTESTKEY", "test-secret")
 
 
 def test_iex_messages_become_trades_withdrawals_and_refusals():
@@ -43,10 +45,10 @@ def test_iex_messages_become_trades_withdrawals_and_refusals():
                         "cp": 10.5, "cs": 5, "cc": ["@"], "t": "2026-10-23T14:00:02Z", "z": "C"})
     assert was[1]["withdrawn"] and was[1]["price"] == 10.0 and not now[1].get("withdrawn") and now[1]["price"] == 10.5
 
-    with pytest.raises(live.Refused) as refused:
+    with pytest.raises(stream.Refused) as refused:
         s.parse([{"T": "error", "code": 402, "msg": "auth failed"}])
     assert refused.value.wait == 600  # bad keys: not tried again for ten minutes
-    with pytest.raises(live.Notice):
+    with pytest.raises(stream.Notice):
         s.parse([{"T": "error", "code": 405, "msg": "symbol limit exceeded"}])  # the connection stays
 
 

@@ -11,6 +11,7 @@ import pytest
 from massive_collate import cli, live, proc
 from massive_collate.config import ConfigError, load_settings
 from massive_collate.storage import Store
+from massive_collate.sources import stream
 
 
 # -- locks ------------------------------------------------------------------------------------
@@ -104,7 +105,7 @@ def test_a_failed_flush_keeps_the_trades_for_the_next(tmp_path, monkeypatch):
     rec = live.Recorder(tmp_path / "m.db", coins=("BTC",), sources=("coinbase",), log=lambda *_: None,
                         connect=lambda url: None)
     t0 = 1_792_825_200_000
-    rec._buffer[("coinbase", "BTCUSD")].append(live._trade(t0 * 1_000_000, 1, 81000, 0.1, 1))
+    rec._buffer[("coinbase", "BTCUSD")].append(stream.trade(t0 * 1_000_000, 1, 81000, 0.1, 1))
     with Store(tmp_path / "m.db") as store:
         real = store.upsert_trades
 
@@ -114,7 +115,7 @@ def test_a_failed_flush_keeps_the_trades_for_the_next(tmp_path, monkeypatch):
         monkeypatch.setattr(store, "upsert_trades", locked)
         with pytest.raises(sqlite3.OperationalError):
             rec.flush(store, now_ms=t0 + 5_000)
-        rec._buffer[("coinbase", "BTCUSD")].append(live._trade((t0 + 1000) * 1_000_000, 2, 81001, 0.1, 2))
+        rec._buffer[("coinbase", "BTCUSD")].append(stream.trade((t0 + 1000) * 1_000_000, 2, 81001, 0.1, 2))
         monkeypatch.setattr(store, "upsert_trades", real)
         assert rec.flush(store, now_ms=t0 + 6_000) == 2  # the first trade too
         assert store.trade_edges("coinbase", "BTCUSD")[0] == t0 * 1_000_000
@@ -134,11 +135,11 @@ def test_a_trade_stamped_after_the_flush_clock_reaches_its_minute_bar(tmp_path):
     rec = live.Recorder(tmp_path / "m.db", coins=("BTC",), sources=("coinbase",), log=lambda *_: None,
                         connect=lambda url: None)
     m = 1_792_825_200_000  # a whole minute
-    rec._buffer[("coinbase", "BTCUSD")] += [live._trade((m - 30_000) * 1_000_000, 1, 100, 1, 1),
-                                            live._trade((m - 200) * 1_000_000, 2, 105, 1, 2)]
+    rec._buffer[("coinbase", "BTCUSD")] += [stream.trade((m - 30_000) * 1_000_000, 1, 100, 1, 1),
+                                            stream.trade((m - 200) * 1_000_000, 2, 105, 1, 2)]
     with Store(tmp_path / "m.db") as store:
         rec.flush(store, now_ms=m - 500)  # this machine's clock a little behind the exchange's
-        rec._buffer[("coinbase", "BTCUSD")].append(live._trade((m + 1000) * 1_000_000, 3, 107, 1, 3))
+        rec._buffer[("coinbase", "BTCUSD")].append(stream.trade((m + 1000) * 1_000_000, 3, 107, 1, 3))
         rec.flush(store, now_ms=m + 2_000)
         bar = store._bars("coinbase").execute(
             "SELECT close, volume FROM built_bars WHERE timespan='minute' AND ts=?", (m - 60_000,)).fetchone()

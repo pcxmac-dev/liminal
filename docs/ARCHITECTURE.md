@@ -155,8 +155,8 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
   menu per provider: set, replace or remove its keys, typed hidden.
 - **Read everywhere from the registry**: the sync's feed list and `--source` choices, feed profiles
   and the one-download-per-span rule, the Fetcher's tabs, rows, limits and health, `status`, `feeds`,
-  `deps`, the composite model's reference and priors, audits, the initializer, the monthly caps.
-  Not yet: the live recorder's streams (`live.STREAMS`, Alpaca's IEX stream) and Massive's own
+  `deps`, the composite model's reference and priors, audits, the initializer, the monthly caps,
+  the live recorder's streams and pollers (`Provider.live`, API 1.5). Not yet: Massive's own
   commands (`plan`, the plan-change check).
 - **The standard report.** Every plugin reports in one form (`Provider.report`: a `Report`): its
   plan, its keys, its limits (requests a day: its daily cap or its rate where tighter; per run; a
@@ -199,7 +199,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     An unknown value is Starter.
 - **The plugin contract, versioned** (2026-10-29; the user: "eventually plugins will need to be in
   their own repo with their own version"). The app offers `registry.PLUGIN_API` (major.minor, now
-  1.4). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
+  1.5). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
   major.minor.patch) and the contract it was written for (`api`: a literal such as `"1.0"`, never
   `PLUGIN_API` itself, which would always match). At discovery a plugin written for another major,
   or for a newer minor than the app offers, is left out and reported with the ones that fail to
@@ -258,12 +258,25 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     plugin's: a second plugin declaring either is left out and reported. Each keeps the file it
     always had (`datasets/<provider>.db`): no stored data moves. `tests/test_plugin_boundary.py`
     holds the app to it: no provider's host named outside `sources/plugins/` but links people follow.
+  - **1.5** (2026-10-31) adds `Provider.live` (`sources/stream.py`: `Live`) and `Provider.partial`:
+    each live feed is declared by its plugin, its stream's class (its URL, messages, parsing) or a
+    poller, with its own feed name, how the page names it (`label`) and whether it is one venue's
+    share of the market (`partial`): Coinbase's and Bitstamp's trade streams, Alpaca's IEX stream
+    (`iex`, signing in with `Live.credentials`: Alpaca's keys), Tiingo's Blue Ocean nights
+    (`tiingoboats`, `Live.poller`). The recorder (`live.py`) names no provider: it runs the crypto
+    streams the plugins declare (`live.crypto_streams`), their stock stream (`stock_stream`,
+    `stock_keys`) and their night poller (`night_poller`), and connects, follows the charts,
+    stores and kills the same way for each; `live.PARTIAL_FEEDS` and `live.LIVE_LABELS` are read
+    from the plugins (`registry.partial_feeds`, `registry.live_feeds`). A live feed's name is its
+    own provider's or one no other provider has; another plugin's is left out and reported. The
+    stream helpers (`Reconnect`, `Refused`, `Notice`, `PING`, `trade`, `ns`) are the contract's.
   - **What a plugin may rely on (API 1.0)**, and nothing else of `massive_collate`:
     `sources.registry`: `PLUGIN_API`, `Provider`, `KeyVar`, `Scanned`, and `Report`, `Limits`,
     `Capability` for a `reporter`; the helpers `limiter`, `machine_caps`, `public_client`,
     `minute_window`. `sources.publisher`: `Publisher`, `Feed`, `Policy`. `sources.dataset` (1.4):
     `Dataset`, `Parsed` and the parsers' helpers (`ms`, `day_of`, `at`, `months_after`, `num`,
-    `text`). `sources.base`:
+    `text`). `sources.stream` (1.5): `Live`, `Reconnect`, `Refused`, `Notice`, `PING`, `trade`, `ns`.
+    `sources.base`:
     `DataSource` (what `build` returns), `Page`, `RESOLUTIONS_BY_ASSET`; `models`: the `Exchange`
     and `Instrument` a source returns; `errors`: `SourceError`, `NotEntitled`, `Unauthorized`,
     `RateLimited`, `BudgetExhausted`. `config`: `Tier`, `ConfigError`, and `Settings` read only:

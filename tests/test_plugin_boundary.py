@@ -21,8 +21,6 @@ STILL_TO_MOVE = {
     ("sources/massive.py", "api.massive.com"),
     ("sources/alpaca.py", "data.alpaca.markets"), ("sources/alpaca.py", "api.alpaca.markets"),
     ("sources/alpaca.py", "paper-api.alpaca.markets"),
-    ("live.py", "ws-feed.exchange.coinbase.com"), ("live.py", "ws.bitstamp.net"),
-    ("live.py", "stream.data.alpaca.markets"), ("live.py", "api.tiingo.com"),
     ("gov.py", "www.federalregister.gov"),
 }
 
@@ -43,7 +41,9 @@ def test_no_providers_host_is_named_outside_the_plugins():
     assert STILL_TO_MOVE <= found  # moved: take it off the list
 
 
-def test_the_datasets_hosts_are_their_plugins():
+def test_the_datasets_and_the_live_streams_hosts_are_their_plugins():
     found = {h for _, h in hosts_named()}
-    for host in ("mba.tuck.dartmouth.edu", "www.cftc.gov", "raw.githubusercontent.com"):
+    for host in ("mba.tuck.dartmouth.edu", "www.cftc.gov", "raw.githubusercontent.com",  # datasets (API 1.4)
+                 "ws-feed.exchange.coinbase.com", "ws.bitstamp.net", "stream.data.alpaca.markets",  # streams (1.5)
+                 "api.tiingo.com"):
         assert host not in found, host

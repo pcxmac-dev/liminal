@@ -10,6 +10,7 @@ import pytest
 from massive_collate import live
 from massive_collate.config import ConfigError, load_settings
 from massive_collate.storage import Store
+from massive_collate.sources import stream
 
 T0 = 1_792_764_000_000  # 2026-10-23 14:00 UTC, ms
 
@@ -124,7 +125,7 @@ def test_the_recorder_builds_only_what_it_recorded(tmp_path, monkeypatch):
                         connect=lambda url: None, selected_only=True)
     with Store(tmp_path / "m.db", ticks=True) as store:
         assert rec.derive_recorded(store) == 0 and calls == []  # nothing recorded: nothing read
-        rec._buffer[("coinbase", "BTCUSD")].append(live._trade((T0 + 1_000) * 1_000_000, 1, "100.5", "0.1", 1))
+        rec._buffer[("coinbase", "BTCUSD")].append(stream.trade((T0 + 1_000) * 1_000_000, 1, "100.5", "0.1", 1))
         rec.flush(store, now_ms=T0 + 5_000)
         assert rec.derive_recorded(store) == 7 and calls == [{"BTCUSD"}]  # only the pair it streamed
         assert rec.derive_recorded(store) == 0 and len(calls) == 1

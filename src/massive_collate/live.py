@@ -7,8 +7,10 @@ every stream follows the symbols open on a chart, and with none of its symbols o
 connected; the sync downloads that time later. LIVE_STREAMS=always keeps the coins streaming and
 adds the rail's watchlists to the stocks.
 
-Crypto: Coinbase (the reference exchange) and Bitstamp's public streams (no key), well-known coins
-only (LIVE_COINS). Stocks: Alpaca's free real-time stream of IEX's trades (with Alpaca keys), at
+Each stream and poller is declared by its plugin (Provider.live, sources/stream.py: its URL,
+messages and parsing); this module connects, follows the charts, stores and kills the same way for
+each. Crypto: Coinbase (the reference exchange) and Bitstamp's public streams (no key), well-known
+coins only (LIVE_COINS). Stocks: Alpaca's free real-time stream of IEX's trades (with Alpaca keys), at
 most MAX_STOCKS (Alpaca Basic's limit on its one stream connection per account). IEX is one exchange, a few per cent of US volume, so
 its trades go in a feed of their own ("iex", one of PARTIAL_FEEDS) that a chart of all feeds shows
 only where no feed of the whole market (SIP) has bars yet: the current session, until a sync
@@ -29,18 +31,19 @@ import socket
 import threading
 import time
 from collections import defaultdict
+from collections.abc import Iterator, Mapping, Set as AbstractSet
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import killswitch
+from .sources.stream import PING, Notice
 
 LIVE_COINS =("BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "LTC", "LINK")
 RECORDER_KEY = "live-recorder"
 STATUS_KEY = "live:status"
 OPEN_KEY = "live:open"  # {ticker: ms}: the symbols chart pages have open (gui/server.py notes them)
 WATCHLISTS_KEY = "ui:watchlists"  # the rail's lists of symbols (gui/server.py): the first profile's
-IEX_FEED = "iex"
 
 
 def watchlists_key(profile: int) -> str:
@@ -51,22 +54,60 @@ def watchlists_key(profile: int) -> str:
 def active_watchlists(store) -> list:
     """The signed-in profile's watchlists (the one signed in last): they set the fetcher's order."""
     return store.kv_json(watchlists_key(store.active_profile()), [])
-BOATS_FEED = "boats"  # Blue Ocean's overnight session (sources/plugins/alpaca.py, BOATS)
-TIINGO_BOATS = "tiingoboats"  # Blue Ocean's night under way, live from Tiingo (BoatsPoller): a feed of its own
-# One venue's bars, ranked last in a chart of all feeds: they show where no feed of the whole market
-# has bars (IEX: the session under way until a sync downloads it; Blue Ocean: the overnight session,
-# which the consolidated tape does not carry; live from Tiingo, the night under way)
-PARTIAL_FEEDS = frozenset({IEX_FEED, BOATS_FEED, TIINGO_BOATS})
-# The live feeds, named by the plugin whose keys they stream on (the user, 2026-10-30: "house all
-# alpaca in alpaca"; "the source isn't blue ocean its alpaca w/ blue ocean"), as registry.label names
-# a plugin's feeds: Alpaca's IEX stream, Tiingo's Blue Ocean night.
-LIVE_LABELS = {IEX_FEED: "alpaca (iex)", TIINGO_BOATS: "tiingo (blue ocean)"}
+
+
+class _Partial(AbstractSet):
+    """PARTIAL_FEEDS: one venue's bars, ranked last in a chart of all feeds: they show where no feed
+    of the whole market has bars (IEX: the session under way until a sync downloads it; Blue Ocean:
+    the overnight session, which the consolidated tape does not carry; live from Tiingo, the night
+    under way). Declared by their plugins (Provider.partial, Live.partial), read each time."""
+
+    def __contains__(self, name) -> bool:
+        from .sources.registry import partial_feeds
+
+        return name in partial_feeds()
+
+    def __iter__(self) -> Iterator[str]:
+        from .sources.registry import partial_feeds
+
+        return iter(partial_feeds())
+
+    def __len__(self) -> int:
+        from .sources.registry import partial_feeds
+
+        return len(partial_feeds())
+
+
+class _Labels(Mapping):
+    """LIVE_LABELS: the live feeds, named by the plugin whose keys they stream on (the user,
+    2026-10-30: "house all alpaca in alpaca"; "the source isn't blue ocean its alpaca w/ blue
+    ocean"), as registry.label names a plugin's feeds: Alpaca's IEX stream, Tiingo's Blue Ocean
+    night (Live.label)."""
+
+    @staticmethod
+    def _all() -> dict[str, str]:
+        from .sources.registry import live_feeds
+
+        return {n: x.label for n, (_, x) in live_feeds().items() if x.label}
+
+    def __getitem__(self, name: str) -> str:
+        return self._all()[name]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._all())
+
+    def __len__(self) -> int:
+        return len(self._all())
+
+
+PARTIAL_FEEDS: AbstractSet = _Partial()
+LIVE_LABELS: Mapping = _Labels()
 BOATS_QUOTE_SECONDS = 5.0  # the open stocks' last sale and quote at night: one request for them all
 # each open stock's minutes of the night: asked again after this many seconds, or 2 s a stock with
 # more open (at most 30 requests a minute, whatever is open)
 BOATS_BARS_SECONDS = 15.0
 BOATS_IDLE_SECONDS = 30.0  # by day, killed, or nothing open: looked at again this often
-BOATS_REFUSED_SECONDS = 3600.0  # Tiingo refused Blue Ocean (the plan, no add-on): asked again after this
+BOATS_REFUSED_SECONDS = 3600.0  # its provider refused the night (Tiingo's plan, no add-on): asked again after this
 BOATS_LIMITS_SECONDS = 3600.0  # the limits a sync's scan found looked at again this often (a lower one kept)
 BOATS_SETTLE_MS = 30_000  # a minute over this long is final (Tiingo's newest came half a minute behind)
 MAX_STOCKS = 30  # Alpaca Basic: symbols on its one real-time connection
@@ -107,35 +148,6 @@ MAX_BUFFERED_BYTES = 64 * 2**20
 TRADE_BYTES = 600
 RECORDER_COMMAND = re.compile(r"-m\s+massive_collate\s+live\s*$")  # a recorder (not `live status`, `live stop`)
 DAY_MS = 86_400_000
-PING = "ping"  # keepalive by WebSocket ping frames rather than a message
-
-
-class Reconnect(ConnectionError):
-    """The exchange asked for a new connection."""
-
-
-class Refused(ConnectionError):
-    """The server ended the session (keys, plan, or another connection on the account): tried
-    again after `wait` seconds at the earliest."""
-
-    def __init__(self, message: str, wait: float):
-        super().__init__(message)
-        self.wait = wait
-
-
-class Notice(Exception):
-    """The server turned down a request but kept the connection (shown, not retried)."""
-
-
-def _ns(iso: str) -> int:
-    """An RFC 3339 time with up to nanosecond digits as ns since the epoch, exactly."""
-    whole, _, frac = iso.rstrip("Z").partition(".")
-    return int(datetime.fromisoformat(whole + "+00:00").timestamp()) * 10**9 + int((frac + "000000000")[:9])
-
-
-def _trade(ts_ns: int, seq: int, price, size, trade_id) -> dict:
-    return {"sip_timestamp": ts_ns, "sequence_number": seq, "price": float(price), "size": float(size),
-            "exchange": None, "conditions": [], "id": str(trade_id), "tape": None}
 
 
 def _settle(trades: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
@@ -157,162 +169,47 @@ def _settle(trades: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
     return [t for kept in standing.values() for t in kept], gone, taken
 
 
-@dataclass
-class CoinbaseStream:
-    """Coinbase Exchange's public feed: the matches channel (every trade) and a heartbeat a second.
-    `dynamic`: its coins are those open on a chart (`change` while connected), not all LIVE_COINS."""
-    source: str = "coinbase"
-    url: str = "wss://ws-feed.exchange.coinbase.com"
-    keepalive: str | None = None
-    dynamic: bool = False
-    asset: str = "crypto"
-    authed: bool = True  # nothing to authenticate: symbols can change as soon as it is connected
-    confirmed: frozenset = frozenset()  # the pairs the server says it streams (dynamic)
-
-    def subscribe(self, coins) -> list[str]:
-        self.confirmed = frozenset()
-        return [json.dumps({"type": "subscribe", "product_ids": [f"{c}-USD" for c in coins],
-                            "channels": ["matches", "heartbeat"]})] if coins else []
-
-    def change(self, add, drop) -> list[str]:
-        """Messages taking pairs (BTCUSD) off and onto the connection."""
-        return [json.dumps({"type": kind, "product_ids": [f"{t[:-3]}-USD" for t in sorted(pairs)],
-                            "channels": ["matches", "heartbeat"]})
-                for kind, pairs in (("unsubscribe", drop), ("subscribe", add)) if pairs]
-
-    def parse(self, msg: dict) -> list[tuple[str, dict]]:
-        kind = msg.get("type")
-        if kind == "error":  # e.g. "Failed to subscribe" "subscription limit reached": a refusal
-            raise ConnectionError(f"coinbase: {msg.get('message')} {msg.get('reason') or ''}".strip())
-        if kind == "subscriptions":  # the whole list after each change
-            self.confirmed = frozenset(p.replace("-", "") for ch in msg.get("channels") or []
-                                       if isinstance(ch, dict) and ch.get("name") == "matches"
-                                       for p in ch.get("product_ids") or [])
-            return []
-        if kind not in ("match", "last_match"):
-            return []
-        ticker = msg["product_id"].replace("-", "")
-        tid = int(msg["trade_id"])
-        return [(ticker, _trade(_ns(msg["time"]), tid, msg["price"], msg["size"], tid))]
-
-
-@dataclass
-class BitstampStream:
-    """Bitstamp's public v2 feed: a live_trades channel per pair."""
-    source: str = "bitstamp"
-    url: str = "wss://ws.bitstamp.net"
-    keepalive: str | None = json.dumps({"event": "bts:heartbeat"})
-    dynamic: bool = False  # as CoinbaseStream
-    asset: str = "crypto"
-    authed: bool = True
-    confirmed: frozenset = frozenset()
-
-    def subscribe(self, coins) -> list[str]:
-        self.confirmed = frozenset()
-        return [json.dumps({"event": "bts:subscribe", "data": {"channel": f"live_trades_{c.lower()}usd"}})
-                for c in coins]
-
-    def change(self, add, drop) -> list[str]:
-        return [json.dumps({"event": f"bts:{kind}", "data": {"channel": f"live_trades_{t.lower()}"}})
-                for kind, pairs in (("unsubscribe", drop), ("subscribe", add)) for t in sorted(pairs)]
-
-    def parse(self, msg: dict) -> list[tuple[str, dict]]:
-        event = msg.get("event")
-        if event == "bts:request_reconnect":
-            raise Reconnect("bitstamp asked for a new connection")
-        if event == "bts:error":
-            data = msg.get("data") if isinstance(msg.get("data"), dict) else {}
-            raise ConnectionError(f"bitstamp: {data.get('message') or msg}")
-        if event in ("bts:subscription_succeeded", "bts:unsubscription_succeeded"):
-            pair = str(msg.get("channel") or "").removeprefix("live_trades_").upper()
-            self.confirmed = (self.confirmed | {pair}) if event == "bts:subscription_succeeded" else (self.confirmed - {pair})
-            return []
-        if event != "trade":
-            return []
-        d = msg["data"]
-        ticker = msg["channel"].removeprefix("live_trades_").upper()
-        tid = int(d["id"])
-        return [(ticker, _trade(int(d["microtimestamp"]) * 1000, tid, d.get("price_str", d["price"]),
-                                d.get("amount_str", d["amount"]), tid))]
-
-
-STREAMS = {"coinbase": CoinbaseStream, "bitstamp": BitstampStream}
-
-# Alpaca stream errors that end the session, and the seconds to wait before connecting again:
-# 401 not authenticated, 402 auth failed, 404 auth timeout, 406 connection limit exceeded (another
-# connection on the account), 407 slow client, 409 insufficient subscription, 500 internal error.
-ALPACA_REFUSALS = {401: 60, 402: 600, 404: 60, 406: 120, 407: 60, 409: 3600, 500: 60}
-
-
-@dataclass
-class AlpacaIexStream:
-    """Alpaca's free real-time stock stream (v2/iex): every trade on IEX, with cancels and
-    corrections (the trades they withdraw are marked `withdrawn`). The keys go in the auth
-    message only, never in a log. Its symbols change while it is connected (`change`), once the
-    server has accepted the keys; `confirmed` holds those the server says it streams."""
-    key_id: str = field(default="", repr=False)
-    secret_key: str = field(default="", repr=False)
-    source: str = IEX_FEED
-    url: str = "wss://stream.data.alpaca.markets/v2/iex"
-    keepalive: str | None = PING
-    dynamic: bool = True  # symbols from the charts (and watchlists: wanted_stocks), not LIVE_COINS
-    asset: str = "stock"
-    tape_rules: bool = True  # bars by the consolidated tape's rules per trade condition (ticks.py)
-    method: str = ("IEX's trades from Alpaca's real-time stream: one exchange, a few per cent of US volume; "
-                   "bars rebuilt as trades arrive (a forming bar changes until it closes), by the consolidated "
-                   "tape's rules per trade condition; a feed of the whole market (SIP) ranks above them")
-    authed: bool = False
-    confirmed: frozenset = frozenset()
-
-    def subscribe(self, symbols) -> list[str]:
-        """The first messages on a new connection: the keys (symbols follow once accepted)."""
-        self.authed, self.confirmed = False, frozenset()
-        return [json.dumps({"action": "auth", "key": self.key_id, "secret": self.secret_key})]
-
-    def change(self, add, drop) -> list[str]:
-        out = []
-        if drop:
-            out.append(json.dumps({"action": "unsubscribe", "trades": sorted(drop)}))
-        if add:
-            out.append(json.dumps({"action": "subscribe", "trades": sorted(add)}))
-        return out
-
-    def parse(self, msg) -> list[tuple[str, dict]]:
-        from .sources.alpaca import normalize_trade
-
-        out = []
-        for m in msg if isinstance(msg, list) else [msg]:
-            kind = m.get("T")
-            if kind == "t":
-                t = normalize_trade(m)
-                if t:
-                    out.append((m["S"], t))
-            elif kind == "x":  # a trade withdrawn: canceled, or an error
-                out.append((m["S"], {**normalize_trade(m), "withdrawn": True}))
-            elif kind == "c":  # a correction: the original trade withdrawn, the corrected one in its place
-                base = {"x": m["x"], "t": m["t"], "z": m.get("z")}
-                was = normalize_trade({**base, "i": m["oi"], "p": m["op"], "s": m["os"], "c": m.get("oc")})
-                out.append((m["S"], {**was, "withdrawn": True}))
-                out.append((m["S"], normalize_trade({**base, "i": m["ci"], "p": m["cp"], "s": m["cs"], "c": m.get("cc")})))
-            elif kind == "subscription":
-                self.confirmed = frozenset(m.get("trades") or [])
-            elif kind == "success" and m.get("msg") == "authenticated":
-                self.authed = True
-            elif kind == "error":
-                code = int(m.get("code") or 0)
-                text = f"alpaca {code}: {m.get('msg')}"
-                if code in ALPACA_REFUSALS:
-                    raise Refused(text, ALPACA_REFUSALS[code])
-                raise Notice(text)
-        return out
-
-
-def stock_keys(settings) -> tuple[str, str] | None:
-    """Alpaca's keys for the IEX stream: None without keys, with LIVE_STOCKS=off, or offline."""
-    a = settings.alpaca
-    if settings.offline or not settings.live_stocks or not (a and a.has_keys):
+def stock_keys(settings) -> tuple[str, ...] | None:
+    """What the stock stream signs in with (the plugin's Live.credentials: Alpaca's keys for its IEX
+    stream): None when it is not set up here (no keys, LIVE_STOCKS=off, offline)."""
+    feed = stock_stream()
+    if feed is None or settings.offline or not settings.live_stocks:
         return None
-    return a.key_id, a.secret_key
+    return feed.credentials(settings) if feed.credentials else ()
+
+
+def stock_stream():
+    """The plugins' live stock stream (Alpaca's IEX), or None: the recorder runs one."""
+    from .sources.registry import live_feeds
+
+    return next((x for _, x in live_feeds().values() if x.asset == "stock" and x.stream is not None), None)
+
+
+def crypto_streams() -> tuple[str, ...]:
+    """The plugins' live crypto streams, by name (Bitstamp's, Coinbase's): the recorder runs each."""
+    from .sources.registry import live_feeds
+
+    return tuple(n for n, (_, x) in live_feeds().items() if x.asset == "crypto" and x.stream is not None)
+
+
+def _title(feed: str) -> str:
+    """A feed's plugin title (Tiingo), for the recorder's notes."""
+    from .sources import providers
+
+    p = providers().get(feed)
+    return p.title if p else feed
+
+
+def night_poller(settings):
+    """The plugins' poller of a session no stream has (Tiingo's Blue Ocean nights), when it is
+    polled here, or None."""
+    from .sources.registry import live_feeds
+
+    for _, x in live_feeds().values():
+        made = x.poller(settings) if x.poller else None
+        if made is not None:
+            return made
+    return None
 
 
 def open_symbols(store, now_ms: int) -> list[str]:
@@ -343,105 +240,14 @@ def wanted_coins(store, now_ms: int, coins) -> tuple[str, ...]:
     return tuple(t for t in dict.fromkeys(open_symbols(store, now_ms)) if t in pairs)
 
 
-# -- Blue Ocean's night, live from Tiingo --------------------------------------------------------
-
-def boats_live(settings) -> bool:
-    """Whether Blue Ocean's nights are polled live from Tiingo (BoatsPoller): online, live stocks
-    on, Tiingo's key set and a paid plan (Power or Commercial: Starter's 50 requests an hour would
-    all go on this)."""
-    if settings.offline or not settings.live_stocks or not settings.tiingo_api_key:
-        return False
-    from .sources.plugins.tiingo import plan_of
-
-    return plan_of(settings) != "starter"
-
-
-def _iso_ms(text: str) -> int:
-    """Tiingo's time (2026-10-28T07:43:00.000Z, or with an offset and nanoseconds) in ms."""
-    text = str(text).replace("Z", "+00:00")
-    head, _, rest = text.partition(".")
-    if not rest:
-        return int(datetime.fromisoformat(head).timestamp() * 1000)
-    cut = next((i for i, ch in enumerate(rest) if ch in "+-"), len(rest))  # nanoseconds: microseconds kept
-    return int(datetime.fromisoformat(f"{head}.{rest[:cut][:6]}{rest[cut:]}").timestamp() * 1000)
-
-
-class BoatsPoller:
-    """Blue Ocean's overnight session (20:00-04:00 ET, Sunday to Thursday nights), live, from Tiingo's
-    REST API: it has no stream for it, but its answers are real time (the newest minute half a minute
-    old, asked 2026-10-28 at 03:43 ET); Alpaca's real-time nights are a paid plan, its free one 16
-    minutes behind. While a night is open, for the stocks open on a chart (the recorder's wanted
-    stocks): their last sale and quote every BOATS_QUOTE_SECONDS, one request for them all (the
-    price the pages show); and each one's minutes of the night every BOATS_BARS_SECONDS or so, the
-    minutes over stored as the feed's own bars, the forming one as a built bar its final bar
-    replaces (TIINGO_BOATS, one of PARTIAL_FEEDS: a chart of all feeds shows them where no other
-    feed has the night yet). On the Tiingo key's limits: its window and day cap (the client), its
-    kills (a 429 or a refused key kills Tiingo's fetching, and this stops with it)."""
-
-    source = TIINGO_BOATS
-    account = "tiingo"  # the feed whose key, limits and kills these requests are
-
-    def __init__(self, client, now=None):
-        self.client = client
-        self.now = now or (lambda: datetime.now(timezone.utc))
-        self.quotes_at = float("-inf")  # monotonic: the last quote request
-        self.bars_at: dict[str, float] = {}  # ticker -> monotonic: its minutes last asked for
-        self.final_to: dict[str, int] = {}  # ticker -> ms: its minutes stored final up to here
-        self.refused_until = float("-inf")  # monotonic: Blue Ocean refused (no add-on) until then
-
-    @staticmethod
-    def symbol(ticker: str) -> str:
-        return ticker.upper().replace(".", "-").lower()  # Tiingo's: brk-b
-
-    def night(self, t: datetime):
-        """The Blue Ocean session open at `t` (sessions.Session), or None."""
-        from .freshness import CALENDAR
-        from .sessions import ET
-
-        d = t.astimezone(ET).date()
-        return next((s for s in CALENDAR.sessions("overnight", d, d + timedelta(days=1)) if s.open <= t < s.close), None)
-
-    def quotes(self, tickers) -> dict[str, dict]:
-        """{ticker: {price, last (ms), bid, ask}}: the last sale and quote of each, one request."""
-        names = {self.symbol(t): t.upper() for t in tickers}
-        rows = self.client.get("/boats/", {"tickers": ",".join(names)})
-        out = {}
-        for r in rows if isinstance(rows, list) else []:
-            ticker = names.get(str(r.get("ticker") or "").lower())
-            if ticker and r.get("last") is not None and r.get("lastSaleTimestamp"):
-                out[ticker] = {"price": float(r["last"]), "last": _iso_ms(r["lastSaleTimestamp"]),
-                               "bid": r.get("bidPrice"), "ask": r.get("askPrice")}
-        return out
-
-    def minutes(self, ticker: str, night, since_ms: int = 0) -> list[dict]:
-        """The night's minutes from `since_ms` (its open at the latest), the forming one too (oldest
-        first). Tiingo reads its dates in New York and, without an endDate, answers only startDate's
-        hours before 04:00 ET: asked as the open's UTC date alone, a night came back empty all
-        evening (2026-10-28). So from the New York date of the first minute wanted (the open's until
-        the minutes after midnight are stored: the night before's last hours come with it, left out
-        here) to the close's."""
-        from .sessions import ET
-
-        lo = int(night.open.timestamp() * 1000)
-        first = datetime.fromtimestamp(max(lo, since_ms) / 1000, ET).date()
-        rows = self.client.get(f"/boats/{self.symbol(ticker)}/prices",
-                               {"startDate": first.isoformat(), "endDate": night.close.astimezone(ET).date().isoformat(),
-                                "resampleFreq": "1min", "columns": "open,high,low,close,volume"})
-        bars = []
-        for r in rows if isinstance(rows, list) else []:
-            t = _iso_ms(r["date"])
-            if t >= lo:
-                bars.append({"t": t, "o": float(r["open"]), "h": float(r["high"]), "l": float(r["low"]),
-                             "c": float(r["close"]), "v": float(r.get("volume") or 0), "vw": None, "n": None})
-        return sorted(bars, key=lambda b: b["t"])
-
-
 @dataclass
 class Recorder:
     db_path: Path
     coins: tuple[str, ...] = LIVE_COINS
-    sources: tuple[str, ...] = ("coinbase", "bitstamp")
-    stock_keys: tuple[str, str] | None = field(default=None, repr=False)  # Alpaca's: the IEX stream
+    # the crypto streams it runs (the plugins' live feeds, by name: crypto_streams)
+    sources: tuple[str, ...] = field(default_factory=lambda: crypto_streams())
+    # what the stock stream signs in with (stock_keys: Alpaca's keys for its IEX stream); None: no stocks
+    stock_keys: tuple[str, ...] | None = field(default=None, repr=False)
     locks: list = field(default_factory=list)  # the lock files it holds (cli.cmd_live): lost, it stops
     log: object = print
     connect: object = None  # WebSocket factory (tests pass a fake)
@@ -450,22 +256,26 @@ class Recorder:
     # and with none open nothing is connected. False (always): the coins of `coins` all the time,
     # and stocks open on a chart or on the rail's watchlists.
     selected_only: bool = False
-    boats: object = None  # BoatsPoller: Blue Ocean's night under way from Tiingo (boats_live)
+    boats: object = None  # a poller of the night (night_poller: Tiingo's Blue Ocean nights), or None
     # the settings the publisher plugins are read with (publications.py), in a thread of its own;
     # None: not read here
     publications: object = field(default=None, repr=False)
 
     def __post_init__(self):
-        self.streams = [STREAMS[s](dynamic=self.selected_only) for s in self.sources] if self.coins else []
-        if self.stock_keys:
-            self.streams.append(AlpacaIexStream(*self.stock_keys))
+        from .sources.registry import live_feeds
+
+        lives = live_feeds()
+        self.streams = [lives[s][1].stream(dynamic=self.selected_only) for s in self.sources] if self.coins else []
+        stocks = stock_stream()
+        if self.stock_keys is not None and stocks is not None:
+            self.streams.append(stocks.stream(*self.stock_keys))
         self._lock = threading.Lock()
         self._buffer: dict[tuple[str, str], list[dict]] = defaultdict(list)
         self._since: dict[str, int] = {}  # source -> connected since (ms)
         self._heard: dict[str, int] = {}  # source -> last heard from (ms): a message or a keepalive answer
         self._status: dict[str, dict] = {s.source: {"connected": False, "pairs": {}} for s in self.streams}
         if self.boats is not None:
-            self._status[TIINGO_BOATS] = {"connected": False, "pairs": {}, "polled": True}
+            self._status[self.boats.source] = {"connected": False, "pairs": {}, "polled": True}
         self._wanted: tuple[str, ...] = ()  # stock symbols to stream (wanted_stocks)
         self._wanted_coins: tuple[str, ...] = ()  # pairs to stream when following the charts (wanted_coins)
         self._subs: dict[str, dict[str, int]] = {s.source: {} for s in self.streams}  # symbol -> asked for since (ms)
@@ -899,7 +709,7 @@ class Recorder:
             return 0
         from . import derive
 
-        sources = {s.source for s in self.streams} | ({TIINGO_BOATS} if self.boats is not None else set())
+        sources = {s.source for s in self.streams} | ({self.boats.source} if self.boats is not None else set())
         try:
             return derive.run(store, sources=sources, tickers=touched, log=lambda *_: None)
         except Exception:
@@ -957,7 +767,7 @@ class Recorder:
                 self.log(f"live: publications: {type(e).__name__}: {e}; tried again in a minute")
                 self.stop.wait(publications.STEP_MAX_S)
 
-    # -- Blue Ocean's night, live from Tiingo (BoatsPoller) ------------------------------------------
+    # -- the night polled (night_poller: Tiingo's Blue Ocean nights) ---------------------------------
     def _start_boats(self) -> threading.Thread | None:
         if self.boats is None:
             return None
@@ -983,7 +793,7 @@ class Recorder:
                         from .sources.registry import rate_window
 
                         if hasattr(p.client, "tighten") and p.client.tighten(*rate_window(p.account, self.publications)):
-                            self.log("live: Blue Ocean from Tiingo: a lower limit its server gave is kept from now on")
+                            self.log(f"live: {p.title}: a lower limit its server gave is kept from now on")
                     wait = self.boats_step(store)
                 except (RateLimited, Unauthorized) as e:  # the server said stop: Tiingo's fetching is killed, this with it
                     killswitch.strike(store, p.account, "fetch", f"live Blue Ocean: {e}", log=self.log,
@@ -991,12 +801,12 @@ class Recorder:
                     self._boats_off(f"stopped: {e}", down=True)
                 except NotEntitled as e:  # the plan has no Blue Ocean (the add-on): not asked again for an hour
                     p.refused_until = time.monotonic() + BOATS_REFUSED_SECONDS
-                    self.log(f"live: Tiingo refused Blue Ocean ({e}); asked again in an hour")
+                    self.log(f"live: {p.title}: refused ({e}); asked again in an hour")
                     self._boats_off("refused by the plan", down=True)
                 except BudgetExhausted as e:  # the Tiingo key's day spent on this machine: idle on its limits
-                    self._boats_off(f"paused on Tiingo's limits: {e}")
+                    self._boats_off(f"paused on {_title(p.account)}'s limits: {e}")
                 except Exception as e:  # noqa: BLE001 - the network, a locked database: logged, tried again
-                    self.log(f"live: Blue Ocean from Tiingo: {type(e).__name__}: {e}")
+                    self.log(f"live: {p.title}: {type(e).__name__}: {e}")
                     self._boats_off(f"{type(e).__name__}: {e}"[:200], down=True)  # not left "connected" on stale quotes
                 self.stop.wait(wait)
 
@@ -1023,7 +833,7 @@ class Recorder:
             p.quotes_at = time.monotonic()
             quotes = p.quotes(wanted)
             with self._lock:
-                st = self._status[TIINGO_BOATS]
+                st = self._status[p.source]
                 st.update(connected=True, idle=False, error=None, symbols=sorted(wanted), note=None)
                 st["pairs"] = {t: v for t, v in st["pairs"].items() if t in wanted}  # only those open: no list growing
                 for t, q in quotes.items():
@@ -1048,12 +858,12 @@ class Recorder:
         since = p.final_to.get(ticker, 0) - 2 * 60_000  # the last two again: a late print corrects one
         new = [b for b in over if b["t"] >= since]
         if new:
-            store.upsert_bars(TIINGO_BOATS, ticker, "minute", 1, new)
+            store.upsert_bars(p.source, ticker, "minute", 1, new)
         if over:
             p.final_to[ticker] = over[-1]["t"] + 60_000
-            store.add_coverage(TIINGO_BOATS, ticker, "minute", int(night.open.timestamp() * 1000), p.final_to[ticker])
+            store.add_coverage(p.source, ticker, "minute", int(night.open.timestamp() * 1000), p.final_to[ticker])
         if forming:
-            store.upsert_built_bars(TIINGO_BOATS, ticker, "minute", 1, forming, self._boats_derivation(store, ticker, night))
+            store.upsert_built_bars(p.source, ticker, "minute", 1, forming, self._boats_derivation(store, ticker, night))
         if new or forming:
             with self._lock:
                 self._touched.add(ticker)
@@ -1062,21 +872,23 @@ class Recorder:
         """The record of a stock's forming minutes of one night (built bars point to it)."""
         from . import provenance
 
-        key = (TIINGO_BOATS, ticker, night.day.toordinal(), "forming")
+        p = self.boats
+        key = (p.source, ticker, night.day.toordinal(), "forming")
         if key not in self._derivations:
             span = (int(night.open.timestamp() * 1000), int(night.close.timestamp() * 1000))
             self._derivations[key] = provenance.record(
-                store, "forming-minute", f"{TIINGO_BOATS}:{ticker}",
-                {"method": "Tiingo's Blue Ocean minute still forming, as its REST answer gives it; replaced by "
+                store, "forming-minute", f"{p.source}:{ticker}",
+                {"method": f"{p.title}: the minute still forming, as its REST answer gives it; replaced by "
                            "the minute's final bar once it is over", "poll_seconds": BOATS_BARS_SECONDS},
-                {"url": f"https://api.tiingo.com/boats/{BoatsPoller.symbol(ticker)}/prices"}, span)
+                {"url": p.url(ticker)}, span)
         return self._derivations[key]
 
     def _boats_off(self, note: str | None, down: bool = False) -> None:
         """Not polling: idle (by day, nothing open, paused on Tiingo's limits) with a note of why, or
         down with the error (status and the Activity view show either)."""
+        p = self.boats
         with self._lock:
-            self._status[TIINGO_BOATS].update(connected=False, idle=not down, note=None if down else note,
+            self._status[p.source].update(connected=False, idle=not down, note=None if down else note,
                                               error=note if down else None, pairs={}, symbols=[])
 
     def holds_locks(self) -> bool:
