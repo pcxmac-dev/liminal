@@ -188,16 +188,32 @@ def test_every_built_in_plugin_is_versioned_for_this_apps_contract():
     # each built-in's release and the contract it needs: every feed plugin holds its client (1.6:
     # sources.http, sources.archive), Alpaca's, Tiingo's, Coinbase's and Bitstamp's their live feeds
     # too; Federal declares the SEC's GOV_CONTACT and the CFTC's dataset (1.4), as the dataset
-    # libraries their datasets; Federal's feeds their parsers (1.7); Massive's headlines are part of
-    # a feed plugin (1.3)
+    # libraries their datasets; Federal's feeds their parsers (1.7); Massive's headlines are released
+    # with Massive
     want = {**dict.fromkeys(("alpaca", "boats", "tiingo", "tiingofx"), ("1.3.0", "1.6")),
-            **dict.fromkeys(("massive", "coinbase", "bitstamp"), ("1.2.0", "1.6")),
+            **dict.fromkeys(("massive", "massive-news", "coinbase", "bitstamp"), ("1.2.0", "1.6")),
             **dict.fromkeys(("bitfinex", "cboe"), ("1.1.0", "1.6")),
             **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("1.3.0", "1.7")),
-            "massive-news": ("1.2.0", "1.3"), "french": ("1.0.0", "1.4"), "datahub": ("1.0.0", "1.4")}
+            "french": ("1.0.0", "1.4"), "datahub": ("1.0.0", "1.4")}
     assert {p.name: (p.version, p.api) for p in plugins_} == want
     assert all(registry.api_refusal(p.api) is None for p in plugins_)
     assert registry.PLUGIN_API == "1.7"
+
+
+def test_a_plugins_parts_are_released_with_it():
+    """A part of a plugin is no plugin of its own (the user, 2026-10-31: "massive headlines should not
+    be separate from massive same thing with federal agencies and federal"): each built-in part, a
+    feed (Alpaca's Blue Ocean, Tiingo's forex) or a publisher (Massive's headlines, Federal's
+    agencies), has its plugin's version and contract."""
+    from massive_collate.sources import publishers
+
+    feeds, pubs = providers(), publishers()
+    release = {n: (p.version, p.api) for n, p in [*feeds.items(), *pubs.items()]}
+    parts = {n: registry.plugin_of(n) for n in feeds if registry.plugin_of(n) != n}
+    parts |= {n: registry.publisher_of(n) for n in pubs if registry.publisher_of(n) != n}
+    assert parts == {"boats": "alpaca", "tiingofx": "tiingo", "massive-news": "massive",
+                     **dict.fromkeys(("fed", "nyfed", "sec", "bls", "fedreg", "cftc"), "federal")}
+    assert {n: release[n] for n in parts} == {n: release[owner] for n, owner in parts.items()}
 
 
 def test_a_plugin_for_another_major_is_left_out_and_reported_and_a_matching_one_loads(installed):
@@ -296,7 +312,7 @@ def test_the_plugins_view_shows_each_plugins_version_and_origin(tmp_path):
     assert out["api"] == registry.PLUGIN_API
     assert {(p["version"], p["api"], p["origin"]) for p in out["plugins"]} == {
         ("1.1.0", "1.6", "built in"), ("1.2.0", "1.6", "built in"), ("1.3.0", "1.6", "built in")}
-    assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.3.0", "1.7"), ("1.2.0", "1.3"), ("1.0.0", "1.4")}
+    assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.3.0", "1.7"), ("1.2.0", "1.6"), ("1.0.0", "1.4")}
 
 
 def test_unknown_providers_are_refused_by_name():

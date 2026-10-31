@@ -993,8 +993,15 @@ main > .view.ex-view:not([hidden]) { display: grid; }
 .ex-state.pl-ready { color: var(--up); border-color: var(--up); }
 .ex-state.pl-scanning { color: var(--accent); border-color: var(--accent); }  /* a rescan has it still to ask */
 .pl-feedrow th { text-align: left; font-weight: 600; color: var(--muted); padding-top: 6px; }
-/* a plugin of several publishers (Federal): its agencies listed beneath it, indented */
-.ex-venue.pl-sub { width: calc(100% - 14px); margin-left: 14px; padding-top: 4px; padding-bottom: 4px; }
+/* a part of a plugin (Massive's headlines, Federal's agencies): a section of its page, opened in place */
+.pl-part { margin: 6px 0; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; }
+.pl-part > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 7px 0; cursor: pointer; }
+.pl-part > summary::before { content: '▸'; color: var(--muted); width: 10px; }
+.pl-part[open] > summary::before { content: '▾'; }
+.pl-part > summary .p-muted { flex-basis: 100%; padding-left: 18px; }
+.pl-part[open] { padding-bottom: 10px; }
+.pl-part[open] > summary { border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+.pl-part-pause { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 8px 0 2px; }
 .pl-link { border: none; background: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; font-weight: 600; }
 .pl-link:hover { text-decoration: underline; }
 .ex-state.pl-killed, .ex-state.pl-no-key { color: var(--down); border-color: var(--down); }

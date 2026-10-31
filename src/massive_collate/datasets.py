@@ -401,17 +401,21 @@ def status(store, today: date | None = None) -> list[dict]:
     """Every dataset: files fetched and closed, values, series, span, last fetch, files due, quality."""
     today = today or datetime.now(ET).date()
     out = []
-    from .sources import publishers
+    from .sources import providers, publishers
+    from .sources.registry import publisher_of
 
     pubs = publishers()
     for ds in declared().values():
+        plugin = publisher_of(ds.publisher)  # the plugin it is in: Federal, for the CFTC's
+        owner = pubs.get(plugin) or providers().get(plugin)
         files = store.dataset_files(ds.name)
         series = [x for x in store.dataset_series(ds.provider, ds.name) if x["n"]] if files else []  # withdrawn left out
         members = len(store.constituents(ds.provider, ds.index)) if files and ds.index else 0
         q = store.quality(ds.name, "dataset")
         out.append({
             "name": ds.name, "title": ds.title, "provider": ds.provider, "kind": ds.kind, "licence": ds.licence,
-            "plugin": ds.publisher, "pluginTitle": pubs[ds.publisher].title if ds.publisher in pubs else ds.publisher,
+            "plugin": plugin, "pluginTitle": owner.title if owner else plugin,
+            "part": pubs[ds.publisher].title if plugin != ds.publisher and ds.publisher in pubs else None,
             "files": len(files), "closed": sum(f["closed"] for f in files.values()),
             "bytes": sum(f["bytes"] or 0 for f in files.values()),
             "values": sum(s["n"] or 0 for s in series), "series": len(series), "members": members,

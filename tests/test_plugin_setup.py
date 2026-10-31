@@ -129,15 +129,16 @@ def test_the_key_route_takes_only_this_apps_pages_and_answers_no_value(tmp_path,
         store.close()
 
 
-def test_the_page_sets_each_plugin_up_and_lists_headlines_under_massive():
+def test_the_page_sets_each_plugin_up_and_shows_headlines_in_massives_page():
     js = (STATIC / "plugins.js").read_text(encoding="utf-8")
     assert "function setupHtml(owner, keys, account)" in js and "'/api/plugins/key'" in js
-    assert "${setupHtml(p.name, p.keys)}" in js and "${err}${pubSetupHtml(p)}" in js
+    assert "${setupHtml(p.name, p.keys)}" in js and "return `${err}<h4>Feeds</h4>" in js
     assert "type=\"${k.secret ? 'password' : 'text'}\"" in js and 'autocomplete="off"' in js
     assert "input.value = '';  // sent once; never kept in the page" in js
     assert "window.confirm(`Remove ${t.dataset.removeKey}" in js
     assert "const typed = [...box.querySelectorAll('input.pl-key')]" in js  # typing survives the refreshes
-    assert "</button>${partsOf(p.name)}`" in js and "function publishersHtml(p)" in js and "function parentOf(p)" in js
+    assert "${pubs.map((q) => partHtml(q, pubs.length === 1)).join('')}" in js  # a section, open when alone
+    assert "function publishersHtml(p)" in js and "function parentOf(p)" in js and "${pubSetupHtml(p)}${readsHtml(p)}" in js
     css = (STATIC / "style.css").read_text(encoding="utf-8")
     assert ".pl-setup input.pl-key {" in css
 

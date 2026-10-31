@@ -712,7 +712,7 @@ def view(gdb: gov.GovDB, settings=None, store=None, now: datetime | None = None,
 
     for p in out:
         if p["partOf"] == p["name"] or p["partOf"] not in by:
-            # part of a feed plugin (Massive's headlines: under Massive), or of none here: one of its own
+            # part of a feed plugin (Massive's headlines: in Massive), or of none here: one of its own
             p["partOf"] = plugin_of(p["partOf"]) if p["partOf"] != p["name"] and p["partOf"] in providers() else ""
     for p in out:  # a plugin of several publishers (Federal): its parts, their requests, its state from theirs
         parts = [q for q in out if q["partOf"] == p["name"] and q is not p]

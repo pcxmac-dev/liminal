@@ -244,8 +244,12 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     of sane length, never Windows' or Python's own nor the app's own setting (`keys.refusal`), nor
     one another plugin declares too. And `Publisher.part_of` may name a feed plugin: Massive's
     headlines (`massive-news`, `part_of="massive"`; the user: "massive headlines needs to be rolled
-    in to Massive") are listed under Massive (`menu()`'s `publishers`, the Plugins view), on its key
-    and limits; Massive's kill stops them as its account's.
+    in to Massive") are in Massive's row (`menu()`'s `publishers`) and a section of its Plugins view
+    page, released with it (its version and contract), on its key and limits; Massive's kill stops
+    them as its account's. A part, a feed or a publisher, is never a Plugins view entry of its own
+    (the user, 2026-10-31: "massive headlines should not be separate from massive same thing with
+    federal agencies and federal"); `test_a_plugins_parts_are_released_with_it` holds the built-ins
+    to their plugin's release.
   - **1.4** (2026-10-31) lets `Publisher.datasets` hold the `Dataset` definitions themselves
     (`sources/dataset.py`: its files, parser, publication rule, the file it is kept in; a name, as in
     1.2, still lists one another plugin declares). Every external data provider is in a plugin (the
@@ -375,8 +379,9 @@ releases and news (read on schedules), data series (point in time, chartable), a
 
 - **Phase 1, the merge (done 2026-10-30):** the Federal Reserve, the New York Fed, the SEC, BLS and
   the Federal Register (each a plugin of its own before), and the CFTC's Commitments of Traders (a
-  dataset) as its parts; one Plugins view entry (its agencies beneath it, an overview of them, Pause
-  all) and one `plugins` row; the Gov view renamed Federal. No new request.
+  dataset) as its parts; one Plugins view entry (each agency a section of its page, opened for its
+  feeds, checks, limits and own pause; Pause all) and one `plugins` row; the Gov view renamed
+  Federal; the Datasets view names the CFTC's as the Federal plugin's. No new request.
 - **Phase 2, EDGAR company data:** the ticker to CIK list; per watched or open stock its filings
   (8-K with items, 10-Q/10-K, offerings S-1/S-3/424B, proxies), share structure (shares outstanding
   from each cover, public float in dollars yearly with float shares from that day's close, diluted

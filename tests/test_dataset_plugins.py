@@ -112,7 +112,9 @@ def test_a_second_plugin_never_takes_a_datasets_name_or_file(monkeypatch, restor
 def test_the_datasets_list_names_each_ones_plugin(tmp_path):
     with Store(tmp_path / "m.db") as store:
         rows = {r["name"]: r for r in datasets.status(store, date(2026, 10, 23))}
-    assert (rows["cftc-cot-legacy"]["plugin"], rows["cftc-cot-legacy"]["pluginTitle"]) == ("cftc", "CFTC")
+    cot = rows["cftc-cot-legacy"]  # in the Federal plugin, the CFTC's part of it
+    assert (cot["plugin"], cot["pluginTitle"], cot["part"]) == ("federal", "Federal", "CFTC")
+    assert rows["french-3-factors-daily"]["part"] is None
     assert rows["french-3-factors-daily"]["pluginTitle"] == "Ken French Data Library"
     assert rows["shiller-us-market-monthly"]["pluginTitle"] == "Datahub"
 

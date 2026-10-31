@@ -61,7 +61,7 @@ DEFAULT_PER_REQUEST = 1000  # bars a request returns, for a provider that does n
 # 1.2 (2026-10-30): Publisher.part_of and Publisher.datasets, a plugin of several publishers (Federal).
 # 1.3 (2026-10-31): Publisher.keys and KeyVar.secret, KeyVar.hint: every variable a plugin reads
 #   declared by it, set from the Plugins view; Publisher.part_of may name a feed plugin (Massive's
-#   headlines, under Massive).
+#   headlines, in Massive).
 # 1.4 (2026-10-31): Publisher.datasets holds the Dataset definitions themselves (sources/dataset.py:
 #   files, parser, publication rule), read only from its hosts and stopped by its pause; a library of
 #   datasets is a publisher with no feeds (Ken French's, Datahub's; the CFTC's in Federal).
@@ -673,9 +673,9 @@ def publishers() -> dict[str, Publisher]:
 
 
 def publisher_of(name: str) -> str:
-    """The plugin a publisher is listed under: the one it is part of (Publisher.part_of), a
-    publisher (Federal's agencies) or a feed plugin (API 1.3: Massive's headlines, under Massive);
-    or its own (a part_of naming neither here leaves it one of its own)."""
+    """The plugin a publisher is in: the one it is part of (Publisher.part_of), a publisher
+    (Federal's agencies) or a feed plugin (API 1.3: Massive's headlines, in Massive); or its own
+    (a part_of naming neither here leaves it one of its own)."""
     pubs = publishers()
     p = pubs.get(name)
     if p is None or not p.part_of or p.part_of == name:

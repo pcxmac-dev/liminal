@@ -102,19 +102,24 @@ def test_the_plugins_view_lists_federal_once_with_its_agencies_and_the_cftcs_dat
     assert by["federal"]["parts"] == AGENCIES and all(by[n]["partOf"] == "federal" for n in AGENCIES)
     assert by["federal"]["requestsToday"] == sum(by[n]["requestsToday"] for n in AGENCIES)
     assert by["cftc"]["datasets"] == ["cftc-cot-legacy"] and by["cftc"]["datasetRows"][0]["name"] == "cftc-cot-legacy"
-    assert by["massive-news"]["partOf"] == "massive" and by["massive-news"]["parts"] == []  # under Massive
+    assert by["massive-news"]["partOf"] == "massive" and by["massive-news"]["parts"] == []  # in Massive
     assert [k["name"] for k in by["federal"]["keys"]] == ["GOV_CONTACT"] and set(by["federal"]["keys"][0]) == {
         "name", "label", "aliases", "secret", "hint", "set"}  # whether it is set, never its value
 
 
-def test_the_page_shows_federal_with_its_agencies_beneath_and_the_gov_view_is_named_federal():
+def test_the_page_shows_federal_once_with_its_agencies_in_its_page_and_the_gov_view_is_named_federal():
+    """The user, 2026-10-31: "massive headlines should not be separate from massive same thing with
+    federal agencies and federal": a part is a section of its plugin's page, no entry of its own."""
     js = (STATIC / "plugins.js").read_text(encoding="utf-8")
-    assert "top.filter((p) => !setsOnly(p)).map((p) => pubButton(p, false) + partsOf(p.name))" in js
-    assert "filter((q) => q.partOf === name).map((q) => pubButton(q, true))" in js and "pubButton(p, false) + partsOf(p.name)" in js
+    assert "const top = (data.publishers || []).filter((p) => !parentOf(p));" in js
+    assert "top.filter((p) => !setsOnly(p)).map(pubButton)" in js and "pl-sub" not in js
     assert "if (p.parts.length) return `${(p.keys || []).length ? pubSetupHtml(p) : ''}${partsHtml(p)}`;" in js
+    assert "${partsOf(p).map((q) => partHtml(q, false)).join('')}" in js  # each agency a section
+    assert '<details class="pl-part" data-part="${esc(q.name)}"' in js and "${q.feeds.length ? readsHtml(q) : datasetsHtml(q)}" in js
+    assert "if (up) { folds.set(part.name, true); sel = up.id; }" in js  # a part picked: its plugin's page
     assert "function datasetsHtml(p)" in js
     assert "whose === 'plugin'" in js and "(all ? 'Pause all' : 'Pause')" in js
     css = (STATIC / "style.css").read_text(encoding="utf-8")
-    assert ".ex-venue.pl-sub {" in css and ".pl-link {" in css
+    assert ".pl-part > summary {" in css and ".pl-sub" not in css and ".pl-link {" in css
     assert "<h2>Federal</h2>" in (STATIC / "gov.js").read_text(encoding="utf-8")
     assert 'id="railGov" title="Federal: the federal agencies' in (STATIC / "index.html").read_text(encoding="utf-8")

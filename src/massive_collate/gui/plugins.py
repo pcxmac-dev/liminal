@@ -14,8 +14,10 @@ While a rescan runs, each feed it has still to ask says "scanning" (the user, 20
 hit rescan all, i want the status of each plug in to say scanning, not 'ready'"); one asked in this
 run is back to its state, and a feed with no scan (a public one) or none it can ask keeps its own.
 
-A publisher can be part of a feed plugin (Massive's headlines: Publisher.part_of): listed under it
-(`publishers`), with its own page (publications.view).
+A publisher can be part of a feed plugin (Massive's headlines: Publisher.part_of), named in it
+(`publishers`): a section of its page, never an entry of its own, as Federal's agencies are of
+Federal's (the user, 2026-10-31: "massive headlines should not be separate from massive same thing
+with federal agencies and federal"); what it reads comes from publications.view.
 
 Each plugin is set up here: every variable it reads (registry.plugin_keys: its keys, its feeds' and
 publishers', a detail of yours such as GOV_CONTACT) with whether it is set, typed into the view and
