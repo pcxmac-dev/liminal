@@ -8,6 +8,8 @@ from datetime import date, datetime, timedelta, timezone
 from massive_collate import gov, publications
 from massive_collate.gov import GovDB, Source
 from massive_collate.sources import publishers
+from massive_collate.sources.publisher import parse_rss
+from massive_collate.sources.plugins.federal.fedreg import parse_fedreg
 
 NOW = datetime(2026, 10, 26, 6, 0, tzinfo=timezone.utc)  # Monday, 2:00 a.m. ET: no release moment near
 OFFICIAL = {n: p for n, p in publishers().items() if p.kind == "official"}
@@ -82,17 +84,17 @@ def read(db, now, http, contact=None, sleep=None, force=False):
 
 def test_feeds_are_read_into_items():
     fed = Source("fed-press", "Fed", "Press releases", "u")
-    items = gov.parse_rss(FED_RSS, fed)
+    items = parse_rss(FED_RSS, fed)
     assert [i["title"] for i in items] == ["Federal Reserve issues FOMC statement", "Agencies issue proposal"]
     assert items[0]["id"] == "monetary20261028a" and items[0]["published"] == "2026-10-28T18:00:00+00:00"
     assert items[1]["id"] == "https://www.federalreserve.gov/x.htm" and items[0]["kind"] == "press release"
-    atom = gov.parse_rss(ATOM, Source("fed-speeches", "Fed", "Speeches", "u"))
+    atom = parse_rss(ATOM, Source("fed-speeches", "Fed", "Speeches", "u", item_kind="speech"))
     assert atom == [{"id": "tag:s1", "agency": "Fed", "title": "Speech", "url": "https://example.gov/s",
                      "published": "2026-10-20T15:00:00+00:00", "kind": "speech"}]
 
 
 def test_the_federal_register_tags_finras_and_the_exchanges_filings():
-    docs = {d["id"]: d for d in gov.parse_fedreg(FEDREG)}
+    docs = {d["id"]: d for d in parse_fedreg(FEDREG)}
     assert docs["2026-1"]["agency"] == "SEC" and docs["2026-1"]["tags"] == ["FINRA"]
     assert docs["2026-2"]["tags"] == ["SRO"] and docs["2026-3"]["agency"] == "CFTC"
     assert docs["2026-3"]["kind"] == "proposed rule" and docs["2026-3"]["published"] == "2026-10-22T00:00:00+00:00"
@@ -196,7 +198,7 @@ def test_the_gov_command_lists_each_sources_state(tmp_path, monkeypatch, capsys)
 
 def test_a_feed_with_a_byte_order_mark_and_no_charset_is_read():
     data = b"\xef\xbb\xbf" + FED_RSS.replace("Agencies", "Agencías").encode("utf-8")
-    items = gov.parse_rss(data, Source("fed-press", "Fed", "Press releases", "u"))
+    items = parse_rss(data, Source("fed-press", "Fed", "Press releases", "u"))
     assert [i["title"] for i in items][1] == "Agencías issue proposal"  # not mojibake from Latin-1
 
 

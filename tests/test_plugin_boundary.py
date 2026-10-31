@@ -15,10 +15,6 @@ FOR_PEOPLE = {
     ("gov.py", "www.bls.gov"), ("gov.py", "www.ecfr.gov"),
     ("gui/server.py", "127.0.0.1"),  # this app's own address
 }
-# still to move into their plugins (emptied piece by piece)
-STILL_TO_MOVE = {
-    ("gov.py", "www.federalregister.gov"),
-}
 
 
 def hosts_named() -> set[tuple[str, str]]:
@@ -33,8 +29,7 @@ def hosts_named() -> set[tuple[str, str]]:
 
 def test_no_providers_host_is_named_outside_the_plugins():
     found = hosts_named()
-    assert found - FOR_PEOPLE - STILL_TO_MOVE == set(), "a provider's host outside sources/plugins/: move it into its plugin"
-    assert STILL_TO_MOVE <= found  # moved: take it off the list
+    assert found - FOR_PEOPLE == set(), "a provider's host outside sources/plugins/: move it into its plugin"
 
 
 def test_the_datasets_and_the_live_streams_hosts_are_their_plugins():
@@ -42,7 +37,8 @@ def test_the_datasets_and_the_live_streams_hosts_are_their_plugins():
     for host in ("mba.tuck.dartmouth.edu", "www.cftc.gov", "raw.githubusercontent.com",  # datasets (API 1.4)
                  "ws-feed.exchange.coinbase.com", "ws.bitstamp.net", "stream.data.alpaca.markets",  # streams (1.5)
                  "api.tiingo.com",
-                 "api.massive.com", "data.alpaca.markets", "api.alpaca.markets"):  # the vendors' clients (1.6)
+                 "api.massive.com", "data.alpaca.markets", "api.alpaca.markets",  # the vendors' clients (1.6)
+                 "www.federalregister.gov", "markets.newyorkfed.org"):  # the agencies' parsers (1.7)
         assert host not in found, host
 
 
@@ -81,3 +77,26 @@ def test_plugins_are_self_contained():
         elif not rel.startswith("sources/plugins/"):
             named = {m for m in _imports(path) if _plugin_of(m)}
             assert not named, f"{rel} imports a plugin by name: {named}"
+
+
+def test_a_plugins_own_parser_reads_its_feed_without_the_app_changing():
+    """A new kind of source is its plugin's (Feed.parse, API 1.7): the reader stores what the parser
+    gives, items and rates, as for the Federal Register's and the New York Fed's."""
+    from massive_collate.sources.publisher import Feed, Read
+
+    from .test_publications import NOW, Resp, Site, _mark, pub, reader
+
+    def parse(answer, feed):
+        lines = answer.content.decode().splitlines()  # a format the app has never seen: one item a line
+        return Read(items=[{"id": t, "agency": feed.agency, "title": t, "url": None, "published": None,
+                            "kind": feed.item_kind} for t in lines],
+                    rates=[{"series": "XR", "day": "2026-10-23", "value": 1.5}])
+
+    p = pub((Feed("t-lines", "T", "Lines", "https://news.example.gov/lines.json", "lines", every_minutes=60,
+                  parse=parse, item_kind="notice"),))
+    site = Site({"https://news.example.gov/lines.json": Resp(text="One\nTwo", headers={"Content-Type": "application/json"})})
+    r = reader(site)
+    _mark(r, p)
+    r.step(NOW, publishers={"t": p})
+    assert sorted((i["title"], i["kind"]) for i in r.gdb.items()) == [("One", "notice"), ("Two", "notice")]
+    assert r.gdb.rate("XR")["value"] == 1.5 and r.gdb.fetched()["t-lines"]["message"] == "2 new"

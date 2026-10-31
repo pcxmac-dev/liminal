@@ -201,7 +201,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     An unknown value is Starter.
 - **The plugin contract, versioned** (2026-10-29; the user: "eventually plugins will need to be in
   their own repo with their own version"). The app offers `registry.PLUGIN_API` (major.minor, now
-  1.6). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
+  1.7). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
   major.minor.patch) and the contract it was written for (`api`: a literal such as `"1.0"`, never
   `PLUGIN_API` itself, which would always match). At discovery a plugin written for another major,
   or for a newer minor than the app offers, is left out and reported with the ones that fail to
@@ -283,6 +283,15 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     `alpaca.py` and `public.py` are gone, and Massive's base URL is its plugin's (`MASSIVE_BASE_URL`
     only overrides it). No plugin imports another, and the app imports none by name
     (`tests/test_plugin_boundary.py`).
+  - **1.7** (2026-10-31) adds `Feed.parse` and `Feed.item_kind` (`sources.publisher`: `Read`,
+    `parse_rss`): each feed's parser is its plugin's, `parse(answer, feed)` giving a `Read` (items
+    for the news and the Federal view, reference rates), so a new kind of source needs no change to
+    the app: the Federal Register's (`fedreg.parse`, its agencies and FINRA's and the exchanges'
+    filings tagged) and the New York Fed's (`nyfed.parse`, its rates) are in their parts, and an RSS
+    or Atom feed is read by the contract's `parse_rss`, its items what the feed says they are
+    (`item_kind`: the Fed's speeches, the SEC's trading suspensions, BLS's data releases). `gov.py`
+    keeps what they send and makes the Federal view; it parses no agency's answer. With it no
+    provider's host is named outside `sources/plugins/` but the links people follow.
   - **What a plugin may rely on (API 1.0)**, and nothing else of `massive_collate`:
     `sources.registry`: `PLUGIN_API`, `Provider`, `KeyVar`, `Scanned`, and `Report`, `Limits`,
     `Capability` for a `reporter`; the helpers `limiter`, `machine_caps`, `public_client`,
@@ -327,8 +336,8 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
        plugin: `config.PUBLIC_FEEDS` (each public feed's plan and caps, into its module),
        `ALPACA_TIERS` and `AlpacaSettings` (`settings.alpaca`, read from `settings.env` by the
        plugin), Massive's `TIERS`, `MASSIVE_CLASS_TIERS`, `asset_tier`, `tier_for`, `symbols.ASSETS`,
-       `sessions.ET`, `gov.FEDREG_URL`, `ratelimit.MachineLedger` (Coinbase's `venue_view`, which
-       Bitfinex borrowed: done, into `sources.archive`);
+       `sessions.ET`, `ratelimit.MachineLedger` (done: Coinbase's `venue_view`, which Bitfinex
+       borrowed, into `sources.archive`; `gov.FEDREG_URL`, into the Federal Register's part);
      - the app's own modules that still name a provider (some 40 lines on 2026-10-29; `live.py`'s
        streams and Alpaca's trade parsing done 2026-10-31, API 1.5: `config.py`, `cli.py`'s Massive plan commands,
        `gui/venues.py`, `gui/server.py`, `storage/directory.py`, `deps.py`, `freshness.py` ...) read it

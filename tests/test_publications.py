@@ -367,7 +367,9 @@ def test_a_parsers_surprise_is_noted_and_never_stops_the_publishers_after_it():
         def json(self):
             return {"refRates": ["x"]}  # JSON of another shape: AttributeError deep in the parser
 
-    nyfed = Publisher("ny", "NY", "", (Feed("ny-r", "NY", "R", "https://markets.example.gov/r.json", "nyfed"),),
+    from massive_collate.sources.plugins.federal.nyfed import parse
+
+    nyfed = Publisher("ny", "NY", "", (Feed("ny-r", "NY", "R", "https://markets.example.gov/r.json", "nyfed", parse=parse),),
                       Policy(hosts=("markets.example.gov",), min_minutes=5, per_day=40), order=1)
     site = Site({"https://markets.example.gov/r.json": Odd(headers={"Content-Type": "application/json"})})
     r = reader(site)

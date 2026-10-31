@@ -188,15 +188,16 @@ def test_every_built_in_plugin_is_versioned_for_this_apps_contract():
     # each built-in's release and the contract it needs: every feed plugin holds its client (1.6:
     # sources.http, sources.archive), Alpaca's, Tiingo's, Coinbase's and Bitstamp's their live feeds
     # too; Federal declares the SEC's GOV_CONTACT and the CFTC's dataset (1.4), as the dataset
-    # libraries their datasets; Massive's headlines are part of a feed plugin (1.3)
+    # libraries their datasets; Federal's feeds their parsers (1.7); Massive's headlines are part of
+    # a feed plugin (1.3)
     want = {**dict.fromkeys(("alpaca", "boats", "tiingo", "tiingofx"), ("1.3.0", "1.6")),
             **dict.fromkeys(("massive", "coinbase", "bitstamp"), ("1.2.0", "1.6")),
             **dict.fromkeys(("bitfinex", "cboe"), ("1.1.0", "1.6")),
-            **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("1.2.0", "1.4")),
+            **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("1.3.0", "1.7")),
             "massive-news": ("1.2.0", "1.3"), "french": ("1.0.0", "1.4"), "datahub": ("1.0.0", "1.4")}
     assert {p.name: (p.version, p.api) for p in plugins_} == want
     assert all(registry.api_refusal(p.api) is None for p in plugins_)
-    assert registry.PLUGIN_API == "1.6"
+    assert registry.PLUGIN_API == "1.7"
 
 
 def test_a_plugin_for_another_major_is_left_out_and_reported_and_a_matching_one_loads(installed):
@@ -270,7 +271,7 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
     # the agencies are Federal's parts; Massive's headlines are in Massive's row; the dataset libraries
     assert list(pubs) == ["federal", "french", "datahub"]
     assert [r["name"] for r in pubs["federal"]["parts"]] == ["fed", "nyfed", "sec", "bls", "fedreg", "cftc"]
-    assert (pubs["federal"]["version"], pubs["federal"]["api"]) == ("1.2.0", "1.4")
+    assert (pubs["federal"]["version"], pubs["federal"]["api"]) == ("1.3.0", "1.7")
     assert pubs["federal"]["parts"][-1]["datasets"] == ["cftc-cot-legacy"] and len(pubs["french"]["datasets"]) == 4
     assert [k["name"] for k in pubs["federal"]["keys"]] == ["GOV_CONTACT"]  # the SEC's, set for the plugin
     massive = next(r for r in out["providers"] if r["name"] == "massive")
@@ -278,7 +279,7 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
     assert cli.main(["plugins"]) == 0
     text = capsys.readouterr().out
     assert text.startswith(f"Plugin API {registry.PLUGIN_API}") and "[1.1.0 for plugin API 1.6, built in]" in text
-    assert any(line.startswith("federal") and "[1.2.0 for plugin API 1.4, built in]" in line and "you set: GOV_CONTACT" in line
+    assert any(line.startswith("federal") and "[1.3.0 for plugin API 1.7, built in]" in line and "you set: GOV_CONTACT" in line
                for line in text.splitlines())
     assert any(line.strip().startswith("and Federal Reserve (fed):") for line in text.splitlines())
     assert "[1.3.0 for plugin API 1.6, built in]" in text
@@ -295,7 +296,7 @@ def test_the_plugins_view_shows_each_plugins_version_and_origin(tmp_path):
     assert out["api"] == registry.PLUGIN_API
     assert {(p["version"], p["api"], p["origin"]) for p in out["plugins"]} == {
         ("1.1.0", "1.6", "built in"), ("1.2.0", "1.6", "built in"), ("1.3.0", "1.6", "built in")}
-    assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.2.0", "1.4"), ("1.2.0", "1.3"), ("1.0.0", "1.4")}
+    assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.3.0", "1.7"), ("1.2.0", "1.3"), ("1.0.0", "1.4")}
 
 
 def test_unknown_providers_are_refused_by_name():

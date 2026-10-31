@@ -21,12 +21,23 @@ read again and the rate-limit headers its servers send, the tighter of theirs an
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date, datetime
+import xml.etree.ElementTree as ET_XML
+from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Callable
 
 from .dataset import Dataset
 from .keys import KeyVar
+
+
+@dataclass
+class Read:
+    """What a feed's answer holds (Feed.parse, API 1.7): items for the news and the Federal view
+    ({id, agency, title, url, published, kind, tags}), and reference rates ({series, day, value,
+    lo, hi}: the New York Fed's)."""
+    items: list[dict] = field(default_factory=list)
+    rates: list[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -36,9 +47,13 @@ class Feed:
     agency: str  # the name shown with its items (Fed, SEC ...)
     title: str
     url: str
-    kind: str = "rss"  # rss | fedreg | nyfed | headlines (a vendor's, through its feed's client)
+    kind: str = "rss"  # rss | fedreg | nyfed (a JSON API's) | headlines (a vendor's, through its feed's client)
     every_minutes: float = 60.0  # read this often
     moments: bool = True  # read at the publisher's release moments too (its speeches: no)
+    # its parser (API 1.7): parse(answer, feed) -> Read (or its items), the answer the HTTP response
+    # (.content, .json()); None: an RSS or Atom feed (parse_rss), its items `item_kind`
+    parse: "Callable[[object, Feed], Read | list[dict]] | None" = None
+    item_kind: str = "press release"  # what an RSS feed's items are (speech, data release ...)
 
 
 @dataclass(frozen=True)
@@ -100,3 +115,43 @@ class Publisher:
     def declared(self) -> tuple["Dataset", ...]:
         """The datasets it declares itself (not those it only names)."""
         return tuple(d for d in self.datasets if not isinstance(d, str))
+
+
+# -- the RSS and Atom reader every agency's feed shares (Feed.parse left out) -------------------------
+
+def _iso(text: str | None) -> str | None:
+    if not text:
+        return None
+    try:
+        t = parsedate_to_datetime(text.strip())
+    except (TypeError, ValueError):
+        try:
+            t = datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return t.astimezone(timezone.utc).isoformat(timespec="seconds")
+
+
+def parse_rss(data: bytes | str, feed: Feed) -> list[dict]:
+    """An RSS 2.0 (or Atom) feed's items: id (guid or link), title, link, when published. Read
+    from the bytes, so the XML's own declaration (and a byte-order mark) sets the encoding: the
+    Fed's feeds start with one and their HTTP header names no charset (decoded as Latin-1, the
+    first character was unreadable)."""
+    root = ET_XML.fromstring(data)
+    out = []
+    for it in root.iter():
+        tag = it.tag.rsplit("}", 1)[-1]
+        if tag not in ("item", "entry"):
+            continue
+        get = {c.tag.rsplit("}", 1)[-1]: c for c in it}
+        title = (get["title"].text or "").strip() if "title" in get else ""
+        link = get.get("link")
+        url = ((link.text or "").strip() or link.get("href")) if link is not None else None
+        guid = (get["guid"].text or "").strip() if "guid" in get else (get["id"].text or "").strip() if "id" in get else ""
+        when = next((get[k].text for k in ("pubDate", "published", "updated", "date") if k in get), None)
+        if title:
+            out.append({"id": guid or url or title, "agency": feed.agency, "title": " ".join(title.split()),
+                        "url": url, "published": _iso(when), "kind": feed.item_kind})
+    return out

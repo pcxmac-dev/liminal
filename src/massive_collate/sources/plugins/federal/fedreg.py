@@ -6,10 +6,44 @@ from __future__ import annotations
 
 from datetime import date, datetime, time
 
-from ....gov import FEDREG_URL
 from ....sessions import ET
-from ...publisher import Feed, Policy, Publisher
+from ...publisher import Feed, Policy, Publisher, Read
 from .release import API, VERSION
+
+FEDREG_AGENCIES = {  # the Federal Register's agency slugs -> the name shown
+    "securities-and-exchange-commission": "SEC", "commodity-futures-trading-commission": "CFTC",
+    "federal-reserve-system": "Fed", "treasury-department": "Treasury",
+}
+FINRA_TITLE = "Financial Industry Regulatory Authority"
+FEDREG_URL = ("https://www.federalregister.gov/api/v1/documents.json?per_page=100&order=newest"
+              + "".join(f"&conditions[agencies][]={a}" for a in FEDREG_AGENCIES)
+              + "".join(f"&fields[]={f}" for f in ("title", "type", "publication_date", "html_url", "agencies",
+                                                    "document_number")))
+
+
+def parse_fedreg(data: dict) -> list[dict]:
+    """The Federal Register's documents: the agency shown (SEC, CFTC, Fed, Treasury), the
+    document type, and FINRA's and the exchanges' rule filings tagged."""
+    out = []
+    for d in data.get("results") or []:
+        slugs = [a.get("slug") for a in d.get("agencies") or [] if a.get("slug")]
+        agency = next((FEDREG_AGENCIES[s] for s in slugs if s in FEDREG_AGENCIES), "Federal Register")
+        title = " ".join((d.get("title") or "").split())
+        tags = []
+        if FINRA_TITLE in title:
+            tags.append("FINRA")
+        elif title.startswith("Self-Regulatory Organizations"):
+            tags.append("SRO")
+        day = d.get("publication_date")
+        out.append({"id": d.get("document_number") or d.get("html_url") or title, "agency": agency, "title": title,
+                    "url": d.get("html_url"), "published": f"{day}T00:00:00+00:00" if day else None,
+                    "kind": (d.get("type") or "document").lower(), "tags": tags})
+    return out
+
+
+def parse(answer, feed) -> Read:
+    """Its JSON API's answer: the documents, as items."""
+    return Read(items=parse_fedreg(answer.json()))
 
 
 def moments(day: date) -> tuple[datetime, ...]:
@@ -21,7 +55,7 @@ PUBLISHER = Publisher(
     name="fedreg", title="Federal Register", order=240,
     about="rules and notices of the SEC (FINRA's and the exchanges' filings), the CFTC, the Fed and the Treasury",
     feeds=(Feed("fedreg", "Federal Register", "Rules and notices: SEC (FINRA, exchanges), CFTC, Fed, Treasury",
-                FEDREG_URL, "fedreg", every_minutes=180),),
+                FEDREG_URL, "fedreg", every_minutes=180, parse=parse),),
     policy=Policy(hosts=("www.federalregister.gov",), min_minutes=30, per_day=30,
                   terms="the Federal Register API, documented for programs; no key",
                   terms_url="https://www.federalregister.gov/developers/documentation/api/v1"),

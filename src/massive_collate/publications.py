@@ -45,7 +45,7 @@ from urllib.parse import urljoin, urlsplit
 import requests
 
 from . import gov, killswitch
-from .sources.publisher import Feed, Publisher
+from .sources.publisher import Feed, Publisher, Read, parse_rss
 
 USER_AGENT = gov.USER_AGENT
 # Sites whose terms bar programs or AI use (the owner's list): never read by any publisher, whatever
@@ -453,19 +453,17 @@ class Reader:
             self._failed(pub, feed, now, f"not a feed ({ctype}): pages are never read", lasting=True)
             self.log(f"publications: {pub.title} {feed.title}: not a feed ({ctype}); not read")
             return sent
-        try:
-            if feed.kind == "nyfed":
-                rate = gov.parse_nyfed(r.json())
-                if rate and rate["day"]:
-                    self.gdb.save_rate(rate["series"], rate["day"], rate["value"], rate["lo"], rate["hi"], now)
-                new = 0
-            else:
-                items = gov.parse_fedreg(r.json()) if feed.kind == "fedreg" else gov.parse_rss(r.content, feed)
-                new = self.gdb.save_items(feed.key, items, now)
+        try:  # the feed's own parser (its plugin's: Feed.parse), else an RSS or Atom feed's items
+            read = feed.parse(r, feed) if feed.parse else Read(items=parse_rss(r.content, feed))
+            read = Read(items=read) if isinstance(read, list) else read
+            for rate in read.rates:
+                self.gdb.save_rate(rate["series"], rate["day"], rate.get("value"), rate.get("lo"), rate.get("hi"), now)
+            rates_only = bool(read.rates) and not read.items  # the New York Fed's: a rate, no items
+            new = 0 if rates_only else self.gdb.save_items(feed.key, read.items, now)
         except (ValueError, ET_XML.ParseError, AttributeError, KeyError, TypeError, IndexError) as e:
             self._failed(pub, feed, now, f"unreadable answer: {type(e).__name__}: {e}", lasting=True)
             return sent
-        self.gdb.note(feed.key, now, "ok", f"{new} new" if feed.kind != "nyfed" else None,
+        self.gdb.note(feed.key, now, "ok", None if rates_only else f"{new} new",
                       etag=_header(r, "ETag") or "", modified=_header(r, "Last-Modified") or "")
         if new:
             self.log(f"publications: {pub.title} {feed.title}: {new} new")

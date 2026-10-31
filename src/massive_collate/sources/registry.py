@@ -71,7 +71,10 @@ DEFAULT_PER_REQUEST = 1000  # bars a request returns, for a provider that does n
 # 1.6 (2026-10-31): sources.http (HttpClient, PublicClient: the HTTP client every plugin's builds on)
 #   and sources.archive (Archive, a public feed's source, and what the exchanges share); each
 #   vendor's client in its plugin (Massive's, Alpaca's, Tiingo's, the exchanges' and Cboe's).
-PLUGIN_API = "1.6"
+# 1.7 (2026-10-31): Feed.parse and Feed.item_kind (sources.publisher: Read, parse_rss): each feed's
+#   parser in its plugin (the Federal Register's, the New York Fed's), an RSS feed read by the
+#   contract's reader.
+PLUGIN_API = "1.7"
 
 
 def api_version(api) -> tuple[int, int]:

@@ -14,10 +14,11 @@
 
 All are official feeds made for programs, keyless. Each agency is a part of the Federal plugin
 (sources/plugins/federal/: fed.py, nyfed.py, sec.py, bls.py, fedreg.py), read on its own schedule
-under its own scrape checks by publications.py (the recorder's thread); this module parses what
-they send and keeps it. FINRA's own website terms bar robots and use with AI programs, so nothing is read from
-finra.org (publications.BLOCKED_HOSTS): its rule changes arrive through the Federal Register and
-the Gov view links to finra.org. Stored in a file of its own (gov/gov.db beside the main
+under its own scrape checks by publications.py (the recorder's thread), each feed parsed by its
+plugin (Feed.parse; an RSS feed by the shared reader, publisher.parse_rss); this module keeps what
+they send and makes the Federal view of it. FINRA's own website terms bar robots and use with AI
+programs, so nothing is read from finra.org (publications.BLOCKED_HOSTS): its rule changes arrive
+through the Federal Register and the Gov view links to finra.org. Stored in a file of its own (gov/gov.db beside the main
 database), with each feed's state, each publisher's requests a day, the hosts' robots.txt and each
 publisher's last limits recheck.
 
@@ -29,7 +30,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import xml.etree.ElementTree as ET_XML
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -40,18 +40,8 @@ USER_AGENT = "massive-collate/1 (personal research)"
 KEEP = 200  # items kept per source, newest first
 Source = Feed  # a feed an agency publishes (sources/publisher.py)
 
-FEDREG_AGENCIES = {  # the Federal Register's agency slugs -> the name shown
-    "securities-and-exchange-commission": "SEC", "commodity-futures-trading-commission": "CFTC",
-    "federal-reserve-system": "Fed", "treasury-department": "Treasury",
-}
-FINRA_TITLE = "Financial Industry Regulatory Authority"
 WAITING = "asks automated readers to identify themselves: set GOV_CONTACT (your name and email) to read it"
 
-
-FEDREG_URL = ("https://www.federalregister.gov/api/v1/documents.json?per_page=100&order=newest"
-              + "".join(f"&conditions[agencies][]={a}" for a in FEDREG_AGENCIES)
-              + "".join(f"&fields[]={f}" for f in ("title", "type", "publication_date", "html_url", "agencies",
-                                                    "document_number")))
 
 LINKS = (  # read by people, never fetched here
     ("FINRA rules", "https://www.finra.org/rules-guidance/rulebooks/finra-rules"),
@@ -235,81 +225,6 @@ class GovDB:
             self.conn.execute("INSERT INTO holds VALUES (?, ?, ?) ON CONFLICT (name) DO UPDATE SET "
                               "until=excluded.until, why=excluded.why WHERE excluded.until > holds.until",
                               (name, until.astimezone(timezone.utc).isoformat(timespec="seconds"), why))
-
-
-# -- reading the feeds -------------------------------------------------------------------------
-def _iso(text: str | None) -> str | None:
-    if not text:
-        return None
-    try:
-        t = parsedate_to_datetime(text.strip())
-    except (TypeError, ValueError):
-        try:
-            t = datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
-        except ValueError:
-            return None
-    if t.tzinfo is None:
-        t = t.replace(tzinfo=timezone.utc)
-    return t.astimezone(timezone.utc).isoformat(timespec="seconds")
-
-
-def parse_rss(data: bytes | str, source: Source) -> list[dict]:
-    """An RSS 2.0 (or Atom) feed's items: id (guid or link), title, link, when published. Read
-    from the bytes, so the XML's own declaration (and a byte-order mark) sets the encoding: the
-    Fed's feeds start with one and their HTTP header names no charset (decoded as Latin-1, the
-    first character was unreadable)."""
-    root = ET_XML.fromstring(data)
-    out = []
-    for it in root.iter():
-        tag = it.tag.rsplit("}", 1)[-1]
-        if tag not in ("item", "entry"):
-            continue
-        get = {c.tag.rsplit("}", 1)[-1]: c for c in it}
-        title = (get["title"].text or "").strip() if "title" in get else ""
-        link = get.get("link")
-        url = ((link.text or "").strip() or link.get("href")) if link is not None else None
-        guid = (get["guid"].text or "").strip() if "guid" in get else (get["id"].text or "").strip() if "id" in get else ""
-        when = next((get[k].text for k in ("pubDate", "published", "updated", "date") if k in get), None)
-        if title:
-            out.append({"id": guid or url or title, "agency": source.agency, "title": " ".join(title.split()),
-                        "url": url, "published": _iso(when), "kind": _kind(source)})
-    return out
-
-
-def _kind(source: Source) -> str:
-    return {"fed-speeches": "speech", "sec-suspensions": "trading suspension"}.get(
-        source.key, "data release" if source.agency == "BLS" else "press release")
-
-
-def parse_fedreg(data: dict) -> list[dict]:
-    """The Federal Register's documents: the agency shown (SEC, CFTC, Fed, Treasury), the
-    document type, and FINRA's and the exchanges' rule filings tagged."""
-    out = []
-    for d in data.get("results") or []:
-        slugs = [a.get("slug") for a in d.get("agencies") or [] if a.get("slug")]
-        agency = next((FEDREG_AGENCIES[s] for s in slugs if s in FEDREG_AGENCIES), "Federal Register")
-        title = " ".join((d.get("title") or "").split())
-        tags = []
-        if FINRA_TITLE in title:
-            tags.append("FINRA")
-        elif title.startswith("Self-Regulatory Organizations"):
-            tags.append("SRO")
-        day = d.get("publication_date")
-        out.append({"id": d.get("document_number") or d.get("html_url") or title, "agency": agency, "title": title,
-                    "url": d.get("html_url"), "published": f"{day}T00:00:00+00:00" if day else None,
-                    "kind": (d.get("type") or "document").lower(), "tags": tags})
-    return out
-
-
-def parse_nyfed(data: dict) -> dict | None:
-    """The New York Fed's newest reference rate: {series, day, value, lo, hi} (lo/hi: the
-    federal funds target range, on EFFR only)."""
-    rows = data.get("refRates") or []
-    if not rows:
-        return None
-    r = rows[0]
-    return {"series": r.get("type"), "day": r.get("effectiveDate"), "value": r.get("percentRate"),
-            "lo": r.get("targetRateFrom"), "hi": r.get("targetRateTo")}
 
 
 # -- the answers --------------------------------------------------------------------------------

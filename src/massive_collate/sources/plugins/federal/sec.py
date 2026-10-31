@@ -16,7 +16,8 @@ PUBLISHER = Publisher(
     feeds=(
         Feed("sec-press", "SEC", "Press releases", "https://www.sec.gov/news/pressreleases.rss", every_minutes=60),
         Feed("sec-suspensions", "SEC", "Trading suspensions",
-             "https://www.sec.gov/enforcement-litigation/trading-suspensions/rss", every_minutes=60),
+             "https://www.sec.gov/enforcement-litigation/trading-suspensions/rss", every_minutes=60,
+             item_kind="trading suspension"),
     ),
     keys=(KeyVar("GOV_CONTACT", "Your name and email", secret=False,
                  hint="Jane Doe jane@example.com: sent in the User-Agent to the SEC only, as it asks"),),
