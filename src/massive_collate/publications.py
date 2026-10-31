@@ -189,7 +189,7 @@ class Reader:
 
     def kill(self, pub: Publisher, now: datetime) -> dict | None:
         """Why nothing is sent for it now, with `whose`: "own" (a pause by hand, or its own kill),
-        "plugin" (the plugin it is part of paused or killed: Federal's agencies), "account" (its
+        "plugin" (the plugin it is part of paused or killed: Federal's agencies, Massive's headlines), "account" (its
         account's kill: a vendor's feed refused), "fetching" (background fetching paused or halted,
         the chart's button). None when it may read."""
         if self.store is None:
@@ -197,7 +197,8 @@ class Reader:
         own = killswitch.killed(self.store, pub.name, "fetch", now)
         if own:
             return {**own, "whose": "own"}
-        plugin = killswitch.killed(self.store, pub.part_of, "fetch", now) if pub.part_of else None
+        # the plugin it is part of (Federal); a vendor's feed plugin is its account, said as that (below)
+        plugin = killswitch.killed(self.store, pub.part_of, "fetch", now) if pub.part_of and pub.part_of != pub.account else None
         if plugin:
             return {**plugin, "whose": "plugin"}
         account = killswitch.killed(self.store, pub.account, "fetch", now) if pub.account else None
@@ -702,9 +703,13 @@ def view(gdb: gov.GovDB, settings=None, store=None, now: datetime | None = None,
                         "recheck": None, "calendar": [], "moments": [], "partOf": pub.part_of,
                         "datasets": list(pub.datasets), "parts": []})
     by = {p["name"]: p for p in out}
+    from .sources import providers
+    from .sources.registry import plugin_of
+
     for p in out:
-        if p["partOf"] not in by or p["partOf"] == p["name"]:
-            p["partOf"] = ""  # part of no publisher here: one of its own
+        if p["partOf"] == p["name"] or p["partOf"] not in by:
+            # part of a feed plugin (Massive's headlines: under Massive), or of none here: one of its own
+            p["partOf"] = plugin_of(p["partOf"]) if p["partOf"] != p["name"] and p["partOf"] in providers() else ""
     for p in out:  # a plugin of several publishers (Federal): its parts, their requests, its state from theirs
         parts = [q for q in out if q["partOf"] == p["name"] and q is not p]
         if not parts:

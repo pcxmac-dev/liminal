@@ -199,13 +199,13 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     An unknown value is Starter.
 - **The plugin contract, versioned** (2026-10-29; the user: "eventually plugins will need to be in
   their own repo with their own version"). The app offers `registry.PLUGIN_API` (major.minor, now
-  1.2). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
+  1.3). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
   major.minor.patch) and the contract it was written for (`api`: a literal such as `"1.0"`, never
   `PLUGIN_API` itself, which would always match). At discovery a plugin written for another major,
   or for a newer minor than the app offers, is left out and reported with the ones that fail to
   load (`errors()`, `plugins`, the key script, the Plugins view's "Left out"), never fatal. An `api`
-  left out is 1.0. The built-ins are 1.0.0 for API 1.0, but Alpaca's and Tiingo's two feeds each:
-  1.1.0 for API 1.1, and Federal with its agencies: 1.0.0 for API 1.2. `plugins` (and its `--json`: `api`, each
+  left out is 1.0. Each built-in's release and contract is in its module (`plugins` lists them).
+  `plugins` (and its `--json`: `api`, each
   plugin's `version`, `api`, `origin`; the publishers too), the key script's list and the Plugins
   view show each plugin's version and origin.
   - **Minor and major.** A minor only adds: a field with a default, a new optional callback, a new
@@ -230,6 +230,20 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     `publisher_parts`, `publisher_menu`), and pausing it stops them all (`publications.Reader.kill`:
     `whose="plugin"`). A publisher with no feed of its own (the plugin's record, a part with
     datasets only) is never read or rechecked: nothing is sent for it, robots.txt neither.
+  - **1.3** (2026-10-31) adds `Publisher.keys`, `KeyVar.secret` and `KeyVar.hint` (`sources/keys.py`):
+    every variable a plugin reads that the user sets is declared by it, a key or a detail of the
+    user's it sends where asked (the SEC's `GOV_CONTACT`, typed in the open; no list of names
+    elsewhere: `config.saved_names` is `registry.variables`). Each plugin is set up in the Plugins
+    view (the user: "i need a way to setup plugins inside the plugin interface in the main window,
+    for all plugins, including keys, user details etc"): its Setup lists every variable it reads
+    (`registry.plugin_keys`: its feeds' and parts' too), set or not, never a value; one typed is
+    sent once (`POST /api/plugins/key`, `ChartApp.set_key`) and saved where the key script saves it
+    (the user's environment variables), or removed. Only a variable the plugin declares, one line
+    of sane length, never Windows' or Python's own nor the app's own setting (`keys.refusal`), nor
+    one another plugin declares too. And `Publisher.part_of` may name a feed plugin: Massive's
+    headlines (`massive-news`, `part_of="massive"`; the user: "massive headlines needs to be rolled
+    in to Massive") are listed under Massive (`menu()`'s `publishers`, the Plugins view), on its key
+    and limits; Massive's kill stops them as its account's.
   - **What a plugin may rely on (API 1.0)**, and nothing else of `massive_collate`:
     `sources.registry`: `PLUGIN_API`, `Provider`, `KeyVar`, `Scanned`, and `Report`, `Limits`,
     `Capability` for a `reporter`; the helpers `limiter`, `machine_caps`, `public_client`,

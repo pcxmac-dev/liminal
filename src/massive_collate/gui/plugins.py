@@ -14,6 +14,13 @@ While a rescan runs, each feed it has still to ask says "scanning" (the user, 20
 hit rescan all, i want the status of each plug in to say scanning, not 'ready'"); one asked in this
 run is back to its state, and a feed with no scan (a public one) or none it can ask keeps its own.
 
+A publisher can be part of a feed plugin (Massive's headlines: Publisher.part_of): listed under it
+(`publishers`), with its own page (publications.view).
+
+Each plugin is set up here: every variable it reads (registry.plugin_keys: its keys, its feeds' and
+publishers', a detail of yours such as GOV_CONTACT) with whether it is set, typed into the view and
+saved as your user environment variable (ChartApp.set_key); its plan chosen (ChartApp.set_plan).
+
 Read from the settings, the plugins' reports, the scans kept (kv sourcing.SCAN_KEY), the watchlist
 and the request ledger: no requests. A key's value never leaves: only whether it is set.
 """
@@ -22,7 +29,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from ..sources import providers
-from ..sources.registry import PLUGIN_API, errors, label, plugin_feeds, plugin_of
+from ..sources.registry import PLUGIN_API, errors, key_row, label, plugin_feeds, plugin_keys, plugin_of, publisher_parts
 
 GROUPS = ("Feeds with keys", "Public feeds")
 
@@ -132,7 +139,8 @@ def view(store, settings, feeds: dict, scheme, scans: dict, running: dict | None
             "group": GROUPS[0] if p.keys else GROUPS[1], "archive": p.archival, "kind": p.kind,
             "assets": sorted(p.assets), "keyless": sorted(p.keyless), "serves": served,
             "configured": prof is not None, "keysSet": keys_set,
-            "keys": [{"name": k.name, "label": k.label, "set": bool(k.value(settings.env))} for k in p.keys],
+            "keys": [key_row(k, settings) for k in plugin_keys(name)],  # its feeds' and publishers' too
+            "publishers": publisher_parts(name),  # in this plugin (Massive's headlines)
             "state": "scanning" if scanning else state, "kill": kill,
             "plan": _plan(p, settings, scan),
             "limits": ({**report.limits.__dict__, "rate": list(report.limits.rate) if report.limits.rate else None}

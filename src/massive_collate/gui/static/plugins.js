@@ -15,7 +15,11 @@
    is a choice, saved like the key script saves it (POST /api/plugins/plan); keys stay in the script.
    Below them the publishers (news and publications: publications.py), each an agency's or a
    vendor's plugin: its feeds with their last and next reads, its release schedule, its scrape
-   checks, its limits as last verified with a Recheck, and a Pause.
+   checks, its limits as last verified with a Recheck, and a Pause. A publisher part of a feed
+   plugin (Massive's headlines) is listed under that one.
+   Every plugin is set up here (Setup): each variable it reads, a key or a detail of yours it sends
+   (GOV_CONTACT), set or not (never its value), typed and saved as your user environment variable
+   (POST /api/plugins/key), or removed. What is typed is sent once and the field cleared.
    Asked again every minute while shown, every few seconds while a rescan or recheck runs. */
 (() => {
   const box = document.getElementById('viewPlugins');
@@ -115,8 +119,46 @@
     setTimeout(load, 1_000);
   }
 
+  async function saveKey(owner, variable, value) {
+    note = '';
+    try {
+      const res = await fetch('/api/plugins/key', { method: 'POST', headers: WRITE_HEADERS,
+        body: JSON.stringify({ plugin: owner, variable, value }) });
+      const out = await res.json().catch(() => ({}));
+      const scans = data.plugins.find((x) => x.name === owner)?.scan.has;
+      note = res.ok ? (value == null ? `${variable} removed from your user environment variables.`
+        : `${variable} saved in your user environment variables: the app uses it now, the sync from its next run${
+          scans ? '; Rescan to see what it gets' : ''}.`) : out.error || res.statusText;
+    } catch (err) { note = String(err.message || err); }
+    await load();
+  }
+
+  // -- setup: what each plugin reads that you set ------------------------------------------------
+  // each variable set or not (never its value); a key typed hidden, a detail of yours in the open
+  function setupHtml(owner, keys, account) {
+    const off = data.offline ? ' disabled title="This offline copy of the app saves no settings"' : '';
+    const rows = keys.map((k) => `<tr data-key-row="${esc(k.name)}">
+        <td><code>${esc(k.name)}</code><div class="p-muted small">${esc(k.label)}</div></td>
+        <td>${k.set ? '<span class="up">set</span>' : '<span class="down">not set</span>'}</td>
+        <td><input class="pl-key" type="${k.secret ? 'password' : 'text'}" data-var="${esc(k.name)}" autocomplete="off" spellcheck="false"
+          maxlength="512" placeholder="${esc(k.hint || (k.set ? 'type a new one to replace it' : `your ${k.label}`))}"${off}></td>
+        <td class="pl-key-btns"><button type="button" data-save-key="${esc(k.name)}" data-owner="${esc(owner)}"${off}>${k.set ? 'Replace' : 'Save'}</button>
+          ${k.set ? `<button type="button" data-remove-key="${esc(k.name)}" data-owner="${esc(owner)}"${off}>Remove</button>` : ''}</td></tr>`).join('');
+    const where = account ? `It reads on ${esc(account.title)}'s key: <button type="button" class="pl-link" data-plugin="${esc(account.id)}">set it up there</button>.` : '';
+    if (!rows) return `<h4>Setup</h4><div class="p-muted small">${where || 'Nothing to set: it needs no key and nothing of yours.'}</div>`;
+    return `<h4>Setup</h4><table class="act-table ex-mini pl-setup"><tbody>${rows}</tbody></table>
+      <div class="p-muted small">Saved as your user environment variables, where the key script saves them: the app uses them at once,
+        the sync from its next run. A value is never shown back, only whether it is set.${where ? ` ${where}` : ''}</div>`;
+  }
+
   // -- left: the plugins ---------------------------------------------------------------------
   function listHtml() {
+    // a plugin of several publishers (Federal) once, its agencies beneath it; a feed plugin's
+    // publishers (Massive's headlines) beneath it; a publisher of its own as it is
+    const pubButton = (p, sub) => `<button type="button" class="ex-venue${sub ? ' pl-sub' : ''}${PUB + p.name === sel ? ' active' : ''}" data-plugin="${esc(PUB + p.name)}" title="${esc(p.about)}">
+          <span class="ex-name">${esc(p.title)}</span>${chip(p.state)}
+          <span class="ex-count">${esc(pubCount(p))}</span></button>`;
+    const partsOf = (name) => (data.publishers || []).filter((q) => q.partOf === name).map((q) => pubButton(q, true)).join('');
     const groups = data.groups.map((g) => {
       const ps = data.plugins.filter((p) => p.group === g);
       if (!ps.length) return '';
@@ -125,15 +167,10 @@
         const plan = t ? `${t.value} · ${ORIGIN[t.origin]}` : p.plan.tier;
         return `<button type="button" class="ex-venue${p.name === sel ? ' active' : ''}" data-plugin="${esc(p.name)}" title="${esc(p.about)}">
           <span class="ex-name">${esc(p.title)}</span>${chip(p.state)}
-          <span class="ex-count">${esc(plan)}${p.feeds.length > 1 ? ` · ${p.feeds.length} feeds` : ''}</span></button>`;
+          <span class="ex-count">${esc(plan)}${p.feeds.length > 1 ? ` · ${p.feeds.length} feeds` : ''}</span></button>${partsOf(p.name)}`;
       }).join('');
     }).join('');
-    // a plugin of several publishers (Federal) once, its agencies beneath it; a publisher of its own as it is
-    const pubButton = (p, sub) => `<button type="button" class="ex-venue${sub ? ' pl-sub' : ''}${PUB + p.name === sel ? ' active' : ''}" data-plugin="${esc(PUB + p.name)}" title="${esc(p.about)}">
-          <span class="ex-name">${esc(p.title)}</span>${chip(p.state)}
-          <span class="ex-count">${esc(pubCount(p))}</span></button>`;
-    const pubs = (data.publishers || []).filter((p) => !p.partOf).map((p) => pubButton(p, false)
-      + (data.publishers || []).filter((q) => q.partOf === p.name).map((q) => pubButton(q, true)).join('')).join('');
+    const pubs = (data.publishers || []).filter((p) => !p.partOf).map((p) => pubButton(p, false) + partsOf(p.name)).join('');
     const news = pubs ? `<h4 class="ex-group">News and publications</h4>${pubs}` : '';
     const left = data.errors.length ? `<h4 class="ex-group">Left out</h4>${data.errors.map((e) => `
       <div class="pl-error"><b>${esc(e.where)}</b><div class="p-muted small">${esc(e.why)}</div></div>`).join('')}` : '';
@@ -170,7 +207,7 @@
       ${differs}
       ${p.plan.note ? `<div class="pl-note">${esc(p.plan.note)}.</div>` : ''}
       ${rows ? `<div class="p-muted small">Choose a plan above: it is saved as your user environment variable. Keys are set
-        with the key script: <code>${esc(data.keyScript)} ${esc(name)}</code></div>` : ''}`;
+        in Setup, or with the key script: <code>${esc(data.keyScript)} ${esc(name)}</code></div>` : ''}`;
   }
 
   function limitsHtml(p) {
@@ -193,6 +230,17 @@
         <td><b>${esc(f.label)}</b><div class="p-muted small">${esc(f.about)}</div></td>
         <td>${chip(f.state)}</td></tr>`).join('')}</tbody></table>
       <div class="p-muted small">Each a feed of its own (its own bars, symbols and requests), on this plugin's keys and limits.</div>`;
+  }
+
+  // the publishers in a feed plugin (Massive's headlines), each with its state and when it reads
+  function publishersHtml(p) {
+    const pubs = (data.publishers || []).filter((q) => q.partOf === p.name);
+    if (!pubs.length) return '';
+    const last = (q) => q.feeds.map((f) => f.at).filter(Boolean).sort().pop();
+    return `<h4>Publishers</h4><table class="act-table ex-mini pl-parts"><tbody>${pubs.map((q) => `<tr>
+        <td><button type="button" class="pl-link" data-plugin="${esc(PUB + q.name)}">${esc(q.title)}</button><div class="p-muted small">${esc(q.about)}</div></td>
+        <td>${chip(q.state)}</td><td>${esc(pubCount(q))}</td><td>${last(q) ? `read ${ago(last(q))}` : 'never read'}</td></tr>`).join('')}</tbody></table>
+      <div class="p-muted small">On this plugin's key and limits; each keeps its own scrape checks, pause and recheck.</div>`;
   }
 
   function capabilitiesHtml(p) {
@@ -246,8 +294,23 @@
       <div class="p-muted small">Fetched with the datasets (<code>datasets fetch</code>, then on their own cadence) and shown in the Datasets view.</div>`;
   }
 
+  // where a publisher sits: the publisher it is part of (Federal) or the feed plugin (Massive): {id, title}
+  function parentOf(p) {
+    if (!p.partOf) return null;
+    const pub = data.publishers.find((q) => q.name === p.partOf);
+    if (pub) return { id: PUB + pub.name, title: pub.title };
+    const feed = data.plugins.find((q) => q.name === p.partOf);
+    return feed ? { id: feed.name, title: feed.title } : null;
+  }
+
+  // a publisher's setup: what it reads that you set (its parts' too); a vendor's points at its feed's keys
+  function pubSetupHtml(p) {
+    const acct = p.kind === 'vendor' ? data.plugins.find((q) => q.name === p.account || q.feeds.some((f) => f.name === p.account)) : null;
+    return setupHtml(p.name, p.keys || [], acct ? { id: acct.name, title: acct.title } : null);
+  }
+
   function pubMainHtml(p) {
-    if (p.parts.length) return partsHtml(p);
+    if (p.parts.length) return `${(p.keys || []).length ? pubSetupHtml(p) : ''}${partsHtml(p)}`;
     if (!p.feeds.length) {
       return `${datasetsHtml(p)}${p.policy.terms ? `<h4>Terms</h4><div class="small">${esc(p.policy.terms)}</div>` : ''}`;
     }
@@ -285,7 +348,7 @@
       : p.state === 'paused' || p.state === 'refused' || p.held ? 'Nothing is sent to it while it is paused, stopped or held'
       : 'Read its robots.txt again (unless read within the hour) and ask each feed once (never within its floor, refused or held), keeping the rate-limit headers its servers send; pressed again within 15 min it sends nothing';
     const err = p.error ? `<div class="pl-warn">Its plugin failed here: ${esc(p.error)}</div>` : '';
-    return `${err}<h4>Feeds</h4><table class="act-table ex-mini pl-feeds"><thead><tr><th>Feed</th><th>Every</th><th>State</th><th>Last read</th><th>Next</th><th></th></tr></thead>
+    return `${err}${pubSetupHtml(p)}<h4>Feeds</h4><table class="act-table ex-mini pl-feeds"><thead><tr><th>Feed</th><th>Every</th><th>State</th><th>Last read</th><th>Next</th><th></th></tr></thead>
         <tbody>${feeds}</tbody></table>
       ${moments || cal ? `<h4>Schedule</h4>${moments}${cal}` : ''}
       <h4>Scrape checks</h4><ul class="pl-checks small">${checks}</ul>${robots}
@@ -300,7 +363,7 @@
   function pubSideHtml(p) {
     const whose = p.kill?.whose;
     const paused = p.state === 'paused' && whose === 'own';  // its own pause: Resume undoes it here
-    const plugin = p.partOf ? data.publishers.find((q) => q.name === p.partOf) : null;  // Federal, for its agencies
+    const plugin = parentOf(p);  // Federal, for its agencies; Massive, for its headlines
     const until = (iso) => esc(String(iso || '').slice(0, 16).replace('T', ' '));
     const stop = !p.kill ? ''
       : paused ? 'Paused by you'
@@ -312,7 +375,7 @@
     const all = p.parts.length > 0;  // a plugin of several: its pause is theirs too
     return `<h3>${esc(p.title)} ${chip(p.state)}</h3>
       <div class="p-muted small">${esc(p.about)}</div>${release(p)}
-      ${plugin ? `<div class="p-muted small">Part of the <button type="button" class="pl-link" data-plugin="${esc(PUB + plugin.name)}">${esc(plugin.title)}</button> plugin.</div>` : ''}
+      ${plugin ? `<div class="p-muted small">Part of the <button type="button" class="pl-link" data-plugin="${esc(plugin.id)}">${esc(plugin.title)}</button> plugin.</div>` : ''}
       ${stop ? `<div class="pl-warn">${stop}</div>` : ''}
       ${p.held ? `<div class="pl-warn">Nothing sent until ${until(p.held.until)} UTC: ${esc(p.held.why)}</div>` : ''}
       <div class="tiles ex-tiles">
@@ -335,7 +398,7 @@
     if (pub) return pubMainHtml(pub);
     const p = plugin();
     if (!p) return '<div class="empty">No plugin found.</div>';
-    return `${feedsHtml(p)}${planHtml(p)}${limitsHtml(p)}${capabilitiesHtml(p)}${scanHtml(p)}
+    return `${setupHtml(p.name, p.keys)}${feedsHtml(p)}${publishersHtml(p)}${planHtml(p)}${limitsHtml(p)}${capabilitiesHtml(p)}${scanHtml(p)}
       ${p.notes.length ? `<h4>Notes</h4>${p.notes.map((n) => `<div class="small">${esc(n)}</div>`).join('')}` : ''}`;
   }
 
@@ -351,7 +414,7 @@
     const era = (e) => `<tr><td>${esc(JOBS[e.job] || e.job)}</td><td>${esc(e.asset)}${several(p) ? `<div class="p-muted">${esc(e.feed)}</div>` : ''}</td><td>${esc(e.start)} → ${esc(e.end || 'now')}</td>
         <td class="p-muted">${e.unique ? 'only source' : e.first ? `then ${esc(e.others.join(', '))}` : `after ${esc(e.others[0] || '')}`}</td></tr>`;
     const keys = p.keys.length ? p.keys.map((k) => `<div class="small"><code>${esc(k.name)}</code> ${k.set ? '<span class="up">set</span>' : '<span class="down">not set</span>'}</div>`).join('')
-      : '<div class="p-muted small">Needs no key.</div>';
+      + '<div class="p-muted small">Set in Setup.</div>' : '<div class="p-muted small">Needs no key.</div>';
     return `<h3>${esc(p.title)} ${chip(p.state)}</h3>
       <div class="p-muted small">${esc(p.about)}</div>${release(p)}
       ${p.kill ? `<div class="pl-warn">Killed until ${esc(p.kill.until?.slice(0, 16).replace('T', ' '))} UTC: ${esc(p.kill.why)}</div>` : ''}
@@ -372,6 +435,9 @@
     if (!data) { box.innerHTML = '<div class="empty">Loading the plugins…</div>'; return; }
     const p = plugin(), pub = publisher();
     const scrolled = box.querySelector('.ex-list')?.scrollTop || 0;
+    // what is being typed in Setup survives the view's refreshes (every minute, every few seconds in a rescan)
+    const typed = [...box.querySelectorAll('input.pl-key')].filter((i) => i.value).map((i) => [i.dataset.var, i.value]);
+    const focused = document.activeElement?.matches?.('input.pl-key') ? document.activeElement.dataset.var : null;
     const setUp = data.plugins.filter((x) => x.configured && x.state !== 'no key').length;
     const head = pub ? `publisher · ${pub.kind === 'vendor' ? `a vendor's headlines, on ${pub.account}'s key` : 'official feeds'} · ${pubCount(pub)}`
       : p ? `${p.archive ? 'closed archive' : 'feed'} · ${p.kind} data · ${p.assets.join(', ')}` : '';
@@ -386,15 +452,35 @@
         <div class="p-muted small">${esc(head)}</div></div></div>${mainHtml()}</div>
       <aside class="ex-side">${sideHtml()}</aside>`;
     box.querySelector('.ex-list').scrollTop = scrolled;
+    for (const [v, value] of typed) {
+      const input = box.querySelector(`input.pl-key[data-var="${CSS.escape(v)}"]`);
+      if (input) input.value = value;
+    }
+    if (focused) box.querySelector(`input.pl-key[data-var="${CSS.escape(focused)}"]`)?.focus();
   }
 
+  box.addEventListener('keydown', (e) => {  // Enter in a Setup field saves it
+    if (e.key === 'Enter' && e.target.matches('input.pl-key')) {
+      e.target.closest('tr')?.querySelector('[data-save-key]')?.click();
+    }
+  });
   box.addEventListener('change', (e) => {
     if (e.target.matches('select.pl-choose')) choosePlan(e.target);
   });
   box.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-plugin],[data-rescan],[data-recheck],[data-pause]');
+    const t = e.target.closest('[data-plugin],[data-rescan],[data-recheck],[data-pause],[data-save-key],[data-remove-key]');
     if (!t || t.disabled) return;
-    if (t.dataset.plugin && t.dataset.plugin !== sel) {
+    if (t.dataset.saveKey) {
+      const input = box.querySelector(`input.pl-key[data-var="${CSS.escape(t.dataset.saveKey)}"]`);
+      const value = input?.value.trim();
+      if (!value) { note = `Type ${t.dataset.saveKey} first.`; render(); return; }
+      input.value = '';  // sent once; never kept in the page
+      saveKey(t.dataset.owner, t.dataset.saveKey, value);
+    } else if (t.dataset.removeKey) {
+      if (window.confirm(`Remove ${t.dataset.removeKey} from your user environment variables? What reads it stops until you set it again.`)) {
+        saveKey(t.dataset.owner, t.dataset.removeKey, null);
+      }
+    } else if (t.dataset.plugin && t.dataset.plugin !== sel) {
       sel = t.dataset.plugin; render();
     } else if (t.dataset.rescan) {
       rescan(t.dataset.rescan === '*' ? null : t.dataset.rescan);

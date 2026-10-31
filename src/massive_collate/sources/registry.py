@@ -44,6 +44,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Callable, Iterable, Mapping
 
 from ..ratelimit import MachineLedger, RateLimiter
+from .keys import KeyVar  # noqa: F401 - plugins import it from here
 from .publisher import Publisher
 
 if TYPE_CHECKING:
@@ -57,7 +58,10 @@ DEFAULT_PER_REQUEST = 1000  # bars a request returns, for a provider that does n
 # before the contract had a number was written for 1.0 (Provider.api's default).
 # 1.1 (2026-10-29): Provider.part_of, a plugin's second feed (Alpaca's Blue Ocean).
 # 1.2 (2026-10-30): Publisher.part_of and Publisher.datasets, a plugin of several publishers (Federal).
-PLUGIN_API = "1.2"
+# 1.3 (2026-10-31): Publisher.keys and KeyVar.secret, KeyVar.hint: every variable a plugin reads
+#   declared by it, set from the Plugins view; Publisher.part_of may name a feed plugin (Massive's
+#   headlines, under Massive).
+PLUGIN_API = "1.3"
 
 
 def api_version(api) -> tuple[int, int]:
@@ -84,21 +88,6 @@ def api_refusal(api, offered: str | None = None) -> str | None:
     if minor > have_minor:
         return f"written for plugin API {api}, newer than this app's {offered}: it needs a newer app"
     return None
-
-
-@dataclass(frozen=True)
-class KeyVar:
-    """A key a provider reads, from the user's environment variables only."""
-    name: str
-    label: str = "API key"
-    aliases: tuple[str, ...] = ()  # also read (Alpaca's own APCA_ names); the key script sets `name`
-
-    @property
-    def names(self) -> tuple[str, ...]:
-        return (self.name, *self.aliases)
-
-    def value(self, env: Mapping[str, str]) -> str | None:
-        return next((env[n] for n in self.names if env.get(n)), None)
 
 
 @dataclass(frozen=True)
@@ -641,16 +630,38 @@ def publishers() -> dict[str, Publisher]:
 
 
 def publisher_of(name: str) -> str:
-    """The plugin a publisher is listed under: the one it is part of (Publisher.part_of: Federal's
-    agencies), or its own (a part_of naming no publisher here leaves it one of its own)."""
+    """The plugin a publisher is listed under: the one it is part of (Publisher.part_of), a
+    publisher (Federal's agencies) or a feed plugin (API 1.3: Massive's headlines, under Massive);
+    or its own (a part_of naming neither here leaves it one of its own)."""
     pubs = publishers()
     p = pubs.get(name)
-    return p.part_of if p is not None and p.part_of in pubs and p.part_of != name else name
+    if p is None or not p.part_of or p.part_of == name:
+        return name
+    if p.part_of in pubs:
+        return p.part_of
+    return plugin_of(p.part_of) if p.part_of in providers() else name
 
 
 def publisher_parts(name: str) -> list[str]:
-    """A publisher plugin's parts, in their order (Federal: fed, nyfed, sec, bls, fedreg, cftc)."""
+    """A plugin's publishers, in their order: a publisher's parts (Federal: fed, nyfed, sec, bls,
+    fedreg, cftc), or a feed plugin's (Massive: massive-news)."""
     return [n for n in publishers() if n != name and publisher_of(n) == name]
+
+
+def plugin_keys(name: str) -> list[KeyVar]:
+    """Every variable a plugin reads that the user sets: a feed plugin's keys with its feeds' and its
+    publishers' (each once, by name), or a publisher's with its parts' (Federal: the SEC's GOV_CONTACT)."""
+    pubs = publishers()
+    if name in pubs:
+        found = [k for n in (name, *publisher_parts(name)) for k in pubs[n].keys]
+    else:
+        ps = providers()
+        found = [k for n in plugin_feeds(name) if n in ps for k in ps[n].keys]
+        found += [k for n in publisher_parts(name) for k in pubs[n].keys]
+    out: dict[str, KeyVar] = {}
+    for k in found:
+        out.setdefault(k.name, k)
+    return list(out.values())
 
 
 def reload() -> dict[str, Provider]:
@@ -691,8 +702,19 @@ def errors() -> list[tuple[str, str]]:
 
 
 def variables() -> tuple[str, ...]:
-    """Every variable a provider reads (keys, plans, options), for Settings.env."""
-    return tuple(dict.fromkeys(n for p in providers().values() for n in (*p.key_names, *p.plan_vars, *p.options)))
+    """Every variable a plugin reads (a provider's keys, plans and options; a publisher's keys), for
+    Settings.env and the saved user variables (config.saved_names)."""
+    return tuple(dict.fromkeys([*(n for p in providers().values() for n in (*p.key_names, *p.plan_vars, *p.options)),
+                                *(n for p in publishers().values() for k in p.keys for n in k.names)]))
+
+
+def key_row(k: KeyVar, settings: "Settings | None" = None) -> dict:
+    """A variable for the key script, `plugins` and the Plugins view: never its value, only whether it
+    is set (with settings)."""
+    row = {"name": k.name, "label": k.label, "aliases": list(k.aliases), "secret": k.secret, "hint": k.hint}
+    if settings is not None:
+        row["set"] = bool(k.value(settings.env))
+    return row
 
 
 def menu(settings: "Settings | None" = None) -> list[dict]:
@@ -706,7 +728,8 @@ def menu(settings: "Settings | None" = None) -> list[dict]:
         row = {"name": p.name, "title": p.title, "about": p.about, "signup": p.signup, "origin": p.origin,
                "version": p.version, "api": p.api, "archive": p.archival, "assets": sorted(p.assets),
                "keyless": sorted(p.keyless),
-               "keys": [{"name": k.name, "label": k.label, "aliases": list(k.aliases)} for k in p.keys],
+               "keys": [key_row(k) for k in plugin_keys(p.name)],
+               "publishers": [_publisher_row(publishers()[n]) for n in publisher_parts(p.name)],
                "planChoices": [{"name": v, "choices": list(c)} for v, c in p.plan_choices.items()],
                "planNote": p.plan_note, "scan": p.scan is not None, "feeds": []}
         for n in plugin_feeds(p.name)[1:]:
@@ -723,13 +746,17 @@ def menu(settings: "Settings | None" = None) -> list[dict]:
     return out
 
 
-def publisher_menu() -> list[dict]:
-    """The publisher plugins for the `plugins` command, each once, with its parts (`parts`:
-    Federal's agencies): what each is, its version and origin."""
-    def row(p: Publisher) -> dict:
-        return {"name": p.name, "title": p.title, "about": p.about, "kind": p.kind, "account": p.account,
-                "origin": p.origin, "version": p.version, "api": p.api, "datasets": list(p.datasets)}
+def _publisher_row(p: Publisher) -> dict:
+    return {"name": p.name, "title": p.title, "about": p.about, "kind": p.kind, "account": p.account,
+            "origin": p.origin, "version": p.version, "api": p.api, "datasets": list(p.datasets),
+            "keys": [key_row(k) for k in p.keys]}
 
+
+def publisher_menu() -> list[dict]:
+    """The publisher plugins for the `plugins` command and the key script, each once, with its parts
+    (`parts`: Federal's agencies) and every variable it reads (`keys`, its parts' too): what each is,
+    its version and origin. A publisher part of a feed plugin is listed in that one's row (menu)."""
     pubs = publishers()
-    return [{**row(p), "parts": [row(pubs[n]) for n in publisher_parts(p.name)]}
+    return [{**_publisher_row(p), "keys": [key_row(k) for k in plugin_keys(p.name)],
+             "parts": [_publisher_row(pubs[n]) for n in publisher_parts(p.name)]}
             for p in pubs.values() if publisher_of(p.name) == p.name]

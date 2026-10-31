@@ -321,9 +321,11 @@ def test_the_plugins_view_shows_each_plugin_its_plan_keys_and_part(tmp_path):
         assert list(by) == [n for n in providers() if n not in ("boats", "tiingofx")]  # feeds of Alpaca's and Tiingo's plugins
         assert out["offline"] is False and out["errors"] == []
         assert by["massive"]["group"] == "Feeds with keys" and by["bitstamp"]["group"] == "Public feeds"
-        assert by["alpaca"]["keys"] == [{"name": "ALPACA_API_KEY_ID", "label": "key ID", "set": True},
+        assert [{k: x[k] for k in ("name", "label", "set")} for x in by["alpaca"]["keys"]] == [
+                                        {"name": "ALPACA_API_KEY_ID", "label": "key ID", "set": True},
                                         {"name": "ALPACA_API_SECRET_KEY", "label": "secret key", "set": True}]
-        assert all(set(k) == {"name", "label", "set"} for p in by.values() for k in p["keys"])  # never a key's value
+        assert all(set(k) == {"name", "label", "aliases", "secret", "hint", "set"}  # never a key's value
+                   for p in by.values() for k in p["keys"])
         assert by["tiingo"]["state"] == "no key" and by["tiingo"]["plan"]["vars"][0]["value"] == "starter"
         assert by["tiingo"]["plan"]["vars"][0]["choices"] == ["starter", "power", "commercial"]
         assert by["tiingo"]["plan"]["note"].startswith("Tiingo's API does not say")
@@ -584,6 +586,6 @@ def test_the_page_says_scanning_and_lists_a_plugins_feeds():
     js = (static / "plugins.js").read_text(encoding="utf-8")
     assert "scanning: 'scanning…'" in js and "' · scanning…'" not in js  # the chip says it, not the plan line
     assert "function feedsHtml(p)" in js and "<th>Feed</th>" in js and 'class="pl-feedrow"' in js
-    assert "${feedsHtml(p)}${planHtml(p)}" in js
+    assert "${feedsHtml(p)}${publishersHtml(p)}${planHtml(p)}" in js
     css = (static / "style.css").read_text(encoding="utf-8")
     assert ".ex-state.pl-scanning { color: var(--accent);" in css

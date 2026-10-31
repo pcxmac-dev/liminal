@@ -602,6 +602,10 @@ class ChartApp:
             held = {d["name"]: d for d in self.datasets()["datasets"]}
             for p in out:
                 p["datasetRows"] = [held[n] for n in p["datasets"] if n in held]
+        from ..sources.registry import key_row, plugin_keys
+
+        for p in out:  # what you set for it (its parts' too, for a plugin of several): set or not, never a value
+            p["keys"] = [key_row(k, self.settings) for k in plugin_keys(p["name"])]
         return out
 
     def start_recheck(self, name: str) -> dict:
@@ -768,6 +772,44 @@ class ChartApp:
             self._settings_at = 0.0  # looked at again on the next request
         self._plugins_cache = None
         return {"plugin": plugin, "variable": variable, "value": value}
+
+    def set_key(self, plugin: str, variable: str, value: str | None) -> dict:
+        """A plugin's key, or a detail of yours it sends where asked (GOV_CONTACT), set up in the
+        Plugins view (the user, 2026-10-31: "i need a way to setup plugins inside the plugin interface
+        in the main window, for all plugins, including keys, user details etc"): saved like the key
+        script saves it (a user environment variable, config.save_user_variable), or with None
+        removed. Only a variable the plugin declares (registry.plugin_keys). Its value is never
+        logged, kept anywhere else or sent back: the answer says only whether it is set."""
+        from ..sources import keys, providers, publishers
+        from ..sources.registry import plugin_keys
+
+        if self.settings.offline:
+            raise RuntimeError("offline (MASSIVE_OFFLINE): this copy of the app saves no settings")
+        if plugin not in providers() and plugin not in publishers():
+            raise LookupError(f"no plugin named {plugin}")
+        if not any(k.name == variable for k in plugin_keys(plugin)):
+            raise LookupError(f"{plugin} reads no variable {variable}")
+        why = keys.refusal(variable) or self._claimed_elsewhere(plugin, variable)
+        if why:  # a plugin declaring PATH, or another plugin's key, never writes it from its panel
+            raise LookupError(why)
+        self._save_variable(variable, None if value is None else keys.clean(value))
+        with self._settings_lock:
+            self._settings_at = 0.0  # looked at again on the next request
+        self._plugins_cache = None
+        return {"plugin": plugin, "variable": variable, "set": value is not None}
+
+    @staticmethod
+    def _claimed_elsewhere(plugin: str, variable: str) -> str | None:
+        """Why a plugin may not set a variable another plugin declares too (one package's KeyVar
+        naming Massive's key), or None: each variable is one plugin's, its feeds' and parts' included."""
+        from ..sources import providers, publishers
+        from ..sources.registry import plugin_of, publisher_of
+
+        def top(name: str) -> str:
+            return publisher_of(name) if name in publishers() else plugin_of(name)
+
+        owners = {top(n) for n, p in [*providers().items(), *publishers().items()] if any(k.name == variable for k in p.keys)}
+        return f"{variable} is declared by {', '.join(sorted(owners))}: no one plugin's to set" if len(owners) > 1 else None
 
     def _save_variable(self, name: str, value: str | None) -> None:
         config.save_user_variable(name, value)
@@ -1743,6 +1785,15 @@ def make_handler(app: ChartApp, port_ref: list[int]):
                                                        body.get("value") or None))
                     except RuntimeError as e:
                         return self._json({"error": str(e)}, HTTPStatus.CONFLICT)
+                if method == "POST" and parts == ["", "api", "plugins", "key"]:
+                    value = body.get("value")
+                    try:
+                        return self._json(app.set_key(str(body.get("plugin") or ""), str(body.get("variable") or ""),
+                                                      None if value is None else str(value)))
+                    except RuntimeError as e:
+                        return self._json({"error": str(e)}, HTTPStatus.CONFLICT)
+                    except LookupError as e:
+                        return self._json({"error": str(e)}, HTTPStatus.NOT_FOUND)
                 if method == "POST" and parts == ["", "api", "plugins", "rescan"]:
                     name = parse_qs(urlparse(self.path).query).get("name", [None])[-1] or None
                     try:

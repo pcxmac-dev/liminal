@@ -23,6 +23,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Callable
 
+from .keys import KeyVar
+
 
 @dataclass(frozen=True)
 class Feed:
@@ -73,6 +75,9 @@ class Publisher:
     # the datasets it publishes (datasets.py names; API 1.2; the CFTC's Commitments of Traders):
     # fetched by `datasets`, shown with it
     datasets: tuple[str, ...] = ()
+    # what the user sets for it (API 1.3): a key, or a detail of theirs it sends where asked (the SEC:
+    # GOV_CONTACT); user environment variables, set from the Plugins view or the key script
+    keys: tuple[KeyVar, ...] = ()
     # its own version and the plugin contract it was written for (sources/registry.py: PLUGIN_API)
     version: str = ""
     api: str = "1.0"

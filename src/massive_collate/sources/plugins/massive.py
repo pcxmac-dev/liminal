@@ -3,8 +3,8 @@
 Its scan finds the stocks plan from what the key may ask for (MassiveSource.plan_reach) and sets
 MASSIVE_TIER where you have not. The other classes' plans are not probed (PLAN_NOTE).
 
-Its headlines are a publisher of its own (PUBLISHER, read by publications.py every 30 minutes),
-on this feed's key and limits."""
+Its headlines are a publisher in this plugin (PUBLISHER, part_of="massive": listed under Massive,
+read by publications.py every 30 minutes), on this feed's key and limits."""
 from __future__ import annotations
 
 from ...config import MASSIVE_CLASS_TIERS, TIERS, asset_tier, tier_for
@@ -57,7 +57,7 @@ def scan(source) -> Scanned:
 
 
 PLUGIN = Provider(
-    version="1.0.0", api="1.0",  # its own release, and the plugin contract it was written for
+    version="1.1.0", api="1.0",  # its own release (its headlines part of it), and the contract it was written for
     name="massive", title="Massive", build=build, assets=frozenset(ASSETS), order=0,
     about="stocks, indices, currencies, crypto and futures: 1-second and minute bars, reference data, news",
     keys=(KeyVar("MASSIVE_API_KEY"),), signup="massive.com: your dashboard's API keys",
@@ -98,8 +98,8 @@ def read_headlines(ctx) -> int:
 
 
 PUBLISHER = Publisher(
-    version="1.0.0", api="1.0",  # its own release, and the plugin contract it was written for
-    name="massive-news", title="Massive headlines", order=300, kind="vendor", account="massive",
+    version="1.1.0", api="1.3",  # the plugin's release, and the contract it needs (part_of a feed plugin)
+    name="massive-news", title="Massive headlines", order=300, kind="vendor", account="massive", part_of="massive",
     about="news headlines for the News view and the globe's ticker, on Massive's key and limits",
     feeds=(Feed("massive-news", "Massive", "Headlines", "https://api.massive.com/v2/reference/news", "headlines",
                 every_minutes=30, moments=False),),

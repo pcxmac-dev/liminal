@@ -29,10 +29,13 @@ def test_the_federal_agencies_are_parts_of_one_plugin():
         assert importlib.util.find_spec(f"massive_collate.sources.plugins.{gone}") is None, gone
     pubs = publishers()
     assert list(pubs)[:7] == ["federal", *AGENCIES]  # the plugin's record first, its agencies after it
-    assert all(pubs[n].part_of == "federal" and (pubs[n].version, pubs[n].api) == ("1.0.0", "1.2") for n in AGENCIES)
+    assert all(pubs[n].part_of == "federal" and (pubs[n].version, pubs[n].api) == ("1.1.0", "1.3") for n in AGENCIES)
     assert pubs["federal"].feeds == () and pubs["federal"].part_of == ""
     assert registry.publisher_parts("federal") == AGENCIES and registry.publisher_of("sec") == "federal"
-    assert registry.publisher_of("massive-news") == "massive-news" and registry.publisher_parts("massive-news") == []
+    assert registry.publisher_of("massive-news") == "massive" and registry.publisher_parts("massive-news") == []
+    # what you set for it: the SEC's GOV_CONTACT, declared by the SEC, the plugin's as a whole
+    assert [k.name for k in pubs["sec"].keys] == ["GOV_CONTACT"] and not pubs["sec"].keys[0].secret
+    assert [k.name for k in registry.plugin_keys("federal")] == ["GOV_CONTACT"] == [k.name for k in registry.plugin_keys("sec")]
     # each agency keeps what it was: its feeds (their keys name the state kept), its hosts and checks
     assert [f.key for f in pubs["fed"].feeds] == ["fed-press", "fed-speeches"] and pubs["sec"].policy.contact
     assert pubs["fed"].calendar is not None and pubs["nyfed"].moments is not None
@@ -99,14 +102,17 @@ def test_the_plugins_view_lists_federal_once_with_its_agencies_and_the_cftcs_dat
     assert by["federal"]["parts"] == AGENCIES and all(by[n]["partOf"] == "federal" for n in AGENCIES)
     assert by["federal"]["requestsToday"] == sum(by[n]["requestsToday"] for n in AGENCIES)
     assert by["cftc"]["datasets"] == ["cftc-cot-legacy"] and by["cftc"]["datasetRows"][0]["name"] == "cftc-cot-legacy"
-    assert by["massive-news"]["partOf"] == "" and by["massive-news"]["parts"] == []
+    assert by["massive-news"]["partOf"] == "massive" and by["massive-news"]["parts"] == []  # under Massive
+    assert [k["name"] for k in by["federal"]["keys"]] == ["GOV_CONTACT"] and set(by["federal"]["keys"][0]) == {
+        "name", "label", "aliases", "secret", "hint", "set"}  # whether it is set, never its value
 
 
 def test_the_page_shows_federal_with_its_agencies_beneath_and_the_gov_view_is_named_federal():
     js = (STATIC / "plugins.js").read_text(encoding="utf-8")
     assert "(data.publishers || []).filter((p) => !p.partOf).map((p) => pubButton(p, false)" in js
-    assert "filter((q) => q.partOf === p.name).map((q) => pubButton(q, true))" in js
-    assert "if (p.parts.length) return partsHtml(p);" in js and "function datasetsHtml(p)" in js
+    assert "filter((q) => q.partOf === name).map((q) => pubButton(q, true))" in js and "pubButton(p, false) + partsOf(p.name)" in js
+    assert "if (p.parts.length) return `${(p.keys || []).length ? pubSetupHtml(p) : ''}${partsHtml(p)}`;" in js
+    assert "function datasetsHtml(p)" in js
     assert "whose === 'plugin'" in js and "(all ? 'Pause all' : 'Pause')" in js
     css = (STATIC / "style.css").read_text(encoding="utf-8")
     assert ".ex-venue.pl-sub {" in css and ".pl-link {" in css

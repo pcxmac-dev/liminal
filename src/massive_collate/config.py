@@ -305,15 +305,13 @@ def read_env_file(path: Path) -> dict[str, str]:
 
 # API keys set as user environment variables after a process started (the chart app, the runs it
 # starts) are not in its environment; on Windows they are read from the user's saved variables:
-# every provider plugin's keys and plan variables (sources/registry.py), and these.
-SAVED_NAMES = ("GOV_CONTACT",)
-
-
+# every variable a plugin declares (sources/registry.py: its keys, plans and options; a publisher's
+# keys, the SEC's GOV_CONTACT among them).
 def saved_names() -> tuple[str, ...]:
-    """The variables read from the user's saved ones: the plugins' keys, plans and options, and SAVED_NAMES."""
+    """The variables read from the user's saved ones: every plugin's (registry.variables)."""
     from .sources.registry import variables
 
-    return (*variables(), *SAVED_NAMES)
+    return variables()
 
 
 def saved_user_keys() -> dict[str, str]:

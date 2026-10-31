@@ -5,6 +5,7 @@ a second: these wait for GOV_CONTACT (your name and email, sent in the User-Agen
 nothing is sent until you set it), and are read hourly, far inside that rate."""
 from __future__ import annotations
 
+from ...keys import KeyVar
 from ...publisher import Feed, Policy, Publisher
 from .release import API, VERSION
 
@@ -17,6 +18,8 @@ PUBLISHER = Publisher(
         Feed("sec-suspensions", "SEC", "Trading suspensions",
              "https://www.sec.gov/enforcement-litigation/trading-suspensions/rss", every_minutes=60),
     ),
+    keys=(KeyVar("GOV_CONTACT", "Your name and email", secret=False,
+                 hint="Jane Doe jane@example.com: sent in the User-Agent to the SEC only, as it asks"),),
     policy=Policy(hosts=("www.sec.gov",), min_minutes=15, per_day=60, contact=True,
                   terms="fair access: identify with your name and email in the User-Agent; "
                         "at most 10 requests a second",

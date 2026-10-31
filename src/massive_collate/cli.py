@@ -915,13 +915,17 @@ def cmd_plugins(args, settings: Settings | None) -> int:
         for f in r["feeds"]:  # a feed of its own in this plugin, on its keys: alpaca (blue ocean)
             print(f"{'':9} and {f['label']} (feed {f['name']}): {f['about']}"
                   + (f"; serves: {', '.join(f['serves']) or '-'}" if "serves" in f else ""))
+        for pub in r["publishers"]:  # a publisher in this plugin: Massive's headlines
+            print(f"{'':9} and {pub['title']} (publisher {pub['name']}): {pub['about']}")
     for r in pubs:
-        print(f"{r['name']:12} {r['title']:28} publisher {release(r)}")
+        print(f"{r['name']:12} {r['title']:28} publisher {release(r)}"
+              + (f"; you set: {', '.join(k['name'] for k in r['keys'])}" if r["keys"] else ""))
         for part in r["parts"]:  # a plugin of several publishers: Federal's agencies
             print(f"{'':12} and {part['title']} ({part['name']}): {part['about']}")
     for where, why in left_out:
         print(f"left out: {where}: {why}")
-    print("Set or remove a provider's keys: powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\set-key.ps1")
+    print("Set or remove a plugin's keys: in the Plugins view (Setup), or "
+          "powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\set-key.ps1")
     return 0
 
 
