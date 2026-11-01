@@ -11,11 +11,12 @@
     <!-- The top bar's tools in strips, each a panel on the page's lighter grey (style.css, "Panels") -->
     <div class="strip">
     <button id="symbolBtn" class="symbol" title="Switch symbol (/)"><span id="symbolLabel">Select symbol</span></button>
-    <select id="feedSelect" title="Data feed"></select>
+    <select id="feedSelect" title="Data feed" hidden></select><!-- picked in Preferences (prefs.js) -->
     </div>
     <div class="strip">
     <div id="periods" class="group" role="toolbar" aria-label="Interval"></div>
-    <select id="typeSelect" title="Chart type">
+    <!-- picked in Preferences (prefs.js); a price-based type's settings stay here (typeParams) -->
+    <select id="typeSelect" hidden title="Chart type">
       <optgroup label="Time based">
         <option value="bars">Bars</option>
         <option value="candles">Candles</option>
@@ -43,6 +44,7 @@
     <span id="typeParams" class="params"></span>
     </div>
     <div class="strip">
+    <label class="model-label" for="modelSelect">Model</label>
     <select id="modelSelect" title="Model: the price, its derivatives, its integral, or its slower Fourier cycles">
       <option value="price">Price</option>
       <option value="d1">1st derivative (slope)</option>
@@ -72,16 +74,19 @@
     </select>
     </div>
     <div class="strip">
-    <select id="sessionSelect" aria-label="Sessions shown" title="Sessions shown: regular hours 09:30-16:00; extended adds pre-market from 04:00 and after-hours to 20:00; overnight adds 20:00-04:00 on Blue Ocean">
+    <select id="sessionSelect" hidden aria-label="Sessions shown" title="Sessions shown: regular hours 09:30-16:00; extended adds pre-market from 04:00 and after-hours to 20:00; overnight adds 20:00-04:00 on Blue Ocean">
       <option value="regular">RTH: regular hours</option>
       <option value="extended">ETH: + pre and after hours</option>
       <option value="all">All four: + overnight</option>
     </select>
-    <button id="unfilteredBtn" class="toggle" title="Unfiltered: all data, bad data included. Off: filtered, the target data (bad data is on each feed's pruned list, in the Data panel)">All data</button>
-    <div class="menu">
-      <button id="indBtn" aria-haspopup="true">Indicators</button>
+    <!-- All data and the indicators are picked in Preferences (prefs.js) through these hidden controls:
+         the user, 2026-10-31: "all data should be a preference, indicators should be a preference too" -->
+    <button id="unfilteredBtn" class="toggle" hidden title="Unfiltered: all data, bad data included. Off: filtered, the target data (bad data is on each feed's pruned list, in the Data panel)">All data</button>
+    <div class="menu" hidden>
+      <button id="indBtn" hidden aria-haspopup="true">Indicators</button>
       <div id="indMenu" class="dropdown" hidden></div>
     </div>
+    <button id="replayBtn" class="toggle analysis-only" title="Replay (Analysis view): click a bar to start from, then play the bars after it as if live">Replay</button>
     </div>
     <div class="strip">
     <div class="menu layout-menu">
@@ -91,16 +96,12 @@
       <div id="layoutMenu" class="dropdown right" hidden></div>
     </div>
     </div>
-    <div class="strip">
-    <button id="zoomOut" title="Zoom out (-)">&minus;</button>
-    <button id="zoomIn" title="Zoom in (+)">+</button>
-    <button id="latestBtn" title="Jump to latest bar (End)">Latest</button>
-    <button id="replayBtn" class="toggle analysis-only" title="Replay (Analysis view): click a bar to start from, then play the bars after it as if live">Replay</button>
-    </div>
-    <div class="strip">
-    <button id="gpuBtn" class="toggle" title="GPU rendering (WebGL2 / OpenGL ES 3)">GPU</button>
-    <button id="shotBtn" title="Save a PNG of the chart">PNG</button>
-    <select id="themeSelect" title="Theme" aria-label="Theme">
+    <!-- The GPU switch and the theme are picked in Preferences (prefs.js); zoom and the latest bar are the
+         keys (+, -, End) and the mouse (the user, 2026-10-31: "lets get rid of the zoom buttons, also get
+         rid of PNG and move GPU to preferences and also theme should be in preferences") -->
+    <div class="strip" hidden>
+    <button id="gpuBtn" class="toggle" hidden title="GPU rendering (WebGL2 / OpenGL ES 3)">GPU</button>
+    <select id="themeSelect" hidden title="Theme" aria-label="Theme">
       <option value="dark">Dark</option>
       <option value="midnight">Midnight</option>
       <option value="graphite">Graphite</option>
@@ -186,6 +187,9 @@
       <button data-pane="stock" id="railStock" title="Stock: chart with the symbol, key statistics and business"></button>
       <button data-pane="analysis" id="railAnalysis" title="Analysis: chart with the highlight and cursor statistics"></button>
       <button data-pane="trading" id="railTrading" title="Trading: chart with the paper account beside it (simulated; Interactive Brokers planned; live trading is off)"></button>
+      <button data-pane="watchlist" id="railWatch" title="Watchlist: every collected symbol and your own lists, beside the chart"></button>
+      <button data-pane="prefs" id="railPrefs" title="Preferences: the sessions shown, the time zone, the theme, and each session's shading on the chart"></button>
+      <hr>
       <button data-pane="exchanges" id="railExchanges" title="Exchanges: every tracked exchange, its products, and insight into them"></button>
       <button data-pane="markets" id="railMarkets" title="Markets: the world's exchanges on a globe, what is open now"></button>
       <button data-pane="news" id="railNews" title="News: exchange events and headlines"></button>
@@ -196,9 +200,7 @@
       <button data-pane="live" id="railLive" title="Live feeds: the current session"></button>
       <button data-pane="plugins" id="railPlugins" title="Plugins: every data provider (feed or source), its plan, limits and capabilities; rescan what each key gets"></button>
       <button data-pane="resources" id="railResources" title="Resources: the app's processes (CPU, memory, disk, connections), the machine's bandwidth, and the data files"></button>
-      <button data-pane="watchlist" id="railWatch" title="Watchlist: every collected symbol and your own lists, beside the chart"></button>
       <hr>
-      <button data-pane="prefs" id="railPrefs" title="Preferences: the sessions shown, the time zone, the theme, and each session's shading on the chart"></button>
       <button type="button" id="railProfile" class="rail-profile" title="Profile: switch to another">?</button>
     </nav>
   </main>

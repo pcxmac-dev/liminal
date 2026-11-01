@@ -159,7 +159,7 @@ def test_the_futures_map_dates_a_front_behind_and_an_empty_watchlist_says_so():
     wl = _js("watchlist.js")
     # the user, 2026-10-29: "even empty watch list": the map says why it is empty, as the table does
     assert "renderMap(box, head, syms.filter(match), empty);" in wl
-    assert "mine ? 'Empty: open a symbol and press + to add it.'" in wl and "'Nothing visited yet: every symbol you open is noted here.'" in wl
+    assert "const empty = !mine.tickers.length ? 'Empty: press + to add a symbol.'" in wl
     draw = wl.split("function renderMap(", 1)[1].split("\n  }\n", 1)[0]
     assert "if (!syms.length) {" in draw and 'id="watchPick"' in draw and "Pick from the market map" in draw
     assert "if (e.target.closest('#watchPick')) {" in wl and "return $('symbolBtn').click();" in wl

@@ -143,13 +143,22 @@ def test_the_gaps_between_panes_are_the_windows_grey_and_hold_no_crosshair_line(
     assert "getPropertyValue('--frame')" in app.split("const gapColor", 1)[1].splitlines()[0]  # the page's grey, between panels
     assert "applyPaneSpacing();" in _function(app, "applyChartType")  # after every theme
 
-def test_the_time_zone_switch_sits_on_the_date_row_centred_on_the_dates():
-    place = _function(_js("app.js"), "placeTimezone")
-    assert "const mid = (text.marginStart ?? 4) + (text.size ?? 12) / 2;" in place  # where the axis draws its dates
-    assert "height = 2 * (mid - PANE_GAP)" in place and "top: `${axis.top + PANE_GAP}px`" in place
-    assert "lineHeight: `${height}px`" in place  # the text on the dates' row ...
-    assert "corner = Math.max(height, axis.height - PANE_GAP)" in place and "height: `${corner}px`" in place  # ... the corner filled
-    assert "width: `${Y_AXIS_WIDTH - TZ_INSET}px`" in place  # set in from the plot
+def test_the_time_zone_and_session_switches_are_buttons_on_the_date_row():
+    # the user, 2026-10-31: "this needs to look more like a button but be styled similiarly"; "need a
+    # session picker button", "on lower left", "get rid of session picker up top"
+    app = _js("app.js")
+    top = _function(app, "axisButtonTop")
+    # "center the two buttons vertically": in the axis's band below the gap band
+    assert "return axis.top + PANE_GAP + Math.max(0, (axis.height - PANE_GAP - AXIS_BTN_HEIGHT) / 2);" in top
+    place = _function(app, "placeTimezone")
+    assert "right: `${TZ_INSET / 2}px`" in place and "left: `${TZ_INSET / 2}px`" in place  # each at its end
+    css = _js("style.css")
+    btn = css.split(".axis-btn {", 1)[1].split("}", 1)[0]
+    assert "border: 1px solid var(--border)" in btn and "background: var(--panel)" in btn  # as the toolbar's pickers
+    assert '.axis-btn::after { content: "\\25BE";' in css and '.axis-btn[aria-expanded="true"]' in css
+    assert '<select id="sessionSelect" hidden' in (STATIC / "index.html").read_text(encoding="utf-8")
+    assert "sessBtn.hidden = meta.aroundTheClock;" in app and "renderSessionButton();" in _function(app, "renderSession")
+    assert "$('sessionSelect').dispatchEvent(new Event('change'));" in app.split("sessMenu.addEventListener('click'", 1)[1]
 
 
 def test_a_roll_marker_names_only_the_contract_it_becomes():
@@ -448,10 +457,10 @@ def test_profiles_have_a_login_page_and_keep_their_own_preferences():
     assert "PROFILE === 1 && i < localStorage.length" in app  # a new profile imports no old markups
     assert 'id="railProfile"' in _js("index.html") and "/api/profiles/sign-out" in _js("panels.js")
     watch = _js("watchlist.js")
-    assert "api('/api/register')" in watch and "Visited (${visits.length})" in watch  # the register
-    # a new profile's Collected starts empty: only its own symbols (the first profile keeps every one)
-    assert "const own = PROFILE === 1 ? null : new Set(" in watch and "Collected (${collected.length})" in watch
-    assert "collected.filter((s) => (key === 'live'" in watch
+    # only your watchlists (the user, 2026-10-31: "those are only watchlists no other kinds of lists"):
+    # a new profile starts with an empty Watchlist, saved with its first symbol
+    assert "/api/register" not in watch and "Visited" not in watch and "Collected" not in watch
+    assert "if (!lists.length) lists.push({ name: FIRST, tickers: [] });" in watch
     # nothing saved (a new profile): the first symbol with data opens, not the list's first (a queued future)
     app = _js("app.js")
     assert "state.symbols[0]" not in app and "s.feeds?.some((f) => f.data?.length)" in app

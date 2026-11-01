@@ -367,6 +367,11 @@ const chart = kc.init('chart', {
   timezone: TZ, styles: themeBase(), locale: 'en-US',
   layout: { barSpaceLimit: { min: MIN_BAR_SPACE, max: 80 } },
 });
+// The price pane's top left names the symbol and its interval only: the user, 2026-10-31: "on the main
+// plot get rid of the open/hi/low/time/vol info on the top left, keep the box info on the top right"
+// (the bar under the cursor, with its change, range and VWAP, is in that box).
+const CANDLE_TOOLTIP = { candle: { tooltip: { legend: { template: [] } } } };
+chart.setStyles(CANDLE_TOOLTIP);
 
 chart.setDataLoader({
   getBars: async ({ type, timestamp, symbol, period, callback }) => {
@@ -1359,7 +1364,9 @@ $('gpuBtn').addEventListener('click', () => {
   state.gpu = !state.gpu;
   prefs.set('gpu', state.gpu);
   applyChartType();
+  window.dispatchEvent(new CustomEvent('massive:gpu', { detail: state.gpu }));  // Preferences shows it
 });
+window.gpuState = () => ({ on: !!state.gpu, supported: !!GPU_INFO.supported, title: $('gpuBtn').title });
 
 // A fixed price-axis width: with "auto" the axis widens for long values (an integral's
 // −46,479.70) and the plot shifts sideways, so switching models would move the time window.
@@ -1410,39 +1417,51 @@ new ResizeObserver(() => requestAnimationFrame(placeAxisGap)).observe($('chart')
 // mouse wheel turns it a zone a notch, round and round (past GMT+14 comes the exchange's zone, then
 // GMT−12 again).
 const TZ_ROWS = 6;
-const tzBtn = Object.assign(document.createElement('button'), { type: 'button', className: 'tz-btn', id: 'tzBtn' });
-const tzMenu = Object.assign(document.createElement('div'), { className: 'tz-menu', hidden: true });
-$('chart').append(tzBtn, tzMenu);
+const tzBtn = Object.assign(document.createElement('button'), { type: 'button', className: 'axis-btn tz-btn', id: 'tzBtn' });
+const tzMenu = Object.assign(document.createElement('div'), { className: 'axis-menu tz-menu', hidden: true });
+// The sessions shown (regular hours, extended, all four), at the axis's other end: the toolbar's picker
+// (now hidden, #sessionSelect) does the rest when one is picked.
+const sessBtn = Object.assign(document.createElement('button'), { type: 'button', className: 'axis-btn sess-btn', id: 'sessBtn' });
+const sessMenu = Object.assign(document.createElement('div'), { className: 'axis-menu sess-menu', hidden: true });
+for (const b of [tzBtn, sessBtn]) b.setAttribute('aria-haspopup', 'listbox');
+$('chart').append(tzBtn, tzMenu, sessBtn, sessMenu);
 let tzTop = 0;  // the zone at the top of the wheel's window (an index into TIMEZONES)
 
 function zoneName(z) {
   return z === 'exchange' ? 'Exchange' : `${zoneCities(z) || z} (${gmtLabel(z)})`;
 }
 
-// The switch sits on the time axis's date row, as tall as it and centred on the dates' line (the
-// axis draws its dates from the top of their margin, in its tick-text font): below the gap band,
-// under the price axis. Its list opens upward from it.
-const TZ_INSET = 8;  // px between the plot and the time zone switch
+// The switches on the time axis's row: the time zone's under the price axis (right), the sessions' at
+// its other end (left), each centred in the axis's band below the gap band (the user, 2026-10-31:
+// "center the two buttons vertically"). Small buttons styled as the
+// toolbar's pickers: their border, their panel and a ▾ (style.css .axis-btn; the user, 2026-10-31:
+// "this needs to look more like a button but be styled similiarly", "need a session picker button",
+// "on lower left"). Each one's list opens upward from it.
+const TZ_INSET = 8;  // px between the plot's edge and a switch
+const AXIS_BTN_HEIGHT = 20;
+
+function axisButtonTop() {
+  const axis = chart.getSize('x_axis_pane');
+  if (!axis) return null;
+  return axis.top + PANE_GAP + Math.max(0, (axis.height - PANE_GAP - AXIS_BTN_HEIGHT) / 2);
+}
 
 function placeTimezone() {
-  const axis = chart.getSize('x_axis_pane');
-  if (!axis) return;
-  const text = chart.getStyles().xAxis.tickText;
-  const mid = (text.marginStart ?? 4) + (text.size ?? 12) / 2;  // the dates' centre, from the axis's top
-  const height = 2 * (mid - PANE_GAP);
-  // The whole corner under the price axis, below the gap band (its highlight fills it), set in from the
-  // plot by TZ_INSET; its text on the dates' row.
-  const corner = Math.max(height, axis.height - PANE_GAP);
-  Object.assign(tzBtn.style, { width: `${Y_AXIS_WIDTH - TZ_INSET}px`, top: `${axis.top + PANE_GAP}px`, bottom: 'auto',
-                               height: `${corner}px`, lineHeight: `${height}px`, paddingBottom: `${corner - height}px`,
-                               fontSize: `${text.size ?? 12}px`, color: text.color });
-  tzMenu.style.bottom = `${$('chart').clientHeight - (axis.top + PANE_GAP) + 4}px`;
+  const top = axisButtonTop();
+  if (top == null) return;
+  Object.assign(tzBtn.style, { width: `${Y_AXIS_WIDTH - 2 * TZ_INSET}px`, right: `${TZ_INSET / 2}px`, top: `${top}px`,
+                               bottom: 'auto', height: `${AXIS_BTN_HEIGHT}px` });
+  tzMenu.style.bottom = `${$('chart').clientHeight - top + 4}px`;
+  Object.assign(sessBtn.style, { width: `${Y_AXIS_WIDTH - 2 * TZ_INSET}px`, left: `${TZ_INSET / 2}px`, top: `${top}px`,
+                                 bottom: 'auto', height: `${AXIS_BTN_HEIGHT}px` });
+  sessMenu.style.bottom = tzMenu.style.bottom;
 }
 
 function renderTimezone() {
   tzBtn.textContent = zoneShort(pickedZone());  // "PDT" in summer, "PST" in winter: its daylight saving
   tzBtn.title = `Time zone of the time axis and crosshair: ${zoneName(state.timezone)}. Days, weeks and months keep `
     + 'the market\'s own dates. Click to change; the mouse wheel turns the list.';
+  tzBtn.setAttribute('aria-expanded', String(!tzMenu.hidden));
   placeTimezone();
   if (tzMenu.hidden) return;
   const n = TIMEZONES.length;
@@ -1459,6 +1478,7 @@ function renderTimezone() {
 
 tzBtn.addEventListener('click', (e) => {
   e.stopPropagation();
+  closeSessions();
   tzMenu.hidden = !tzMenu.hidden;
   tzTop = TIMEZONES.indexOf(state.timezone) - Math.floor(TZ_ROWS / 2);  // the zone in use in the middle
   renderTimezone();
@@ -1490,7 +1510,43 @@ function setChartTimezone(z) {
   window.dispatchEvent(new CustomEvent('massive:timezone', { detail: { zone: pickedZone() } }));  // level 2, Preferences
 }
 window.setChartTimezone = setChartTimezone;
-document.addEventListener('click', (e) => { if (!tzMenu.hidden && !tzMenu.contains(e.target)) tzMenu.hidden = true; });
+document.addEventListener('click', (e) => {
+  if (!tzMenu.hidden && !tzMenu.contains(e.target)) { tzMenu.hidden = true; renderTimezone(); }
+  if (!sessMenu.hidden && !sessMenu.contains(e.target)) closeSessions();
+});
+
+// The sessions' switch: its short name (RTH, ETH, ETH+ON) and the list of the three.
+function renderSessionButton() {
+  const [short, what] = SESSION_TEXT[state.session] || SESSION_TEXT.regular;
+  sessBtn.textContent = short;
+  sessBtn.title = `Sessions shown: ${what}. Click to change.`;
+  sessBtn.setAttribute('aria-expanded', String(!sessMenu.hidden));
+  if (sessMenu.hidden) return;
+  sessMenu.innerHTML = [...$('sessionSelect').options].map((o) =>
+    `<button type="button" data-session="${esc(o.value)}" class="${o.value === state.session ? 'on' : ''}"`
+    + ` title="${esc(SESSION_TEXT[o.value]?.[1] || '')}"><span class="tz-name">${esc(SESSION_TEXT[o.value]?.[0] || o.value)}</span>`
+    + `<span class="tz-city p-muted">${esc(o.textContent.split(': ').slice(1).join(': ') || o.textContent)}</span></button>`).join('');
+}
+
+function closeSessions() {
+  if (sessMenu.hidden) return;
+  sessMenu.hidden = true;
+  renderSessionButton();
+}
+
+sessBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!tzMenu.hidden) { tzMenu.hidden = true; renderTimezone(); }
+  sessMenu.hidden = !sessMenu.hidden;
+  renderSessionButton();
+});
+sessMenu.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-session]');
+  if (!b) return;
+  sessMenu.hidden = true;
+  $('sessionSelect').value = b.dataset.session;  // the hidden picker does the rest (kept, the chart read again)
+  $('sessionSelect').dispatchEvent(new Event('change'));
+});
 window.addEventListener('resize', () => requestAnimationFrame(renderTimezone));
 requestAnimationFrame(renderTimezone);
 
@@ -1498,10 +1554,13 @@ chart.subscribeAction('onCrosshairChange', placeAxisGap);  // follows a pane add
 
 function applyChartType() {
   const custom = !NATIVE[state.chartType];
+  // Preferences shows the type (its picker there: the user, 2026-10-31: "move candles picker to preferences")
+  window.dispatchEvent(new CustomEvent('massive:charttype', { detail: state.chartType }));
   chart.setStyles(themeBase());
   if (themeBase() === 'light') chart.setStyles(LIGHT_CHART);
   if (THEMES[state.theme].chart) chart.setStyles(THEMES[state.theme].chart);
   chart.setStyles({ yAxis: { size: Y_AXIS_WIDTH } });
+  chart.setStyles(CANDLE_TOOLTIP);  // the theme's styles above put back the library's legend
   candleStyles();  // the theme's styles above put back the library's green and red
   applyPaneSpacing();
   chart.setStyles({ candle: { type: NATIVE[state.chartType] || 'candle_solid', ...DEFAULT_CANDLE } });
@@ -1949,6 +2008,7 @@ window.addEventListener('massive:open-symbol', (e) => openSymbol(e.detail));
 async function loadSymbols() {
   state.symbols = await api('/api/symbols');
   state.symbolsLoaded = true;
+  window.dispatchEvent(new CustomEvent('massive:symbols'));  // the watchlist draws its rows at once
 }
 
 function symbolInfo(ticker) {
@@ -1969,7 +2029,7 @@ async function selectSymbol(ticker, source = null) {
   const meta = await api('/api/meta', { source, ticker, adjust: state.adjust, auto: 1 });
   if (pick !== state.selectToken) return;  // another symbol was picked while this one was asked for
   resetLod();
-  $('sessionSelect').hidden = meta.aroundTheClock;  // fx and futures trade around the clock
+  sessBtn.hidden = meta.aroundTheClock;  // fx and futures trade around the clock: no sessions to pick
   $('adjustSelect').hidden = meta.asset !== 'future';
   saveDrawings();
   state.ticker = meta.ticker;
@@ -2037,7 +2097,9 @@ function renderFeeds(info) {
     if (feeds.length > 1) feeds.forEach((f) => add(f.source, `Only ${feedLabel(f.source)}`));
   }
   sel.value = state.source;
-  sel.hidden = !feeds.length;
+  // picked in Preferences (prefs.js mirrors these options), not the toolbar: the user, 2026-10-31,
+  // of this picker: "lets get rid of this", "at best its a preference"
+  window.dispatchEvent(new CustomEvent('massive:feeds'));
   chart.removeIndicator({ name: 'XDEV' });
   if (state.source === 'composite') chart.createIndicator({ name: 'XDEV', paneId: 'candle_pane' }, true);
 }
@@ -2116,8 +2178,9 @@ function drawRolls() {
   }
 }
 
-// The symbol button shows the symbol's logo, ticker, exchange and its data state, like
-// TradingView; the picker is an app switcher: a grid of tiles with logos, last price, change and
+// The symbol button shows the symbol's logo, ticker, company name and its data state, like
+// TradingView (the listing exchange in its hover text: the user, 2026-10-31, of the exchange shown
+// there: "is this the right corp name ?", "still wrong"); the picker is an app switcher: a grid of tiles with logos, last price, change and
 // average dollar volume, sorted (by default) by dollar volume ascending, with keyboard navigation.
 function renderSymbolButton() {
   const { symbolIcon, dataIcon, esc: e } = window.MassiveIcons;
@@ -2128,7 +2191,10 @@ function renderSymbolButton() {
   // would start its turn over each time
   if (!$('symbolLogo')) $('symbolLabel').innerHTML = '<span id="symbolLogo" class="symbol-logo"></span><span id="symbolText"></span>';
   window.Throbber.face($('symbolLogo'), symbolIcon(info, 20), 20);
-  const text = `<b>${e(state.ticker)}</b>${info.exchange ? `<span class="p-muted">${e(info.exchangeName || info.exchange)}</span>` : ''}${dataIcon(data, 14)}`;
+  const name = info.name || info.exchangeName || info.exchange;
+  const text = `<b>${e(state.ticker)}</b>${name ? `<span class="p-muted symbol-name">${e(name)}</span>` : ''}${dataIcon(data, 14)}`;
+  $('symbolBtn').title = [info.name, info.exchange ? `listed on ${info.exchangeName || info.exchange}` : null, 'switch symbol (/)']
+    .filter(Boolean).join(' · ');
   if ($('symbolText').dataset.html !== text) { $('symbolText').innerHTML = text; $('symbolText').dataset.html = text; }
 }
 window.addEventListener('massive:activity', renderSymbolButton);
@@ -2661,6 +2727,7 @@ function noteWideInView(wide) {
 // regular hours only, and the overnight choice was two clicks away, unseen).
 function renderSession() {
   $('sessionSelect').value = state.session;
+  renderSessionButton();
   $('unfilteredBtn').classList.toggle('on', state.unfiltered);
 }
 
@@ -2671,6 +2738,7 @@ $('unfilteredBtn').addEventListener('click', () => {
   prefs.set('unfiltered', state.unfiltered);
   renderSession();
   chart.resetData();
+  window.dispatchEvent(new CustomEvent('massive:unfiltered', { detail: state.unfiltered }));  // Preferences shows it
 });
 
 $('sessionSelect').addEventListener('change', (e) => {
@@ -2780,16 +2848,19 @@ function renderIndicatorMenu() {
       const l = document.createElement('label');
       const cb = document.createElement('input');
       cb.type = 'checkbox';
+      cb.dataset.ind = name;  // Preferences (prefs.js) picks the indicators through these
       cb.checked = state.indicators.includes(name);
       cb.addEventListener('change', () => {
         if (cb.checked) { addIndicator(name); state.indicators.push(name); drawAside(name); }
         else { chart.removeIndicator({ name }); state.indicators = state.indicators.filter((n) => n !== name); }
         prefs.set('indicators', state.indicators); markDirty();
+        window.dispatchEvent(new CustomEvent('massive:indicators', { detail: state.indicators }));
       });
       l.append(cb, document.createTextNode(`${name}  ${label}`));
       menu.append(l);
     }
   }
+  window.dispatchEvent(new CustomEvent('massive:indicators', { detail: state.indicators }));  // a layout's, at the start
 }
 
 $('indBtn').addEventListener('click', (e) => { e.stopPropagation(); $('indMenu').hidden = !$('indMenu').hidden; });
@@ -3350,16 +3421,8 @@ async function ensureLayout() {
 }
 
 // -- top bar actions and keys ----------------------------------------------------
-$('zoomIn').addEventListener('click', () => chart.zoomAtCoordinate(1.25, undefined, 150));
-$('zoomOut').addEventListener('click', () => chart.zoomAtCoordinate(0.8, undefined, 150));
-$('latestBtn').addEventListener('click', () => goLatest());
-$('shotBtn').addEventListener('click', () => {
-  const bg = getComputedStyle(document.body).getPropertyValue('--bg').trim();
-  const a = document.createElement('a');
-  a.href = chart.getConvertPictureUrl(true, 'png', bg);
-  a.download = `${state.ticker || 'chart'}-${state.period.span}${state.period.type}.png`;
-  a.click();
-});
+// Zoom and the latest bar are keys (+, -, End) and the mouse, no buttons; the theme and the GPU switch
+// are picked in Preferences (prefs.js), through these hidden controls.
 $('themeSelect').addEventListener('change', (e) => {
   setTheme(e.target.value);
   prefs.set('theme', state.theme);

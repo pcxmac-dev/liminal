@@ -155,6 +155,7 @@ select option { background: var(--panel); }
 .strip { display: flex; align-items: center; gap: 4px; padding: 3px var(--pad); background: var(--card);
   border-radius: var(--radius); }
 .strip:not(:has(> :not([hidden]))) { display: none; }  /* every tool in it hidden: no empty panel */
+body:not([data-pane="analysis"]) .strip:not(:has(> :not([hidden], .analysis-only))) { display: none; }  /* Replay alone: the Analysis view's */
 #topbar .symbol { font-weight: 600; border-color: var(--border); min-width: 120px; text-align: left; }
 .group { display: flex; gap: 1px; }
 .group button { padding: 4px 6px; }
@@ -172,6 +173,10 @@ select option { background: var(--panel); }
 .layout-row .del { color: var(--muted); padding: 4px 6px; }
 .layout-row .del:hover { color: var(--down); }
 .params { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; }
+/* a model's settings only for a model that has them: the price shows none (its display: flex had kept
+   them on screen; the user, 2026-10-31: "convert this to just model : 'price' no other info") */
+.params[hidden] { display: none; }
+.model-label { color: var(--muted); font-size: 12px; }
 .params input { width: 72px; border-color: var(--border); background: var(--bg); padding: 3px 6px; cursor: text; }
 .params .approx { color: #f0b90b; }
 .params select { padding: 2px 4px; }
@@ -300,6 +305,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .5); }
 /* symbol button, rail and panes */
 #topbar .symbol #symbolLabel, #topbar .symbol #symbolText { display: inline-flex; align-items: center; gap: 6px; }
 #topbar .symbol .p-muted { font-size: 12px; }
+#topbar .symbol .symbol-name { max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
 .symbol-logo { display: inline-grid; }
 /* The open symbol's logo as a throbber (throbber.js): while the symbol updates, a turning sphere drawn
    on a canvas in the logo's place (the logo on one half, the Earth by day and night on the other); the
@@ -409,19 +415,32 @@ button.primary[disabled] { opacity: .5; cursor: default; }
 /* The band between the last pane and the time axis's labels, behind the chart's canvases. */
 .axis-gap { position: absolute; left: 0; pointer-events: none; z-index: 0; }
 /* The time zone switch in the corner under the price axis, and its menu. */
-.tz-btn { position: absolute; right: 0; bottom: 0; z-index: 6; font: 11px/1 inherit; color: var(--muted);
-  background: transparent; border: 0; cursor: pointer; padding: 0; }
-.tz-btn:hover { color: var(--text); background: var(--hover, rgba(120,123,134,0.15)); }
+/* The switches on the time axis's date row (the time zone's right, the sessions' left): buttons styled
+   as the toolbar's pickers, their border and panel, a ▾ as the Default ▾ button has. */
+.axis-btn { position: absolute; bottom: 0; z-index: 6; display: inline-flex; align-items: center;
+  justify-content: center; gap: 4px; padding: 0 6px; font-size: 11px; line-height: 1; color: var(--text);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+.axis-btn::after { content: "\25BE"; font-size: 9px; color: var(--muted); }
+.axis-btn:hover { background: var(--hover); }
+.axis-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.axis-btn[hidden] { display: none; }
+.tz-btn { right: 0; }
+.sess-btn { left: 0; }
 .tz-menu { position: absolute; right: 0; bottom: 30px; z-index: 30; display: flex; flex-direction: column; min-width: 160px;
   background: var(--panel, var(--bg)); border: 1px solid var(--border); border-radius: 6px; padding: 4px;
   box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
 .tz-menu[hidden] { display: none; }
 .tz-menu { min-width: 280px; }
-.tz-menu button { display: grid; grid-template-columns: 9ch 1fr auto; gap: 10px; text-align: left; font: inherit; font-size: 12px;
+.sess-menu { position: absolute; left: 0; bottom: 30px; z-index: 30; display: flex; flex-direction: column; min-width: 240px;
+  background: var(--panel, var(--bg)); border: 1px solid var(--border); border-radius: 6px; padding: 4px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35); }
+.sess-menu[hidden] { display: none; }
+.tz-menu button, .sess-menu button { display: grid; grid-template-columns: 9ch 1fr auto; gap: 10px; text-align: left; font: inherit; font-size: 12px;
   color: var(--text); background: transparent; border: 0; border-radius: 4px; padding: 5px 8px; cursor: pointer; }
-.tz-menu .tz-city { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tz-menu button:hover { background: rgba(120,123,134,0.15); }
-.tz-menu button.on { color: #2962ff; }
+.tz-menu .tz-city, .sess-menu .tz-city { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tz-menu button:hover, .sess-menu button:hover { background: rgba(120,123,134,0.15); }
+.tz-menu button.on, .sess-menu button.on { color: #2962ff; }
+.sess-menu button { grid-template-columns: 7ch 1fr; }
 .cursor-box { position: absolute; z-index: 3; pointer-events: none; font-size: 11px; line-height: 1.5;
   font-variant-numeric: tabular-nums; text-align: right; color: var(--text);
   background: color-mix(in srgb, var(--panel) 82%, transparent); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; }
@@ -836,6 +855,13 @@ table.l2 tr.cursor.beyond td { box-shadow: inset 0 1px 0 var(--muted), inset 0 -
 .pref-row select { max-width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border);
   border-radius: 4px; padding: 2px 4px; }
 .pref-session { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+/* the indicators, on and below the price, two columns of checkboxes */
+.pref-inds { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin: 4px 0 8px; }
+.pref-ind-head { font-size: 11px; font-weight: 600; color: var(--muted); margin: 2px 0 4px; }
+.pref-ind { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 6px; font-size: 12px;
+  margin: 2px 0; cursor: pointer; }
+.pref-ind input { margin: 0; }
+.pref-ind .p-muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .pref-session select { width: 100%; }
 .pref-shade { grid-template-columns: minmax(0, 1fr) 110px 44px; position: relative; }
 .pref-shade > span, .pref-candles > span { display: inline-flex; align-items: center; }
@@ -883,9 +909,25 @@ table.l2 tr.cursor.beyond td { box-shadow: inset 0 1px 0 var(--muted), inset 0 -
 .w-table .w-ex { color: var(--muted); font-size: 10px; margin-left: 4px; }
 .w-table .w-live { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--down); margin-left: 4px;
   vertical-align: middle; }
-.w-table .w-group td { color: var(--muted); font-weight: 600; cursor: pointer; background: var(--panel); }
-.w-table .w-x button { border: 0; background: none; color: var(--muted); cursor: pointer; visibility: hidden; }
-.w-table tr:hover .w-x button { visibility: visible; }
+/* − on each row of your list, + at the top with its search (TradingView's way) */
+.w-table td.w-vol { color: var(--muted); }
+.w-table .w-x { width: 12px; padding: 3px 0 3px 2px; }
+.w-table .w-x button { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; font-size: 14px;
+  line-height: 1; visibility: hidden; }
+.w-table tr:hover .w-x button, .w-table .w-x button:focus-visible { visibility: visible; }
+.w-table .w-x button:hover { color: var(--down); }
+#pWatch .w-head #watchAdd[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+#pWatch .w-addbox { margin: 4px 0 6px; }
+#pWatch .w-addbox input { width: 100%; box-sizing: border-box; padding: 4px 6px; border: 1px solid var(--accent);
+  border-radius: 4px; background: var(--bg); color: var(--text); cursor: text; }
+#pWatch .w-addlist { display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; margin-top: 4px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--panel); }
+#pWatch .w-add-hit { display: grid; grid-template-columns: 18px 7ch minmax(0, 1fr) auto 2ch; align-items: center; gap: 6px;
+  text-align: left; border: 0; border-radius: 0; padding: 4px 8px; font-size: 12px; }
+#pWatch .w-add-hit .w-add-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+#pWatch .w-add-hit .w-add-mark { color: var(--accent); text-align: center; font-weight: 600; }
+#pWatch .w-add-hit:disabled { opacity: .55; cursor: default; }
+#pWatch .w-add-hint { padding: 6px 8px; }
 .w-table td.w-empty { padding: 8px 4px; white-space: normal; }  /* outranks the cells' nowrap: no sideways scroll */
 .w-map-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px 4px; }
 .w-map-empty button { border: 1px solid var(--border); border-radius: 4px; background: none; color: var(--text);

@@ -1,48 +1,41 @@
-// Watchlist (right rail, beside the chart): quick access to symbols, as TradingView's. "Collected"
-// lists every symbol with data here (another profile than the first: only its own, from its lists and
-// its register), grouped by class (what is streaming live first) with its
-// exchange, last price and change; your own lists (saved in the database, /api/watchlists) keep
-// the symbols you add in your order; "Visited" is the profile's register, every symbol it opened,
-// the latest first (/api/register). A click opens the symbol on the chart.
+// Watchlist (right rail, beside the chart): quick access to symbols, as TradingView's. Only your
+// watchlists, nothing else (the user, 2026-10-31: "those are only watchlists no other kinds of lists"):
+// each keeps the symbols you add in your order (saved in the database, /api/watchlists, each profile
+// its own), with its exchange, last price, change and volume. A profile without one starts with an
+// empty "Watchlist", saved with its first symbol. A click opens the symbol on the chart.
 (() => {
   'use strict';
 
   const $ = (id) => document.getElementById(id);
   const { symbolIcon, esc } = window.MassiveIcons;
-  const COLLECTED = '__collected__';
-  const VISITED = '__visited__';  // the profile's register
-  const GROUPS = [['live', 'Live now'], ['stock', 'Stocks'], ['index', 'Indices'], ['future', 'Futures'],
-                  ['fx', 'Currencies'], ['crypto', 'Crypto']];
+  const FIRST = 'Watchlist';  // a profile's list before it has one of its own
   let lists = [];  // [{ name, tickers: [] }]
-  let visits = [];  // the register: [{ ticker, first_at, last_at, count }], the latest first
-  let current = prefs.get('watchlist', COLLECTED);
+  let current = prefs.get('watchlist', FIRST);
   let query = '';
   let sort = prefs.get('watchSort', { key: 'symbol', dir: 1 });
-  let collapsed = new Set(prefs.get('watchCollapsed', []));
   // The list as a table or as a heat map (the user, 2026-10-28: "heat maps for all the exchanges ... as
   // well as watchlist(s) so when i open the symbol picker or watchlist picker, its easier to figure").
   let view = prefs.get('watchView', 'list');
-  const MAP_EQUAL = 400;  // a list up to this many: equal tiles; longer (everything collected): by dollar volume
+  const MAP_EQUAL = 400;  // a list up to this many: equal tiles; longer: by dollar volume
   const MAP_REDRAW_MS = 15000;  // the map drawn again with the activity polls at most this often
   let mapDrawn = 0;
-  // A group shows its first GROUP_ROWS rows until "Show all": thousands of stocks took half a second
-  // to draw, again with every activity poll. A filter still searches every symbol.
-  const GROUP_ROWS = 200;
-  const expanded = new Set();
 
   const shown = () => document.body.dataset.pane === 'watchlist';
+
+  // The list shown: the one picked, or the first; with none, an empty FIRST (saved with its first symbol).
+  function shownList() {
+    if (!lists.length) lists.push({ name: FIRST, tickers: [] });
+    const mine = lists.find((l) => l.name === current) || lists[0];
+    current = mine.name;
+    return mine;
+  }
 
   async function load() {
     try {
       lists = (await api('/api/watchlists')).lists || [];
     } catch { lists = []; }
-    await loadVisits();
-    if (current !== COLLECTED && current !== VISITED && !lists.some((l) => l.name === current)) current = COLLECTED;
+    shownList();
     render();
-  }
-
-  async function loadVisits() {
-    try { visits = (await api('/api/register')).visits || []; } catch { /* kept as it was */ }
   }
 
   // One save at a time, each sending the lists as they are when it goes: two at once could reach the
@@ -71,36 +64,43 @@
       if (s.connected && p?.price != null && (live == null || p.last > live.last)) live = p;
     }
     const isLiveNow = (window.Activity?.data?.liveFeeds?.liveTickers || []).includes(sym.ticker);
+    const vol = sym.market?.volume ?? null;  // the last session's (shares)
     if (isLiveNow && live) {
       const prev = close != null && pct != null ? close / (1 + pct / 100) : null;
-      return { last: live.price, pct: prev ? (live.price / prev - 1) * 100 : null, live: true };
+      return { last: live.price, pct: prev ? (live.price / prev - 1) * 100 : null, vol, live: true };
     }
-    return { last: close, pct, live: false };
+    return { last: close, pct, vol, live: false };
   }
 
   const fmtPrice = (v) => (v == null ? '–' : Number(v).toLocaleString(undefined, {
     minimumFractionDigits: 2, maximumFractionDigits: Math.abs(v) < 1 ? 6 : Math.abs(v) < 100 ? 4 : 2 }));
   const fmtPct = (v) => (v == null ? '' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`);
+  // the last session's volume, as TradingView's watchlist shows it (the user, 2026-10-31: "lets add volume to the watchlist")
+  const fmtVol = (v) => (v == null ? '' : v >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `${(v / 1e6).toFixed(2)}M`
+    : v >= 1e3 ? `${(v / 1e3).toFixed(1)}K` : String(Math.round(v)));
 
   function compare(a, b) {
     const k = sort.key;
-    const va = k === 'symbol' ? a.sym.ticker : k === 'last' ? a.q.last : a.q.pct;
-    const vb = k === 'symbol' ? b.sym.ticker : k === 'last' ? b.q.last : b.q.pct;
+    const va = k === 'symbol' ? a.sym.ticker : k === 'last' ? a.q.last : k === 'vol' ? a.q.vol : a.q.pct;
+    const vb = k === 'symbol' ? b.sym.ticker : k === 'last' ? b.q.last : k === 'vol' ? b.q.vol : b.q.pct;
     if (va == null && vb == null) return 0;
     if (va == null) return 1;
     if (vb == null) return -1;
     return (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * sort.dir;
   }
 
-  function row(entry, removable) {
+  // A row: − at its left, shown while the pointer is on the row (the user, 2026-10-31: "lets keep the
+  // minuses under the arrow", "Hidden until hover"), the symbol, its last price, change and volume.
+  function row(entry) {
     const { sym, q } = entry;
     const on = sym.ticker === state.ticker;
     return `<tr class="${on ? 'on' : ''}" data-ticker="${esc(sym.ticker)}" title="${esc(sym.name || sym.ticker)}${sym.exchangeName ? ` · ${esc(sym.exchangeName)}` : ''}">
+      <td class="w-x"><button type="button" data-remove="${esc(sym.ticker)}" title="Remove ${esc(sym.ticker)} from this list" aria-label="Remove ${esc(sym.ticker)}">−</button></td>
       <td class="w-sym">${symbolIcon(sym, 18)}<span><b>${esc(sym.ticker)}</b>${q.live ? '<span class="w-live" title="Streaming live"></span>' : ''}
         <span class="w-ex">${esc(sym.exchange || sym.asset || '')}</span></span></td>
       <td class="num">${fmtPrice(q.last)}</td>
       <td class="num ${q.pct == null ? '' : q.pct >= 0 ? 'up' : 'down'}">${fmtPct(q.pct)}</td>
-      ${removable ? `<td class="w-x"><button type="button" data-remove="${esc(sym.ticker)}" title="Remove from this list" aria-label="Remove ${esc(sym.ticker)}">×</button></td>` : '<td></td>'}
+      <td class="num w-vol" title="The last session's volume">${fmtVol(q.vol)}</td>
     </tr>`;
   }
 
@@ -118,7 +118,7 @@
     if (!syms.length) {  // no blank map: why it is empty, and the market's map to pick from
       box.innerHTML = `${head}<div class="w-map-empty p-muted">${esc(empty)}
         <button type="button" id="watchPick" title="The symbol picker's map: every Nasdaq and NYSE company by exchange and sector">Pick from the market map</button></div>`;
-      $('watchList').value = lists.some((l) => l.name === current) ? current : current === VISITED ? VISITED : COLLECTED;
+      $('watchList').value = current;
       mapDrawn = Date.now();
       return;
     }
@@ -133,78 +133,101 @@
     box.innerHTML = `${head}<div id="watchMap" class="market-map watch-map" role="listbox" aria-label="Watchlist map"></div>
       <div class="map-foot"><span class="map-legend">${[-3, -1, 0, 1, 3].map((p) => `<span style="background:${M.changeColor(p)}">${p > 0 ? '+' : ''}${p}%</span>`).join('')}</span>
         <span class="p-muted small">${items.length.toLocaleString()} · ${items.length <= MAP_EQUAL ? 'equal tiles' : 'stocks by dollar volume'} · by sector</span></div>`;
-    $('watchList').value = lists.some((l) => l.name === current) ? current : current === VISITED ? VISITED : COLLECTED;
+    $('watchList').value = current;
     const el = $('watchMap');
     if (el.clientWidth) M.render(el, items, { current: state.ticker, levels: [(s) => s.sector, (s) => s.industry], size });
     mapDrawn = Date.now();
   }
 
   let shownHead = null;  // the panel's head (list, sort, filter) as last drawn
+
+  // Adding and removing, TradingView's way (the user, 2026-10-31: "i need away to add and get rid of
+  // watchlist items", "lets use the tradingview way", "a plus at the top and minus next to each entry"):
+  // + at the top opens a search of the symbols collected here, a click (or Enter) adds one to the list
+  // shown, and the search stays open for the next; − on each row takes it off.
+  let adding = false;
+  let addQuery = '';
+
+  function addHits() {
+    const q = addQuery.trim().toUpperCase();
+    const syms = state.symbols || [];
+    if (!q) return state.ticker ? syms.filter((s) => s.ticker === state.ticker) : [];  // the open symbol first
+    const score = (s) => (s.ticker === q ? 0 : s.ticker.startsWith(q) ? 1 : s.ticker.includes(q) ? 2
+      : (s.name || '').toUpperCase().includes(q) ? 3 : 9);
+    return syms.map((s) => [score(s), s]).filter(([k]) => k < 9)
+      .sort((a, b) => a[0] - b[0] || a[1].ticker.localeCompare(b[1].ticker)).slice(0, 30).map(([, s]) => s);
+  }
+
+  function fillAdd() {
+    const list = document.querySelector('#pWatch .w-addlist');
+    if (!list) return;
+    const mine = shownList();
+    const hits = addHits();
+    list.innerHTML = hits.length ? hits.map((s) => {
+      const has = mine.tickers.includes(s.ticker);
+      return `<button type="button" class="w-add-hit" data-add="${esc(s.ticker)}"${has ? ' disabled' : ''}
+          title="${esc(has ? `${s.ticker} is on ${mine.name}` : `Add ${s.ticker} to ${mine.name}`)}">
+        ${symbolIcon(s, 16)}<b>${esc(s.ticker)}</b><span class="w-add-name">${esc(s.name || '')}</span>
+        <span class="w-ex">${esc(s.exchange || s.asset || '')}</span><span class="w-add-mark">${has ? '✓' : '+'}</span></button>`;
+    }).join('') : `<div class="p-muted small w-add-hint">${addQuery.trim() ? 'No symbol collected here matches.' : 'Type a ticker or a company name.'}</div>`;
+  }
+
+  function openAdd(focus = true) {
+    const input = $('watchAddInput');
+    if (!input) return;
+    input.value = addQuery;
+    fillAdd();
+    if (focus) input.focus();
+  }
+
+  function addSymbol(ticker) {
+    const mine = shownList();
+    if (!mine.tickers.includes(ticker)) mine.tickers.push(ticker);
+    prefs.set('watchlist', current);
+    shownHead = null;  // drawn whole: the search still open
+    return save();
+  }
+
+  const addHead = (mine) => `<button type="button" id="watchAdd" aria-expanded="${adding}"
+      title="${esc(`Add a symbol to ${mine.name}`)}">+</button>`;
+  const addBox = () => (adding ? `<div class="w-addbox"><input id="watchAddInput" type="search" placeholder="Add a symbol: ticker or company"
+      autocomplete="off" spellcheck="false" aria-label="Add a symbol"><div class="w-addlist" role="listbox"></div></div>` : '');
+
   function render() {
     if (!shown()) return;
     const box = $('pWatch');
-    const symbols = state.symbols || [];
-    const bySym = new Map(symbols.map((s) => [s.ticker, s]));
-    // Collected: every symbol with data here for the first profile (it kept what was here before
-    // profiles); another's are its own, in its lists or opened by it, so a new one starts with none.
-    const own = PROFILE === 1 ? null : new Set([...lists.flatMap((l) => l.tickers), ...visits.map((v) => v.ticker)]);
-    const collected = own ? symbols.filter((s) => own.has(s.ticker)) : symbols;
+    const bySym = new Map((state.symbols || []).map((s) => [s.ticker, s]));
     const q = query.trim().toUpperCase();
     const match = (s) => !q || s.ticker.includes(q) || (s.name || '').toUpperCase().includes(q) || (s.exchange || '').includes(q);
-    const mine = lists.find((l) => l.name === current);
+    const mine = shownList();
     const th = (key, label, cls = '') => `<th class="${cls}" data-sort="${key}">${label}${sort.key === key ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
-    const options = [`<option value="${COLLECTED}">Collected (${collected.length})</option>`,
-      `<option value="${VISITED}">Visited (${visits.length})</option>`,
-      ...lists.map((l) => `<option value="${esc(l.name)}">${esc(l.name)} (${l.tickers.length})</option>`),
+    const options = [...lists.map((l) => `<option value="${esc(l.name)}">${esc(l.name)} (${l.tickers.length})</option>`),
       '<option value="__new__">New list…</option>'].join('');
     const toggle = `<button type="button" id="watchView" title="${view === 'map' ? 'Show the list as a table' : 'Show the list as a heat map, by sector'}"
       aria-pressed="${view === 'map'}">${view === 'map' ? 'List' : 'Map'}</button>`;
+    const empty = !mine.tickers.length ? 'Empty: press + to add a symbol.'
+      : state.symbolsLoaded ? 'Nothing matches.' : 'Loading the symbols…';
     if (view === 'map') {
-      const syms = current === VISITED ? visits.map((v) => bySym.get(v.ticker)).filter(Boolean)
-        : mine ? mine.tickers.map((t) => bySym.get(t)).filter(Boolean) : collected;
+      const syms = mine.tickers.map((t) => bySym.get(t)).filter(Boolean);
       const head = `<h3 class="w-head">Watchlist <select id="watchList" aria-label="Watchlist">${options}</select>${toggle}
-          ${mine ? `<button type="button" id="watchAdd" title="Add ${esc(state.ticker || 'the open symbol')} to this list"${state.ticker && !mine.tickers.includes(state.ticker) ? '' : ' disabled'}>+</button>` : ''}</h3>
+          ${addHead(mine)}</h3>${addBox()}
         <input id="watchFilter" type="search" placeholder="Filter symbols" value="${esc(query)}" autocomplete="off">`;
       shownHead = null;  // the table is drawn whole when it comes back
       // an empty list (the user, 2026-10-29: "even empty watch list"): said as the table says it
-      const empty = syms.length ? 'Nothing matches.' : current === VISITED ? 'Nothing visited yet: every symbol you open is noted here.'
-        : mine ? 'Empty: open a symbol and press + to add it.' : 'Nothing collected yet: the symbols you open or add to a list show here.';
       renderMap(box, head, syms.filter(match), empty);
+      if (adding) openAdd(false);
       return;
     }
-    let body;
-    if (current === VISITED) {
-      const entries = visits.map((v) => bySym.get(v.ticker)).filter((s) => s && match(s)).map((sym) => ({ sym, q: quote(sym) }));
-      if (sort.key !== 'order') entries.sort(compare);
-      body = entries.length ? `<tbody>${entries.map((e) => row(e, false)).join('')}</tbody>`
-        : `<tbody><tr><td colspan="4" class="p-muted w-empty">${visits.length ? 'Nothing matches.' : 'Nothing visited yet: every symbol you open is noted here.'}</td></tr></tbody>`;
-    } else if (!mine) {
-      const live = new Set(window.Activity?.data?.liveFeeds?.liveTickers || []);
-      body = !collected.length ? '<tbody><tr><td colspan="4" class="p-muted w-empty">Nothing collected yet: the symbols you open or add to a list show here.</td></tr></tbody>'
-        : GROUPS.map(([key, label]) => {
-        const entries = collected.filter((s) => (key === 'live' ? live.has(s.ticker) : s.asset === key && !live.has(s.ticker)) && match(s))
-          .map((sym) => ({ sym, q: quote(sym) })).sort(compare);
-        if (!entries.length) return '';
-        const closed = collapsed.has(key) && !q;
-        const shownRows = expanded.has(key) ? entries : entries.slice(0, GROUP_ROWS);
-        const more = entries.length - shownRows.length;
-        return `<tbody><tr class="w-group" data-group="${key}"><td colspan="4">${closed ? '▸' : '▾'} ${label} <span class="p-muted">${entries.length}</span></td></tr></tbody>
-          <tbody${closed ? ' hidden' : ''}>${shownRows.map((e) => row(e, false)).join('')}${more
-            ? `<tr class="w-more" data-more="${key}"><td colspan="4">Show all ${entries.length.toLocaleString()} (${more.toLocaleString()} more)</td></tr>` : ''}</tbody>`;
-      }).join('');
-    } else {
-      const entries = mine.tickers.map((t) => bySym.get(t)).filter((s) => s && match(s)).map((sym) => ({ sym, q: quote(sym) }));
-      if (sort.key !== 'order') entries.sort(compare);
-      body = entries.length ? `<tbody>${entries.map((e) => row(e, true)).join('')}</tbody>`
-        : `<tbody><tr><td colspan="4" class="p-muted w-empty">${mine.tickers.length ? 'Nothing matches.' : 'Empty: open a symbol and press + to add it.'}</td></tr></tbody>`;
-    }
+    const entries = mine.tickers.map((t) => bySym.get(t)).filter((s) => s && match(s)).map((sym) => ({ sym, q: quote(sym) }));
+    if (sort.key !== 'order') entries.sort(compare);
+    const body = entries.length ? `<tbody>${entries.map(row).join('')}</tbody>`
+      : `<tbody><tr><td colspan="5" class="p-muted w-empty">${empty}</td></tr></tbody>`;
     const head = `<h3 class="w-head">Watchlist
         <select id="watchList" aria-label="Watchlist">${options}</select>${toggle}
-        ${mine ? `<button type="button" id="watchAdd" title="Add ${esc(state.ticker || 'the open symbol')} to this list"${state.ticker && !mine.tickers.includes(state.ticker) ? '' : ' disabled'}>+</button>
-          <button type="button" id="watchDelete" title="Delete this list">🗑</button>` : ''}</h3>
+        ${addHead(mine)}<button type="button" id="watchDelete" title="Delete this list">🗑</button></h3>${addBox()}
       <input id="watchFilter" type="search" placeholder="Filter symbols" value="${esc(query)}" autocomplete="off">
       <div class="table-wrap w-wrap"><table class="w-table">
-        <thead><tr>${th('symbol', 'Symbol')}${th('last', 'Last', 'num')}${th('pct', 'Chg%', 'num')}<th></th></tr></thead>`;
+        <thead><tr><th class="w-x"></th>${th('symbol', 'Symbol')}${th('last', 'Last', 'num')}${th('pct', 'Chg%', 'num')}${th('vol', 'Vol', 'num')}</tr></thead>`;
     const table = box.querySelector('.w-table');
     if (table && shownHead === head) {  // the same list, sort and filter: new rows only
       table.querySelectorAll('tbody').forEach((t) => t.remove());
@@ -213,12 +236,14 @@
     }
     shownHead = head;
     box.innerHTML = `${head}${body}</table></div>`;
-    $('watchList').value = mine ? mine.name : current === VISITED ? VISITED : COLLECTED;
+    $('watchList').value = mine.name;
+    if (adding) openAdd(document.activeElement === document.body || !document.activeElement);
   }
 
   // A light refresh of prices without losing the filter's focus.
   function refresh() {
     if (!shown()) return;
+    if (document.activeElement?.id === 'watchAddInput') return;  // searching to add: the prices wait
     if (view === 'map' && Date.now() - mapDrawn < MAP_REDRAW_MS && document.activeElement?.id !== 'watchFilter') return;
     const focused = document.activeElement?.id === 'watchFilter';
     const at = focused ? $('watchFilter').selectionStart : null;
@@ -229,6 +254,7 @@
   }
 
   $('pWatch').addEventListener('input', (e) => {
+    if (e.target.id === 'watchAddInput') { addQuery = e.target.value; fillAdd(); return; }
     if (e.target.id !== 'watchFilter') return;
     query = e.target.value;
     refresh();
@@ -238,7 +264,7 @@
     if (e.target.value === '__new__') {
       const name = (window.prompt('Name of the new list') || '').trim().slice(0, 40);
       if (name && !lists.some((l) => l.name === name)) {
-        lists.push({ name, tickers: state.ticker ? [state.ticker] : [] });
+        lists.push({ name, tickers: [] });
         current = name;
         prefs.set('watchlist', current);
         await save();
@@ -272,41 +298,49 @@
       prefs.set('watchSort', sort);
       return render();
     }
-    const group = e.target.closest('tr.w-group');
-    if (group) {
-      const k = group.dataset.group;
-      if (collapsed.has(k)) collapsed.delete(k); else collapsed.add(k);
-      prefs.set('watchCollapsed', [...collapsed]);
-      return render();
+    const mine = shownList();
+    if (e.target.closest('#watchAdd')) {
+      adding = !adding;
+      addQuery = '';
+      shownHead = null;
+      render();
+      if (adding) openAdd();
+      return;
     }
-    const mine = lists.find((l) => l.name === current);
-    if (e.target.closest('#watchAdd') && mine && state.ticker && !mine.tickers.includes(state.ticker)) {
-      mine.tickers.push(state.ticker);
-      return save();
-    }
-    if (e.target.closest('#watchDelete') && mine && window.confirm(`Delete the list "${mine.name}"?`)) {
+    const hit = e.target.closest('button[data-add]');
+    if (hit) return addSymbol(hit.dataset.add);
+    if (e.target.closest('#watchDelete') && window.confirm(`Delete the list "${mine.name}"?`)) {
       lists = lists.filter((l) => l !== mine);
-      current = COLLECTED;
+      shownList();  // the first left, or an empty Watchlist
       prefs.set('watchlist', current);
       return save();
     }
     const remove = e.target.closest('button[data-remove]');
-    if (remove && mine) {
+    if (remove) {
       mine.tickers = mine.tickers.filter((t) => t !== remove.dataset.remove);
       return save();
     }
-    const moreRow = e.target.closest('tr[data-more]');
-    if (moreRow) { expanded.add(moreRow.dataset.more); render(); return; }
     const item = e.target.closest('tr[data-ticker]');
     if (item) window.dispatchEvent(new CustomEvent('massive:open-symbol', { detail: item.dataset.ticker }));
   });
 
-  window.addEventListener('massive:view', (e) => { if (e.detail?.pane === 'watchlist') render(); });
-  window.addEventListener('massive:symbol', () => {
-    refresh();
-    // the opened symbol goes in the register (the chart's priority request notes it): read it again
-    setTimeout(() => loadVisits().then(() => { if (current === VISITED) { shownHead = ''; refresh(); } }), 1500);
+  $('pWatch').addEventListener('keydown', (e) => {
+    if (e.target.id !== 'watchAddInput') return;
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      adding = false;
+      shownHead = null;
+      render();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const first = document.querySelector('#pWatch .w-add-hit:not([disabled])');
+      if (first) addSymbol(first.dataset.add);
+    }
   });
+
+  window.addEventListener('massive:view', (e) => { if (e.detail?.pane === 'watchlist') render(); });
+  window.addEventListener('massive:symbols', refresh);  // the symbols arrived: the list's rows
+  window.addEventListener('massive:symbol', refresh);
   window.addEventListener('massive:activity', refresh);  // live prices with every activity poll
   window.Watchlist = { render, load, lists: () => lists };  // the lists: the symbol picker maps them too
   load();

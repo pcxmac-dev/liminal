@@ -1,11 +1,21 @@
 'use strict';
 /* Preferences: the rail's sliders (above the profile), a pane beside the chart as the watchlist is.
 
-     Sessions          the sessions an intraday stock chart shows (the toolbar's session picker: the
+     Feed              which feed the chart reads the symbol from: all of them in order, one alone, or
+                       an asset's models (app.js renderFeeds fills the options; the user, 2026-10-31, of
+                       the toolbar's picker: "lets get rid of this", "at best its a preference")
+     All data          bad data included (unfiltered), or the filtered view (app.js unfilteredBtn, hidden)
+     Indicators        the chart's indicators on and below the price (app.js MAIN_INDICATORS and
+                       SUB_INDICATORS; its hidden menu does the rest). The user, 2026-10-31: "all data
+                       should be a preference, indicators should be a preference too"
+     Sessions          the sessions an intraday stock chart shows (the switch at the time axis's left end: the
                        same setting, either one changes both)
      Time zone         the zone intraday times are read in (the switch under the price axis: the same
                        setting); with none picked, this computer's own (app.js LOCAL_ZONE)
-     Theme             the page's and the chart's colours (the toolbar's theme picker: the same setting)
+     Chart type        candles, bars, lines ... or a price-based type (Renko, Kagi ...): app.js typeSelect,
+                       hidden, does the rest; a price-based type's settings stay in the toolbar
+     Theme             the page's and the chart's colours (here only: the toolbar's picker is gone)
+     GPU               the chart drawn by the graphics card (WebGL2), or by the CPU (app.js gpuBtn, hidden)
      Candles           the rising and falling candles' colours (app.js setCandleColors: TradingView's
                        #089981 and #f23645 unless picked), from the same colour popup
      Session shading   each session's shade on the chart (timeaxis.js): pre-market (blue), after-hours
@@ -46,14 +56,30 @@
       ? (isCandle(k) ? ", TradingView's" : ', standard') : ''}. Click to pick`)}"></button>`;
 
   const shown = () => document.body.dataset.pane === 'prefs';
+  const typeOption = (o) => `<option value="${esc(o.value)}"${o.value === state.chartType ? ' selected' : ''}${o.disabled ? ' disabled' : ''}`
+    + `${o.title ? ` title="${esc(o.title)}"` : ''}>${esc(o.textContent)}</option>`;
 
   function render() {
     const box = $('pPrefs');
     if (!box) return;
     if (pop) { pop.remove(); pop = null; }  // drawn again: an open popup goes with its row (a click on its swatch opens it)
     const fixed = !!state.meta?.aroundTheClock;  // fx and futures: no sessions to pick
+    const feeds = [...$('feedSelect').options];
+    const gpu = window.gpuState?.() || { on: false, supported: false, title: '' };
     box.innerHTML = `
       <h3>Preferences</h3>
+      <div class="p-sub">Data</div>
+      <label class="pref-row pref-session" title="The feed the chart reads ${esc(state.ticker || 'the symbol')} from: all of them in order (each span from the first that has it), one alone, or an asset's models"><span>Feed</span>
+        <select id="prefFeed"${feeds.length < 2 ? ' disabled' : ''}>${feeds.map((o) =>
+          `<option value="${esc(o.value)}"${o.value === state.source ? ' selected' : ''}>${esc(o.textContent)}</option>`).join('')}
+        </select></label>
+      <label class="pref-row pref-gpu" title="${esc($('unfilteredBtn').title)}"><span>All data</span>
+        <span><input type="checkbox" id="prefUnfiltered"${state.unfiltered ? ' checked' : ''}> bad data included</span></label>
+      <div class="p-sub">Indicators</div>
+      <div class="pref-inds">${[['On price', MAIN_INDICATORS], ['Below price', SUB_INDICATORS]].map(([title, items]) =>
+        `<div class="pref-ind-group"><div class="pref-ind-head">${esc(title)}</div>${items.map(([name, label]) =>
+          `<label class="pref-ind" title="${esc(label)}"><input type="checkbox" data-ind="${esc(name)}"${state.indicators.includes(name) ? ' checked' : ''}>
+            <b>${esc(name)}</b><span class="p-muted">${esc(label)}</span></label>`).join('')}</div>`).join('')}</div>
       <div class="p-sub">Sessions and time</div>
       <label class="pref-row pref-session" title="${esc($('sessionSelect').title)}"><span>Sessions shown</span>
         <select id="prefSession"${fixed ? ' disabled' : ''}>${[...$('sessionSelect').options].map((o) =>
@@ -66,10 +92,16 @@
             ? `Exchange: New York (${gmtLabel(TZ)})` : zoneName(z))}${z === LOCAL_ZONE ? ' · this computer' : ''}</option>`).join('')}
         </select></label>
       <div class="p-sub">Appearance</div>
-      <label class="pref-row pref-session" title="The page's and the chart's colours (the toolbar's theme picker: the same setting)"><span>Theme</span>
+      <label class="pref-row pref-session" title="${esc($('typeSelect').title)}"><span>Chart type</span>
+        <select id="prefType">${[...$('typeSelect').children].map((g) => g.tagName === 'OPTGROUP'
+          ? `<optgroup label="${esc(g.label)}">${[...g.children].map(typeOption).join('')}</optgroup>` : typeOption(g)).join('')}
+        </select></label>
+      <label class="pref-row pref-session" title="The page's and the chart's colours"><span>Theme</span>
         <select id="prefTheme">${Object.entries(THEMES).map(([t, th]) =>
           `<option value="${esc(t)}"${t === state.theme ? ' selected' : ''}>${esc(th.label)} (${th.base === 'light' ? 'light' : 'dark'})</option>`).join('')}
         </select></label>
+      <label class="pref-row pref-gpu" title="${esc(gpu.title)}"><span>Drawing</span>
+        <span><input type="checkbox" id="prefGpu"${gpu.on && gpu.supported ? ' checked' : ''}${gpu.supported ? '' : ' disabled'}> on the GPU</span></label>
       <div class="pref-row pref-candles"><span class="pref-candles-head">Candles</span>
         ${CANDLES.map(([k, name, what]) => `<span>${swatchHtml(k, what)}${esc(name)}</span>`).join('')}</div>
       <div class="p-sub">Session shading <span class="p-muted small">on intraday stock charts: its colour, and its strength (100 % standard)</span></div>
@@ -164,13 +196,30 @@
   });
   $('pPrefs').addEventListener('change', (e) => {
     if (e.target.id === 'prefZone') window.setChartTimezone(e.target.value);  // as the switch under the price axis
-    if (e.target.id === 'prefTheme') {  // the toolbar's picker does the rest (app.js): page, chart, kept
+    if (e.target.id === 'prefFeed') {  // the hidden picker does the rest (app.js): the symbol read from that feed
+      $('feedSelect').value = e.target.value;
+      $('feedSelect').dispatchEvent(new Event('change'));
+      return;
+    }
+    if (e.target.id === 'prefUnfiltered') { $('unfilteredBtn').click(); return; }  // the hidden toggle does the rest (app.js)
+    if (e.target.matches('input[data-ind]')) {  // the hidden menu's checkbox does the rest (app.js): the chart, kept
+      const cb = $('indMenu').querySelector(`input[data-ind="${CSS.escape(e.target.dataset.ind)}"]`);
+      if (cb) { cb.checked = e.target.checked; cb.dispatchEvent(new Event('change')); }
+      return;
+    }
+    if (e.target.id === 'prefGpu') { $('gpuBtn').click(); return; }
+    if (e.target.id === 'prefType') {  // the hidden picker does the rest (app.js): drawn again, kept
+      $('typeSelect').value = e.target.value;
+      $('typeSelect').dispatchEvent(new Event('change'));
+      return;
+    }  // the hidden switch does the rest (app.js): kept, drawn again
+    if (e.target.id === 'prefTheme') {  // the hidden picker does the rest (app.js): page, chart, kept
       $('themeSelect').value = e.target.value;
       $('themeSelect').dispatchEvent(new Event('change'));
       return;
     }
     if (e.target.id !== 'prefSession') return;
-    $('sessionSelect').value = e.target.value;  // the toolbar's picker does the rest (app.js)
+    $('sessionSelect').value = e.target.value;  // the hidden picker does the rest (app.js), as the axis's switch
     $('sessionSelect').dispatchEvent(new Event('change'));
   });
   $('pPrefs').addEventListener('click', (e) => {
@@ -197,6 +246,11 @@
   const again = () => { if (shown()) { closePop(); render(); } };
   $('sessionSelect').addEventListener('change', again);
   window.addEventListener('massive:symbol', again);
+  window.addEventListener('massive:feeds', again);
+  window.addEventListener('massive:gpu', again);
+  window.addEventListener('massive:unfiltered', again);
+  window.addEventListener('massive:indicators', again);  // picked here, or a layout's
+  window.addEventListener('massive:charttype', again);  // a type picked, or set by a model or a layout  // the symbol's feeds listed again (app.js renderFeeds)
   window.addEventListener('massive:timezone', again);  // picked under the price axis
   window.addEventListener('massive:theme', () => { again(); window.TimeAxis?.redraw(); });  // picked in the toolbar; the shades' theme
   window.addEventListener('massive:view', (e) => { if (e.detail?.pane === 'prefs') render(); else closePop(); });

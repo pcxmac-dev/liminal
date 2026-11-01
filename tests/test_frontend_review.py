@@ -374,11 +374,17 @@ def test_each_sessions_colour_is_picked_from_a_popup_in_preferences():
     assert "for (const [k] of SHADES) { setShade(k, 100); setColor(k, null); }" in prefs  # the reset: colours too
 
 
-def test_the_preferences_pane_sits_above_the_profile_below_the_separator_and_sets_sessions_and_shading():
+def test_the_preferences_pane_sits_under_trading_above_a_divider_and_sets_sessions_and_shading():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     rail = html.split('<nav id="rail"', 1)[1].split("</nav>", 1)[0]
-    last_hr = rail.rindex("<hr>")
-    assert last_hr < rail.index('id="railPrefs"') < rail.index('id="railProfile"')  # below the line, above the user
+    # the user, 2026-10-31: "lets have the preferences moved under the trade icon, then have a divider
+    # line between the rest going down"; then "swap user icon with watchlist icon", "move the profile icon
+    # under the hardware monitor" (Resources), "put a division between the profile and the hardware monitor"
+    order = [rail.index(f'id="{b}"') for b in ("railStock", "railAnalysis", "railTrading", "railWatch", "railPrefs",
+                                               "railExchanges", "railResources", "railProfile")]
+    assert order == sorted(order)
+    assert rail.index('id="railPrefs"') < rail.index("<hr>") < rail.index('id="railExchanges"')  # the line below them
+    assert rail.index('id="railResources"') < rail.rindex("<hr>") < rail.index('id="railProfile"')  # last, set apart
     assert '<div class="pane" id="panePrefs" data-pane="prefs" hidden>' in html
     assert html.index('<script src="app.js"></script>') < html.index('<script src="prefs.js"></script>')
     icons = _js("icons.js")
@@ -612,3 +618,122 @@ def test_the_page_names_a_feed_on_a_plugins_keys_by_that_plugin():
     assert "<b>${esc(label(l.source))}</b>" in _js("plugins.js")  # its limits, on its page
     assert "(d.feeds || []).map((f) => (typeof feedLabel === 'function' ? feedLabel(f) : f)).join(' > ')" in _js("venues.js")
     assert "<td><b>${esc(f.label)}</b>" in _js("plugins.js")
+
+
+def test_the_feed_is_picked_in_preferences_not_the_toolbar():
+    """The user, 2026-10-31, of the toolbar's feed picker: "lets get rid of this", "at best its a preference"."""
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert '<select id="feedSelect" title="Data feed" hidden></select>' in html
+    app = _js("app.js")
+    assert "sel.hidden = !feeds.length;" not in app and "window.dispatchEvent(new CustomEvent('massive:feeds'));" in app
+    prefs = _js("prefs.js")
+    assert '<div class="p-sub">Data</div>' in prefs and "<select id=\"prefFeed\"" in prefs
+    assert "$('feedSelect').value = e.target.value;" in prefs and "window.addEventListener('massive:feeds', again);" in prefs
+
+
+def test_the_symbol_button_names_the_company_not_its_exchange():
+    """The user, 2026-10-31, of MCD's button showing its exchange: "is this the right corp name ?", "still wrong"."""
+    render = _js("app.js").split("function renderSymbolButton()", 1)[1].split("\n}\n", 1)[0]
+    assert "const name = info.name || info.exchangeName || info.exchange;" in render
+    assert '<span class="p-muted symbol-name">${e(name)}</span>' in render
+    assert "`listed on ${info.exchangeName || info.exchange}`" in render  # the exchange in its hover text
+    assert "#topbar .symbol .symbol-name { max-width: 26ch;" in _js("style.css")  # a long name cut short
+
+
+def test_the_toolbar_keeps_no_zoom_png_gpu_or_theme_buttons():
+    """The user, 2026-10-31: "lets get rid of the zoom buttons, also get rid of PNG and move GPU to
+    preferences and also theme should be in preferences"."""
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    for gone in ('id="zoomIn"', 'id="zoomOut"', 'id="latestBtn"', 'id="shotBtn"'):
+        assert gone not in html
+    assert '<button id="gpuBtn" class="toggle" hidden' in html and '<select id="themeSelect" hidden' in html
+    assert 'id="replayBtn"' in html  # Replay (the Analysis view's) keeps its place
+    app = _js("app.js")
+    assert "$('zoomIn')" not in app and "$('shotBtn')" not in app and "$('latestBtn')" not in app
+    assert "else if (e.key === 'End') goLatest();" in app and "e.key === '+'" in app  # the keys stay
+    prefs = _js("prefs.js")
+    assert '<input type="checkbox" id="prefGpu"' in prefs and "if (e.target.id === 'prefGpu') { $('gpuBtn').click(); return; }" in prefs
+    assert "window.addEventListener('massive:gpu', again);" in prefs and '<select id="prefTheme">' in prefs
+
+
+def test_the_price_model_shows_no_settings():
+    """The user, 2026-10-31: "convert this to just model : 'price' no other info": the derivatives'
+    settings (basis, per, window, gaps) were on screen for the price too, .params' display: flex
+    overriding their hidden attribute."""
+    assert ".params[hidden] { display: none; }" in _js("style.css")
+    assert "$('modelParams').hidden = m.kind === 'price';" in _js("app.js")
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert '<label class="model-label" for="modelSelect">Model</label>' in html
+    assert '<span id="modelParams" class="params" hidden>' in html
+
+
+def test_the_chart_type_is_picked_in_preferences():
+    """The user, 2026-10-31: "move candles picker to preferences"."""
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert '<select id="typeSelect" hidden title="Chart type">' in html
+    assert html.index('id="typeSelect"') < html.index('<span id="typeParams" class="params"></span>')  # its settings stay
+    prefs = _js("prefs.js")
+    assert '<select id="prefType">' in prefs and "g.tagName === 'OPTGROUP'" in prefs  # its groups, as the picker has them
+    assert "$('typeSelect').value = e.target.value;" in prefs and "window.addEventListener('massive:charttype', again);" in prefs
+    assert "window.dispatchEvent(new CustomEvent('massive:charttype'" in _js("app.js").split("function applyChartType()", 1)[1][:400]
+
+
+def test_the_watchlist_adds_with_a_plus_and_removes_with_a_minus():
+    """The user, 2026-10-31: "i need away to add and get rid of watchlist items", "lets use the
+    tradingview way", "a plus at the top and minus next to each entry"."""
+    js = _js("watchlist.js")
+    assert js.count("${addHead(mine)}") == 2  # + at the top, on the table and on the map
+    assert "if (e.target.closest('#watchAdd')) {" in js and "const hit = e.target.closest('button[data-add]');" in js
+    assert "if (hit) return addSymbol(hit.dataset.add);" in js
+    assert 'data-remove="${esc(sym.ticker)}"' in js and ">−</button>" in js  # − on each row
+    assert "if (!lists.length) lists.push({ name: FIRST, tickers: [] });" in js  # none yet: an empty Watchlist
+    assert "if (document.activeElement?.id === 'watchAddInput') return;" in js  # no repaint under the caret
+    assert "if (e.key === 'Enter') {" in js and "if (e.key === 'Escape') {" in js
+    css = _js("style.css")
+    # "lets keep the minuses under the arrow" (the groups' ▾, the row's left), "Hidden until hover"
+    assert "visibility: hidden" in css.split(".w-table .w-x button {", 1)[1].split("}", 1)[0]
+    assert ".w-table tr:hover .w-x button, .w-table .w-x button:focus-visible { visibility: visible; }" in css
+    row = js.split("function row(entry) {", 1)[1].split("</tr>`;", 1)[0]
+    assert row.index('class="w-x"') < row.index('class="w-sym"')  # first in the row
+    assert '<thead><tr><th class="w-x"></th>${th(\'symbol\', \'Symbol\')}' in js
+
+
+def test_the_watchlist_shows_volume_and_a_minus_on_every_list_of_yours():
+    """The user, 2026-10-31: "lets add volume to the watchlist, i dont see the minuses next to each list item"."""
+    js = _js("watchlist.js")
+    assert "${th('vol', 'Vol', 'num')}" in js and '<td class="num w-vol" title="The last session\'s volume">${fmtVol(q.vol)}</td>' in js
+    assert "const vol = sym.market?.volume ?? null;" in js and "k === 'vol' ? a.q.vol" in js
+    assert 'colspan="4"' not in js  # a column more
+    assert "const body = entries.length ? `<tbody>${entries.map(row).join('')}</tbody>`" in js  # − on every row
+
+
+def test_the_watchlist_shows_only_your_watchlists():
+    """The user, 2026-10-31: "when i add symbols it seems to add to multiple lists" (Collected was a
+    profile's lists and its register together), "those are only watchlists no other kinds of lists"."""
+    js = _js("watchlist.js")
+    assert "const options = [...lists.map((l) => `<option value=\"${esc(l.name)}\">" in js
+    assert "'<option value=\"__new__\">New list…</option>'].join('');" in js
+    for gone in ("__collected__", "__visited__", "loadVisits", "/api/register"):
+        assert gone not in js
+
+
+def test_the_watchlist_draws_its_rows_once_the_symbols_arrive():
+    js = _js("watchlist.js")
+    assert "state.symbolsLoaded ? 'Nothing matches.' : 'Loading the symbols…'" in js
+    assert "window.addEventListener('massive:symbols', refresh);" in js
+    assert "window.dispatchEvent(new CustomEvent('massive:symbols'));" in _js("app.js").split("async function loadSymbols()", 1)[1][:300]
+
+
+def test_all_data_and_the_indicators_are_preferences():
+    """The user, 2026-10-31: "all data should be a preference, indicators should be a preference too"."""
+    html = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert '<button id="unfilteredBtn" class="toggle" hidden' in html
+    assert '<div class="menu" hidden>' in html and '<button id="indBtn" hidden' in html
+    app = _js("app.js")
+    assert "cb.dataset.ind = name;" in app and "window.dispatchEvent(new CustomEvent('massive:indicators'" in app
+    assert "window.dispatchEvent(new CustomEvent('massive:unfiltered'" in app
+    prefs = _js("prefs.js")
+    assert '<input type="checkbox" id="prefUnfiltered"' in prefs and "if (e.target.id === 'prefUnfiltered') { $('unfilteredBtn').click(); return; }" in prefs
+    assert "[['On price', MAIN_INDICATORS], ['Below price', SUB_INDICATORS]]" in prefs
+    assert "const cb = $('indMenu').querySelector(`input[data-ind=\"${CSS.escape(e.target.dataset.ind)}\"]`);" in prefs
+    assert "window.addEventListener('massive:indicators', again);" in prefs and "window.addEventListener('massive:unfiltered', again);" in prefs
