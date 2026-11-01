@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .common import _ET, BUSY_TIMEOUT_S, _feed_name, _now
+from .common import _ET, BUSY_TIMEOUT_S, _feed_name, _now, seal
 
 
 # A research dataset provider's file (datasets/<provider>.db, see datasets.py): series of dated
@@ -111,7 +111,7 @@ class DatasetStore:
                         if cols and column not in cols:
                             conn.execute(f"ALTER TABLE {table} RENAME TO {table}_v1")
                 conn.executescript(DATASET_SCHEMA)
-                self._dataset_conns[provider] = conn
+                self._dataset_conns[provider] = seal(conn)  # read-only (MASSIVE_READONLY): no write from here on
         return conn
 
     # -- the ledger of fetched file versions (main file) ----------------------------------

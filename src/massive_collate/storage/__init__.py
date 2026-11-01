@@ -17,6 +17,7 @@ from .datasets import DATASET_SCHEMA, datasets_backup_dir
 from .feeds import (
     BAR_COLUMNS, COMPOSITE, COMPOSITE_SCHEMA, FEED_SCHEMA, OldLayout, TICKS_SCHEMA, TicksBlocked, feeds_backup_dir,
     old_layout, set_tick_access, tick_access)
+from .common import read_only, set_read_only
 from .store import Store
 
 __all__ = [
@@ -34,5 +35,7 @@ __all__ = [
     'feeds_backup_dir',
     'old_layout',
     'set_tick_access',
+    'set_read_only',
+    'read_only',
     'tick_access',
 ]

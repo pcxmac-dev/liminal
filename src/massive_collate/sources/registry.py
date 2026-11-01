@@ -796,7 +796,10 @@ def plugin_databases(name: str) -> list[Database]:
         for n in plugin_feeds(name) if plugin_of(name) == name else [name]:
             f = ps[n]
             for feed, called in ((n, label(n)), *((x.name, x.label or x.name) for x in f.live if x.name != n)):
-                found += [Database(layout.bars(feed), f"{called}: bars"), Database(layout.ticks(feed), f"{called}: trades")]
+                found += [Database(layout.bars(feed), f"{called}: bars"),
+                          Database(layout.history(feed), f"{called}: closed months' bars, a DuckDB file a month (when "
+                                   "its bars store is DuckDB)", engine="duckdb"),
+                          Database(layout.ticks(feed), f"{called}: trades")]
             declared += f.databases
         main.append("its rows by feed: requests a day, events, the reference it gave")
         parts = publisher_parts(name) if plugin_of(name) == name else []
@@ -816,6 +819,13 @@ def plugin_databases(name: str) -> list[Database]:
         own = [q.title for q in readers if q.read is None]
         found.append(Database(layout.GOV, (f"what {_and(own)} read" + ", and " if own else "")
                               + "the reads' record: requests, robots.txt, rechecks", shared=True))
+        # its documents when its documents store is MongoDB (stores.py): the server here, the app's database
+        server = f"mongodb://127.0.0.1:{_mongo_port()}/massive."
+        if own:
+            found.append(Database(server + "gov_items", f"what {_and(own)} read, when its documents are in MongoDB",
+                                  shared=True))
+        if any(q.read is not None for q in readers):
+            found.append(Database(server + "news", "its headlines, when its documents are in MongoDB", shared=True))
     declared += [d for n in parts for d in pubs[n].databases]
     found += [d for d in declared if d.where != layout.MAIN]
     if main:  # the main file last, what the app keeps of it first
@@ -898,6 +908,12 @@ def menu(settings: "Settings | None" = None) -> list[dict]:
                        plan=settings.for_source(p.name).tier.name, planVars=p.plan_state(settings))
         out.append(row)
     return out
+
+
+def _mongo_port() -> int:
+    from .. import mongo
+
+    return mongo.port()
 
 
 def database_row(d: Database, main=None) -> dict:

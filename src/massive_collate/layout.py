@@ -27,6 +27,8 @@ FEEDS = "feeds"
 DATASETS = "datasets"
 SOURCES = "sources/datasets"
 GOV = "gov/gov.db"
+HISTORY = "history"  # a feed's closed months of bars, in DuckDB (storage/history.py)
+MONGO = "mongo"  # the MongoDB server's data, when one runs here (mongo.py)
 COMPOSITE = "composite"  # the composite model's feed: the app's, no plugin's
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
 # What a database is (the user, 2026-10-31: "lets prep for mongo and duck"): SQLite files today;
@@ -71,6 +73,10 @@ def bars(feed: str) -> str:
 
 def ticks(feed: str) -> str:
     return f"{FEEDS}/{feed}-ticks.db"
+
+
+def history(feed: str) -> str:
+    return f"{HISTORY}/{feed}/"
 
 
 def dataset_file(provider: str) -> str:

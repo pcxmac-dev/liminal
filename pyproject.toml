@@ -15,6 +15,8 @@ dependencies = [
     "plotly>=5.18",
     "tzdata>=2023.3",
     "exchange_calendars>=4.5",  # world exchange sessions, lunch breaks and holidays (Markets view)
+    "duckdb>=1.1",  # closed months of bars by column (storage/history.py)
+    "pymongo>=4.9",  # documents on the MongoDB server here (mongo.py, storage/documents.py)
 ]
 
 [project.optional-dependencies]

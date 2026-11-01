@@ -25,7 +25,8 @@ from typing import Iterable, Sequence
 
 import pandas as pd
 
-from .common import BUSY_TIMEOUT_S, _date_ms, _distinct, _feed_name, _now, add_column, write_transaction
+from . import history
+from .common import BUSY_TIMEOUT_S, _date_ms, _distinct, _feed_name, _now, add_column, seal, write_transaction
 
 
 # A feed's own files, in the `feeds` folder beside the main file: <feed>.db holds its bars (the
@@ -205,6 +206,7 @@ ON CONFLICT (ticker, timespan, multiplier, ts) DO UPDATE SET
 BAR_COLUMNS = ["open", "high", "low", "close", "volume", "vwap", "transactions"]
 
 MISSING_RECHECK_S = 5.0  # a feed found without files is looked for again after this long
+HISTORY_CHOICE_S = 10.0  # a feed's bars store (SQLite, or DuckDB for its closed months) looked up again after this
 STORED_SERIES_S = 60.0  # another process's writes show in stored_series() within this
 
 # Only a bar whose values changed is rewritten (and so revised); the same values leave it as stored.
@@ -423,6 +425,7 @@ class _Feed:
             with self.conn:  # complete from now: the triggers exist, so every write after this is logged
                 self.conn.execute("INSERT INTO changes_since SELECT ? WHERE NOT EXISTS (SELECT 1 FROM changes_since)",
                                   (_stored_ms(),))
+        seal(self.conn)  # read-only (MASSIVE_READONLY): no write from here on
         self.ticks = False
         self._lock = threading.Lock()
         self.has_ticks()
@@ -747,15 +750,17 @@ class FeedStore:
             frames = [f for f in frames if f is not None]
         else:
             frames = []
-            for conn in (self._bars(src) for src in sources):
+            for src, conn in ((src, self._bars(src)) for src in sources):
                 if conn is None:
                     continue
                 gone = _excluded(conn, ticker, timespan, 1, lo_ms, hi_ms) if filtered else {}
+                months = self._archived(src, conn, timespan, lo_ms, hi_ms)
                 for table in _BAR_TABLES:
-                    f = pd.read_sql_query(
+                    f = self._bar_frame(
+                        src, conn, table, months,
                         f"SELECT ts, open, high, low, close, volume, vwap, transactions, {int(table == 'built_bars')} "
-                        f"AS derived FROM {table} WHERE ticker=? AND timespan=? AND multiplier=1 AND ts >= ? AND ts < ? "
-                        "ORDER BY ts", conn, params=(ticker.upper(), timespan, int(lo_ms), int(hi_ms)))
+                        "AS derived FROM {table} WHERE ticker=? AND timespan=? AND multiplier=1 AND ts >= ? AND ts < ?",
+                        (ticker.upper(), timespan, int(lo_ms), int(hi_ms)), ["ts"])
                     out = gone.get(table)  # each table's own bad data: a built bar beside a feed's left out stays
                     frames.append(f[~f["ts"].isin(out)] if out else f)
         frames = [f for f in frames if len(f)]  # an empty read has untyped columns: it would turn numbers to objects
@@ -795,6 +800,60 @@ class FeedStore:
             out = out[published(out["ts"].to_numpy()) <= as_of]
         return out[cols].sort_values("ts").reset_index(drop=True)
 
+    # -- closed history (storage/history.py) -------------------------------------------------------
+
+    @property
+    def _history(self) -> history.Reader:
+        reader = self.__dict__.get("_history_reader")
+        if reader is None:
+            reader = self.__dict__["_history_reader"] = history.Reader(self.history_dir)
+        return reader
+
+    def history_on(self, source: str) -> bool:
+        """Whether a feed's closed months are read from DuckDB (its plugin's bars store, stores.py:
+        DuckDB unless SQLite was picked; never the composite model's, nor without duckdb here). Looked
+        up again at most every HISTORY_CHOICE_S."""
+        if self.history_dir is None or source == COMPOSITE or not history.available():
+            return False
+        hit = self._cache.get(("history_on", source))
+        now = time.monotonic()
+        if hit is not None and now - hit[0] < HISTORY_CHOICE_S:
+            return hit[1]
+        on = (self.kv_get(f"store:feed:{source}:bars") or "duckdb") == "duckdb"
+        self._cache[("history_on", source)] = (now, on)
+        return on
+
+    def _archived(self, source: str, conn: sqlite3.Connection, timespan: str, lo_ms: int | None,
+                  hi_ms: int | None) -> list:
+        """The feed's current archived months in [lo, hi), read from DuckDB; none if it keeps its
+        bars in SQLite, nor for the weeks, months and years (history.CALENDAR: never archived)."""
+        if timespan in history.CALENDAR or not self.history_on(source):
+            return []
+        try:
+            return history.current(conn, lo_ms, hi_ms)
+        except sqlite3.Error:
+            return []
+
+    def _bar_frame(self, source: str, conn: sqlite3.Connection, table: str, months: list, sql: str,
+                   params: Sequence, order: list[str]) -> pd.DataFrame:
+        """`sql` (FROM {table}) over a bar table: from SQLite outside the archived months, from their
+        DuckDB files in them, in `order`."""
+        not_in, extra = history.outside(months)
+        f = pd.read_sql_query(sql.format(table=table) + not_in + f" ORDER BY {', '.join(order)}", conn,
+                              params=(*params, *extra))
+        if not months:
+            return f
+        q = sql.format(table="{t_" + table + "}") + f" ORDER BY {', '.join(order)}"
+        parts = [p for p in (f, *(self._history.frame(source, file, q, params) for _, _, file in months)) if len(p)]
+        if len(parts) < 2:
+            return parts[0] if parts else f
+        return pd.concat(parts, ignore_index=True).sort_values(order, kind="stable", ignore_index=True)
+
+    def history_months(self, source: str) -> list[dict]:
+        """A feed's archived months (the manifest, newest first)."""
+        conn = self._bars(source)
+        return history.manifest(conn) if conn is not None else []
+
     def bar_revisions(self, source: str, ticker: str, timespan: str = "minute") -> pd.DataFrame:
         """Every replaced version of a series' bars, with when it was stored and replaced."""
         conn = self._bars(source)
@@ -811,11 +870,17 @@ class FeedStore:
         if conn is None:
             return []
         rows: dict[int, tuple] = {}
+        months = self._archived(source, conn, timespan, lo_ms, hi_ms)
+        not_in, extra = history.outside(months)
+        sql = ("SELECT ts, open, high, low, close, volume, vwap, transactions FROM {table} "
+               "WHERE ticker=? AND timespan=? AND multiplier=1 AND ts >= ? AND ts < ?")
+        args = (ticker.upper(), timespan, lo_ms, hi_ms)
         for table in reversed(_BAR_TABLES):  # the feed's own last, so they replace any built here
-            for r in conn.execute(f"SELECT ts, open, high, low, close, volume, vwap, transactions FROM {table} "
-                                  "WHERE ticker=? AND timespan=? AND multiplier=1 AND ts >= ? AND ts < ?",
-                                  (ticker.upper(), timespan, lo_ms, hi_ms)):
+            for r in conn.execute(sql.format(table=table) + not_in, (*args, *extra)):
                 rows[r[0]] = r
+            for _, _, file in months:  # the archived months' from DuckDB
+                for r in self._history.rows(source, file, sql.format(table="{t_" + table + "}"), args):
+                    rows[r[0]] = r
         return [rows[t] for t in sorted(rows)]
 
     def bar_range(self, source: str, ticker: str, timespan: str, multiplier: int = 1) -> tuple[int, int] | None:
@@ -855,8 +920,9 @@ class FeedStore:
                 gone = pd.read_sql_query("SELECT DISTINCT ticker, ts, derivation IS NOT NULL AS built FROM pruned p" + where
                                          + " AND excludes=1 AND released_at IS NULL AND " + _STILL_STORED, feed.conn,
                                          params=params) if filtered else None
+                months = self._archived(feed.name, feed.conn, timespan, lo, hi)
                 for table in _BAR_TABLES:
-                    f = pd.read_sql_query(sql.format(table=table) + " ORDER BY ticker, ts", feed.conn, params=params)
+                    f = self._bar_frame(feed.name, feed.conn, table, months, sql, params, ["ticker", "ts"])
                     # each table's own bad data (as bars_window: a built bar beside a feed's left out stays)
                     out = gone[gone["built"] == int(table == "built_bars")] if gone is not None and len(gone) else None
                     if out is not None and len(out) and len(f):
@@ -1299,18 +1365,19 @@ class FeedStore:
 
     def daily_snapshot(self, source: str | None = None, sessions: int = 30) -> dict[str, dict]:
         """Per ticker from local daily bars: average dollar volume over the last `sessions`
-        sessions (volume x VWAP, close when VWAP is missing), last close and the one before."""
+        sessions (volume x VWAP, close when VWAP is missing), last close and the one before, and the
+        last session's volume (shares)."""
         def compute():
             out: dict[str, dict] = {}
             for src, ticker, kind in self.stored_series():
                 if kind != "day" or (source and src != source) or ticker in out:
                     continue
                 rows = self._bars(src).execute(
-                    "SELECT close, volume * COALESCE(vwap, close) FROM bars WHERE ticker=? "
+                    "SELECT close, volume * COALESCE(vwap, close), volume FROM bars WHERE ticker=? "
                     "AND timespan='day' AND multiplier=1 ORDER BY ts DESC LIMIT ?", (ticker, sessions)).fetchall()
                 if rows:
                     out[ticker] = {"close": rows[0][0], "prevClose": rows[1][0] if len(rows) > 1 else None,
-                                   "dollarVolume": sum(v or 0.0 for _, v in rows) / len(rows)}
+                                   "dollarVolume": sum(v or 0.0 for _, v, _ in rows) / len(rows), "volume": rows[0][2]}
             return out
         return self._cached(("daily_snapshot", source, sessions), compute)
 

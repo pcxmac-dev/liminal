@@ -36,6 +36,20 @@ def no_found_limits(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_installed_plugins(monkeypatch):
+    """The suite tests the app and its built-in plugins, never the plugin packages installed beside
+    it (massive-plugin-cboe ...: each tested in its own repository): their entry points are hidden,
+    a test gives its own (test_plugins.py: `installed`), and test_plugins.py loads the installed ones
+    on their own. Plugins found with a package's (on collection, or by a test) are found again."""
+    from massive_collate.sources import registry
+
+    monkeypatch.setattr(registry, "_entry_points", lambda: ())
+    if registry._providers is not None and any(
+            p.origin != "built in" for p in (*registry._providers.values(), *registry._publishers.values())):
+        registry._providers = None
+
+
+@pytest.fixture(autouse=True)
 def no_agency_requests(monkeypatch):
     """Tests never read the publishers' real feeds: the hourly sync without a recorder reads them
     (cli._fetch_gov, publications.run_due), and the Plugins view's Recheck (recheck_now);
@@ -54,6 +68,16 @@ def no_cached_movers():
     from massive_collate import collector
 
     collector._movers_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def read_only_restored():
+    """cli.main sets the process's read-only mode from MASSIVE_READONLY: never left on for the next test."""
+    from massive_collate.storage import read_only, set_read_only
+
+    was = read_only()
+    yield
+    set_read_only(was)
 
 
 @pytest.fixture(autouse=True)
@@ -104,6 +128,21 @@ def no_recorders(monkeypatch, tmp_path):
     from massive_collate import cli
 
     monkeypatch.setattr(cli, "start_feed", lambda name: no_spawn(["--source", name, "sync", "--only"]))
+    monkeypatch.setattr(cli, "start_history", lambda: no_spawn(["history", "run"]))
+    # Nor start, see or write to a MongoDB server: one may run on this machine with the user's
+    # documents. Mongo is "not installed" unless a test installs its stand-in (tests/test_stores.py).
+    from massive_collate import mongo
+
+    monkeypatch.setattr(mongo, "_spawn", no_spawn)
+    monkeypatch.setattr(mongo, "binary", lambda: None)
+    monkeypatch.setattr(mongo, "running", lambda timeout_ms=500: False)
+    monkeypatch.setattr(mongo, "_alive", [0.0, False])  # a ping's answer kept a few seconds: never a test's before
+
+    def no_server(*a, **k):
+        raise AssertionError("a test tried to reach the MongoDB server")
+
+    monkeypatch.setattr(mongo, "client", no_server)
+    monkeypatch.setattr(mongo, "database", no_server)
 
 
 class FakeResponse:

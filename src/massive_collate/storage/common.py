@@ -17,6 +17,27 @@ _ET = ZoneInfo("America/New_York")
 BUSY_TIMEOUT_S = 30.0
 
 
+# Read-only (MASSIVE_READONLY): a process sets it once it knows its settings (cli.py); every
+# connection a store opens is then made query-only once its tables are looked for, so no write of
+# this process reaches a file (SQLite refuses it: "attempt to write a readonly database").
+_READ_ONLY = [False]
+
+
+def set_read_only(on: bool) -> None:
+    _READ_ONLY[0] = bool(on)
+
+
+def read_only() -> bool:
+    return _READ_ONLY[0]
+
+
+def seal(conn: sqlite3.Connection) -> sqlite3.Connection:
+    """The connection query-only when this process reads only."""
+    if _READ_ONLY[0]:
+        conn.execute("PRAGMA query_only=ON")
+    return conn
+
+
 @contextmanager
 def write_transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     """One write transaction taken from its start (BEGIN IMMEDIATE), committed at the end: what

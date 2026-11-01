@@ -19,7 +19,7 @@ from .errors import NotEntitled, RateLimited, SourceError, Unauthorized
 from .sessions import ET
 from .symbols import resolve
 from .sources import DataSource, build_source, feed_profiles, is_archive, providers, supports
-from .storage import Store, feeds_backup_dir
+from .storage import COMPOSITE, Store, feeds_backup_dir
 
 TASK_NAME = "MassiveCollateSync"
 
@@ -414,7 +414,150 @@ def dispatch(settings: Settings, log=None) -> int:
     # missed (no recorder, or one from before it read them). One reader at a time (their lock), and a
     # feed read lately is not due, so nothing is read twice.
     _fetch_gov(settings, log)
+    _stores_pass(settings, log)
     return len(started) + len(going)
+
+
+HISTORY_LOCK = "history.lock"  # beside the database: one `history run` at a time
+
+
+def _stores_pass(settings: Settings, log) -> None:
+    """The hourly sync's part in the stores (stores.py): each plugin's documents moved to the store
+    wanted (MongoDB started if it is the one), and a `history run` started for the feeds whose
+    closed months go to DuckDB, unless one is going on. A failure is logged, never the sync's."""
+    from . import gov, proc, stores
+
+    try:
+        with Store(settings.db_path) as store:
+            gdb = gov.open_db(settings.db_path)
+            try:
+                stores.settle(store, gdb.conn, settings.db_path.parent, log)
+            finally:
+                gdb.close()
+            feeds = stores.bars_feeds(store)
+        if feeds and proc.holder(settings.db_path.with_name(HISTORY_LOCK)) is None:
+            start_history()
+            log(f"history: started copying the closed months of {', '.join(feeds)} to DuckDB, in a process of its own")
+    except Exception as e:  # noqa: BLE001 - the stores are the sync's extras: its data is in
+        log(f"stores: failed ({type(e).__name__}: {e})")
+
+
+def start_history() -> int:
+    """Start `history run` in a process of its own, without a window, at a background priority
+    (below normal, and Windows' low I/O priority once it runs: the machine stays responsive)."""
+    exe = Path(sys.executable)
+    quiet = exe.with_name("pythonw.exe") if os.name == "nt" and exe.with_name("pythonw.exe").exists() else exe
+    flags = 0x00000008 | 0x00000200 | 0x00004000 if os.name == "nt" else 0  # DETACHED | NEW_GROUP | BELOW_NORMAL
+    return subprocess.Popen([str(quiet), "-m", "massive_collate", "history", "run"], creationflags=flags, close_fds=True,
+                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).pid
+
+
+def _background_priority() -> None:
+    """This process's CPU, I/O and memory priority lowered (Windows' background mode)."""
+    if os.name == "nt":
+        import ctypes
+
+        ctypes.windll.kernel32.SetPriorityClass(ctypes.windll.kernel32.GetCurrentProcess(), 0x00100000)
+
+
+def cmd_history(args, settings: Settings) -> int:
+    """Closed history (storage/history.py). `run`: copy the due closed months of the feeds whose
+    bars go to DuckDB (stores.py), newest first, within --budget seconds (one run at a time); a halt
+    of fetching ends it after the month in hand. `status`: each feed's months in DuckDB."""
+    from . import proc, provenance, stores
+    from .storage import history
+
+    if args.action == "status":
+        with Store(settings.db_path) as store:
+            on = set(stores.bars_feeds(store))
+            for f in store.feed_names():
+                months = store.history_months(f)
+                if not months and f not in on:
+                    continue
+                current = [m for m in months if not m["stale"]]
+                print(f"{f:12} {'DuckDB' if f in on else 'SQLite':7} {len(current):4} months in DuckDB"
+                      + (f" ({current[-1]['month']} to {current[0]['month']}, "
+                         f"{sum(m['bytes'] for m in current) / 1e9:,.2f} GB)" if current else "")
+                      + (f", {len(months) - len(current)} stale" if len(months) > len(current) else ""))
+        return 0
+    log = Logger(settings.db_path.parent / "logs" / "massive-collate.log")
+    if settings.read_only:
+        print("read-only (MASSIVE_READONLY): nothing is copied")
+        return 0
+    if not history.available():
+        log("history: duckdb is not installed here: every month stays in SQLite alone")
+        return 0
+    lock = settings.db_path.with_name(HISTORY_LOCK)
+    if not proc.acquire(lock):
+        log("history: another run is copying; left to it")
+        return 0
+    try:
+        _background_priority()
+        with Store(settings.db_path) as store:
+            feeds = [f for f in (args.feed or stores.bars_feeds(store))  # never the composite model's: read from SQLite
+                     if f in store.feed_names() and f != COMPOSITE]
+            conns = {f: store._bars(f) for f in feeds}
+
+            def halted() -> bool:
+                p = collector.pause_state(store)
+                return bool(p and p.get("halt"))
+            done = history.run({f: c for f, c in conns.items() if c is not None}, store.history_dir, log,
+                               budget_s=args.budget, code=provenance.code_version(), stop=halted)
+        if not done:
+            log("history: nothing due (every closed month copied, or written lately)")
+    finally:
+        proc.release(lock)
+    return 0
+
+
+def cmd_mongo(args, settings: Settings) -> int:
+    """The MongoDB server here (mongo.py): start it (bound to 127.0.0.1, its cache capped), stop it
+    cleanly, or show it."""
+    from . import mongo
+
+    data = settings.db_path.parent
+    if args.action == "start":
+        pid = mongo.start(data)
+        print(f"MongoDB started (process {pid}) on {mongo.HOST}:{mongo.port()}" if pid else "MongoDB is running")
+    elif args.action == "stop":
+        print("MongoDB stopped" if mongo.stop() else "MongoDB was not running")
+    s = mongo.status(data)
+    print(f"MongoDB {s['version'] or '(not installed)'}: " + (
+        f"running, process {s['pid']}, {s['residentMB']} MB resident, cache capped at {s['cacheGB']} GB, "
+        f"the app's data {((s['storageBytes'] or 0) / 1e6):,.1f} MB" if s["running"] else "not running")
+        + (f"; {s['binary']}" if s["binary"] else ""))
+    return 0
+
+
+def cmd_stores(args, settings: Settings) -> int:
+    """Each plugin's stores by data type (stores.py): `list`; `pick PLUGIN TYPE ENGINE` (auto: the
+    optimal); `settle`: move documents to the store wanted now (as the hourly sync does)."""
+    from . import gov, stores
+    from .sources.registry import plugin_of, providers, publisher_of, publishers
+
+    with Store(settings.db_path) as store:
+        if args.action == "pick":
+            if not (args.plugin and args.type and args.engine):
+                print("pick needs PLUGIN TYPE ENGINE (ENGINE: auto for the optimal)")
+                return 2
+            stores.pick(store, args.plugin, args.type, None if args.engine == "auto" else args.engine)
+        gdb = gov.open_db(settings.db_path)
+        try:
+            if args.action in ("pick", "settle"):
+                for d in stores.settle(store, gdb.conn, settings.db_path.parent, print, only=args.plugin):
+                    if d.get("error"):
+                        print(f"{d['plugin']}: {d['error']}")
+            names = dict.fromkeys([n for n in providers() if plugin_of(n) == n]
+                                  + [n for n in publishers() if publisher_of(n) == n])
+            for name in names:
+                for r in stores.plugin_stores(store, name, gdb.conn):
+                    t = stores.ENGINE_TITLES
+                    print(f"{name:12} {r['title']:10} {t[r['effect']]:8}"
+                          + (f" (moving to {t[r['wanted']]})" if r["wanted"] != r["effect"] else "")
+                          + (" picked" if r["picked"] else f" optimal here: {t[r['optimal']]}"))
+        finally:
+            gdb.close()
+    return 0
 
 
 def start_feed(name: str) -> int:
@@ -498,7 +641,7 @@ def cmd_gov(args, settings: Settings) -> int:
     else:
         _fetch_gov(settings, Logger(settings.db_path.parent / "logs" / "massive-collate.log"),
                    force=bool(getattr(args, "all", False)))
-    db = gov.GovDB(gov.db_path(settings.db_path))
+    db = gov.open_db(settings.db_path)
     try:
         for s in gov.view(db, contact_set=bool(settings.gov_contact))["sources"]:
             print(f"{s['agency']:17} {s['title'][:56]:56} {s['state']}" + (f"  ({s['message']})" if s["message"] else ""))
@@ -1582,6 +1725,25 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--plugin", help="that plugin only")
     s.set_defaults(func=cmd_fetcher)
 
+    s = sub.add_parser("history", help="closed months of bars in DuckDB: run (copy the due ones, as the hourly "
+                                      "sync starts it) or status")
+    s.add_argument("action", nargs="?", default="status", choices=["run", "status"])
+    s.add_argument("--feed", action="append", help="run: this feed only (repeatable)")
+    s.add_argument("--budget", type=float, default=20 * 60, help="run: seconds of copying (default: 1200)")
+    s.set_defaults(func=cmd_history)
+
+    s = sub.add_parser("mongo", help="the MongoDB server here (127.0.0.1 only): start, stop or status")
+    s.add_argument("action", nargs="?", default="status", choices=["start", "stop", "status"])
+    s.set_defaults(func=cmd_mongo)
+
+    s = sub.add_parser("stores", help="each plugin's stores by data type (SQLite, DuckDB, MongoDB): list, pick "
+                                     "PLUGIN TYPE ENGINE|auto, or settle")
+    s.add_argument("action", nargs="?", default="list", choices=["list", "pick", "settle"])
+    s.add_argument("plugin", nargs="?")
+    s.add_argument("type", nargs="?", help="bars, documents, series or files")
+    s.add_argument("engine", nargs="?", help="sqlite, duckdb, mongodb, files, or auto")
+    s.set_defaults(func=cmd_stores)
+
     s = sub.add_parser("datasets", help="research datasets: list, fetch (or refresh), show NAME [SERIES]")
     s.add_argument("action", choices=["list", "fetch", "show"], nargs="?", default="list")
     s.add_argument("names", nargs="*", help="fetch: datasets (default all); show: a dataset and one of its series")
@@ -1694,6 +1856,9 @@ def main(argv: list[str] | None = None) -> int:
         from . import sourcing
         from .storage.feeds import set_tick_access
 
+        from .storage import set_read_only
+
+        set_read_only(settings.read_only)  # MASSIVE_READONLY: every store this command opens reads only
         settings = sourcing.apply_detected(settings)  # each plugin's plan as its scan found it, unless you set it
 
         set_tick_access(not settings.bars_only)  # bars-only: no store this command opens reads ticks

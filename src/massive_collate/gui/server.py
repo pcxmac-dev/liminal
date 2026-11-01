@@ -26,6 +26,7 @@ import pandas as pd
 from .. import config, freshness, live, sourcing
 from ..config import Settings, load_settings
 from ..storage import LayoutLimit, Store
+from ..storage.markets import mic_names
 from . import activity, astro
 from .bars import CALENDAR, PRICE_BASED, TIME_TYPES, BarEngine, Style, _BoundedCache, resample
 from ..calc.derivatives import Model
@@ -236,7 +237,7 @@ class ChartApp:
             for src in sorted({w["source"] for w in watch}):
                 for r in activity.symbol_rows(store, self.settings, src, now, detail=0):
                     by_feed.setdefault(r["ticker"], {})[src] = r
-        names = {r.mic: r.name for r in exchanges.itertuples() if r.mic}
+        names = mic_names(exchanges)
         # Futures contracts are stored only as parts of a continuous series (NQ1!): not symbols of their own.
         with self._symbols_lock:
             parts = {c["ticker"] for w in watch if w["asset"] == "future"
@@ -437,7 +438,7 @@ class ChartApp:
         daily = s.daily if s.daily is not None and not s.daily.empty else resample(
             s.frame, "day", 1, "extended", utc_days=s.asset in ("crypto", "fx"), session_hours=6 if s.asset == "future" else 0)
         mic = watch.get("exchange") or (details or {}).get("primary_exchange")
-        names = {r.mic: r.name for r in exchanges.itertuples() if r.mic}
+        names = mic_names(exchanges)
         out = {
             "symbol": {
                 "ticker": s.ticker, "name": watch.get("name") or (details or {}).get("name"),
@@ -474,7 +475,7 @@ class ChartApp:
             details = next((d for d in (self.store.details(f, s.ticker) for f in feeds) if d), None)
             exchanges = self.store.exchanges()
         mic = watch.get("exchange") or (details or {}).get("primary_exchange")
-        names = {r.mic: r.name for r in exchanges.itertuples() if r.mic}
+        names = mic_names(exchanges)
         # the series' base as the interval charts counted it: its minutes (seconds are a layer apart)
         base = next((lv for lv in levels if lv["type"] == "minute"), levels[0])
         iso = lambda ms: pd.Timestamp(ms, unit="ms", tz="UTC").tz_convert("America/New_York").isoformat()
@@ -583,7 +584,7 @@ class ChartApp:
 
         with self._gov_lock:
             if self._gov_db is None:
-                self._gov_db = gov.GovDB(gov.db_path(self.store.path))
+                self._gov_db = gov.open_db(self.store.path)
             return gov.view(self._gov_db, contact_set=bool(self.settings.gov_contact), spx_close=self._spx_close())
 
     def publishers(self) -> list[dict]:
@@ -595,7 +596,7 @@ class ChartApp:
 
         with self._gov_lock:
             if self._gov_db is None:
-                self._gov_db = gov.GovDB(gov.db_path(self.store.path))
+                self._gov_db = gov.open_db(self.store.path)
             with self._lock:
                 out = publications.view(self._gov_db, self.settings, self.store)
         if any(p["datasets"] for p in out):
@@ -1155,6 +1156,8 @@ class ChartApp:
         symbols not noted for live.OPEN_FRESH_MS drop out."""
         import time as _time
 
+        if self.settings.read_only:  # a copy reading the real data: the recorder follows the user's own app
+            return
         ticker = ticker.strip().upper()
         now_ms = now_ms or int(_time.time() * 1000)
         last = self._open_noted.get(ticker)
@@ -1220,6 +1223,62 @@ class ChartApp:
 
         with self._status_lock:
             return queue.plugin_status(self._status_store, self.settings, self.store.path, name)
+
+    def _gov_conn(self):
+        from .. import gov
+
+        with self._gov_lock:
+            if self._gov_db is None:
+                self._gov_db = gov.open_db(self.store.path)
+            return self._gov_db.conn
+
+    def engines(self) -> dict:
+        """The engines here for the Store picker: SQLite's version, DuckDB's (installed or not), the
+        MongoDB server's state (mongo.status: installed, running, its memory and the app's data)."""
+        import sqlite3
+
+        from .. import mongo
+        from ..storage import history
+
+        duck = None
+        if history.available():
+            import duckdb
+
+            duck = duckdb.__version__
+        return {"sqlite": sqlite3.sqlite_version, "duckdb": duck, "mongodb": mongo.status(self.store.path.parent)}
+
+    def plugin_stores(self, name: str) -> dict:
+        """A plugin's stores by data type for its page (stores.py): each with its engines, its pick,
+        where it should be and is, and how far a move has gone; and the engines here."""
+        from .. import stores
+
+        gconn = self._gov_conn()
+        with self._status_lock:
+            rows = stores.plugin_stores(self._status_store, name, gconn)
+        return {"name": name, "stores": rows, "engines": self.engines()}
+
+    def set_store(self, plugin: str, dtype: str, engine: str | None) -> dict:
+        """A plugin's store for a data type picked in the Plugins view (None: the optimal). The user,
+        2026-10-31: "lets have a 'store' picker so i can choose manually, but lets try to use the
+        optimal data store for the data type". Documents move at once (copied, counted, then used
+        there: MongoDB started if it is the one); bars a few closed months each hour (the sync's
+        `history run`). Nothing is removed from the store left."""
+        from .. import stores
+        from ..storage import Store
+
+        if self.settings.offline:
+            raise RuntimeError("offline (MASSIVE_OFFLINE): this copy of the app saves no settings")
+        with self._status_lock:
+            stores.pick(self._status_store, plugin, dtype, engine)
+        note = None
+        if dtype == "documents":
+            log = _log_to(self.store.path)
+            with Store(self.store.path) as store:
+                for d in stores.settle(store, self._gov_conn(), self.store.path.parent, log, only=plugin):
+                    note = d.get("error") or note
+        out = self.plugin_stores(plugin)
+        out["error"] = note
+        return out
 
     def datasets(self) -> dict:
         """The research datasets: what is held, its span, files fetched and closed, quality."""
@@ -1460,6 +1519,8 @@ class ChartApp:
 
         ticker = ticker.upper()
         now = datetime.now(timezone.utc)
+        if self.settings.read_only:  # a copy reading the real data: no visit noted, nothing asked of the feeds
+            return {"ticker": ticker, "feeds": [], "state": "offline"}
         with self._lock:
             if profile is not None:  # noted whether or not a feed fetches it
                 self.store.visit(profile, ticker, now)
@@ -1622,12 +1683,13 @@ def _futures_moves(store) -> Callable[[dict], dict]:
 
 
 def _market(snapshot: dict, ticker: str, watch: dict) -> dict | None:
-    """Last close, change and 30-session average dollar volume from local daily bars."""
+    """Last close, change, the last session's volume and the 30-session average dollar volume, from
+    local daily bars."""
     d = snapshot.get(ticker)
     if not d or watch.get("asset", "stock") != "stock":
         return None  # dollar volume only means something for shares
     change = (d["close"] / d["prevClose"] - 1) * 100 if d["prevClose"] else None
-    return {"close": d["close"], "changePct": change, "dollarVolume": d["dollarVolume"]}
+    return {"close": d["close"], "changePct": change, "dollarVolume": d["dollarVolume"], "volume": d.get("volume")}
 
 
 def _model(q: dict[str, str]) -> Model:
@@ -1715,6 +1777,9 @@ def make_handler(app: ChartApp, port_ref: list[int]):
         def _failed(self, err: Exception) -> None:
             """An error no route expects: logged and answered (500; 503 while another process holds
             the database), not a dropped connection the page cannot tell from the app being gone."""
+            if isinstance(err, sqlite3.OperationalError) and "readonly" in str(err) and app.settings.read_only:
+                return self._json({"error": "this copy of the app reads only (MASSIVE_READONLY): nothing is saved"},
+                                  HTTPStatus.CONFLICT)
             traceback.print_exc()
             if isinstance(err, sqlite3.OperationalError) and "locked" in str(err):
                 return self._json({"error": "the database is busy (another process is writing to it): ask again shortly"},
@@ -1813,6 +1878,14 @@ def make_handler(app: ChartApp, port_ref: list[int]):
                         return self._json({"error": str(e)}, HTTPStatus.CONFLICT)
                     except LookupError as e:
                         return self._json({"error": str(e)}, HTTPStatus.NOT_FOUND)
+                if method == "POST" and parts == ["", "api", "plugins", "store"]:
+                    try:
+                        return self._json(app.set_store(str(body.get("plugin") or ""), str(body.get("type") or ""),
+                                                         body.get("engine") or None))
+                    except LookupError as e:
+                        return self._json({"error": str(e)}, HTTPStatus.NOT_FOUND)
+                    except (ValueError, RuntimeError) as e:
+                        return self._json({"error": str(e)}, HTTPStatus.CONFLICT)
                 if method == "POST" and parts == ["", "api", "plugins", "rescan"]:
                     name = parse_qs(urlparse(self.path).query).get("name", [None])[-1] or None
                     try:
@@ -1980,6 +2053,8 @@ def make_handler(app: ChartApp, port_ref: list[int]):
                     return self._json(app.queue(q))
                 if url.path == "/api/plugin-fetching":
                     return self._json(app.plugin_fetching(q["name"]))
+                if url.path == "/api/plugin-stores":
+                    return self._json(app.plugin_stores(q["name"]))
                 if url.path == "/api/datasets":
                     return self._json(app.datasets())
                 if url.path == "/api/dataset/series":

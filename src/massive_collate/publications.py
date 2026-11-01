@@ -850,7 +850,7 @@ def run_due(settings, log: Callable[[str], None], force: bool = False, now: date
     lock = lock_path(settings.db_path)
     if not proc.acquire(lock):
         return None
-    gdb = gov.GovDB(gov.db_path(settings.db_path))
+    gdb = gov.open_db(settings.db_path)
     try:
         with Store(settings.db_path) as store:
             return Reader(gdb, settings, store, log=log).step(now or datetime.now(timezone.utc), force=force)
@@ -876,7 +876,7 @@ def recheck_now(settings, name: str, log: Callable[[str], None], wait_s: float =
         if time.monotonic() > until:
             return None
         time.sleep(0.5)
-    gdb = gov.GovDB(gov.db_path(settings.db_path))
+    gdb = gov.open_db(settings.db_path)
     try:
         with Store(settings.db_path) as store:
             reader, now = Reader(gdb, settings, store, log=log), datetime.now(timezone.utc)

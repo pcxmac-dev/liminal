@@ -433,13 +433,95 @@
   // its engine and its size here; a shared one (the main file, gov.db) holds only some rows of it
   function databasesHtml(p) {
     const dbs = p.databases || [];
-    if (!dbs.length) return '';
+    if (!dbs.length) return storesHtml(p.name);
     const rows = dbs.map((d) => `<tr><td><code title="${esc(d.path || d.where)}">${esc(d.where)}</code>${d.shared
       ? ` <span class="chip" title="The app's and other plugins' too: only this plugin's rows in it are its">shared</span>` : ''}</td>
       <td class="small">${esc(d.holds)}</td><td>${esc(ENGINES[d.engine] || d.engine)}</td>
       <td class="num">${d.bytes == null ? `<span class="p-muted">${d.engine === 'mongodb' ? 'a server' : 'none yet'}</span>` : size(d.bytes)}</td></tr>`).join('');
-    return `<h4>Databases</h4><table class="act-table ex-mini pl-dbs"><thead><tr><th>Database</th><th>What it holds</th><th>Engine</th><th class="num">Size</th></tr></thead>
+    return `${storesHtml(p.name)}<h4>Databases</h4><table class="act-table ex-mini pl-dbs"><thead><tr><th>Database</th><th>What it holds</th><th>Engine</th><th class="num">Size</th></tr></thead>
       <tbody>${rows}</tbody></table><div class="p-muted small">In the data folder, beside the main file; hover a name for its path here.</div>`;
+  }
+
+  // -- its stores (stores.py): the user, 2026-10-31: "each module needs to support sqlite or mongo
+  // or duck db based on data type", "lets have a 'store' picker so i can choose manually, but lets
+  // try to use the optimal data store for the data type". Each data type it keeps, the store picked
+  // (or the optimal, left to the app), where it is now, and how far a move has gone.
+  const STORES_EVERY_MS = 60_000;
+  const storeState = { name: null, data: null, at: 0, busy: false };
+  const gb = (b) => (b == null ? '–' : b >= 1e9 ? `${(b / 1e9).toFixed(2)} GB` : `${(b / 1e6).toFixed(1)} MB`);
+
+  async function loadStores(name) {
+    try {
+      const got = await api(`/api/plugin-stores?name=${encodeURIComponent(name)}`);
+      Object.assign(storeState, { name, data: got, at: Date.now() });
+      if (shown() === name) render();
+    } catch { /* the next look */ }
+  }
+
+  function storeHeld(r) {
+    if (r.type === 'bars') {
+      const feeds = Object.entries(r.progress || {});
+      if (!feeds.length) return '<span class="p-muted">no bars yet</span>';
+      return feeds.map(([f, x]) => `<div><b>${esc(label(f))}</b>: ${x.months ? `${num(x.months)} closed month${x.months === 1 ? '' : 's'} in DuckDB
+        (${esc(x.oldest)} to ${esc(x.newest)}), ${num(x.bars)} bars, ${gb(x.bytes)}` : r.effect === 'duckdb' ? 'none in DuckDB yet: the hourly sync copies a few closed months a run, newest first'
+        : 'every month in SQLite'}${x.stale ? ` · ${num(x.stale)} written since, read from SQLite until copied again` : ''}</div>`).join('');
+    }
+    if (r.type === 'documents') {
+      const c = r.counts || {};
+      return Object.entries(c).map(([e, n]) => `${esc(ENGINES[e] || e)}: ${n == null ? '<span class="p-muted">not running</span>' : num(n)}`).join(' · ');
+    }
+    return '';
+  }
+
+  function storesHtml(name) {
+    if (storeState.name !== name || Date.now() - storeState.at > STORES_EVERY_MS) {
+      if (!storeState.busy) { storeState.busy = true; setTimeout(() => loadStores(name).finally(() => { storeState.busy = false; }), 0); }
+    }
+    const got = storeState.name === name ? storeState.data : null;
+    if (!got) return '<h4>Stores</h4><div class="p-muted small">Asking…</div>';
+    if (!got.stores.length) return '';
+    const off = data.offline ? ' disabled title="This offline copy of the app saves no settings"' : '';
+    const rows = got.stores.map((r) => {
+      const opts = [`<option value=""${r.picked ? '' : ' selected'}>Optimal: ${esc(ENGINES[r.optimal] || r.optimal)}</option>`,
+        ...r.engines.map((e) => `<option value="${esc(e.name)}"${r.picked === e.name ? ' selected' : ''}${e.ok ? '' : ' disabled'}>${esc(e.title)}${e.ok ? '' : ` (${esc(e.why)})`}</option>`)];
+      const title = (e) => r.engines.find((x) => x.name === e)?.title || ENGINES[e] || e;
+      const means = r.engines.find((e) => e.name === r.effect)?.means || '';
+      const single = r.engines.length < 2;
+      return `<tr><td><b>${esc(r.title)}</b></td>
+        <td>${single ? esc(r.engines[0].title) : `<select class="pl-store" data-store-plugin="${esc(name)}" data-store-type="${esc(r.type)}"${off}>${opts.join('')}</select>`}</td>
+        <td>${esc(title(r.effect))}${r.wanted !== r.effect ? ` <span class="warn">moving to ${esc(title(r.wanted))}</span>` : ''}
+          <div class="p-muted small">${esc(means)}</div></td>
+        <td class="small">${storeHeld(r)}</td></tr>`;
+    }).join('');
+    const m = got.engines.mongodb || {};
+    const mongo = !m.installed ? 'MongoDB: not installed' : m.running
+      ? `MongoDB ${esc(m.version)}: running on ${esc(m.host)}:${m.port}, ${num(m.residentMB)} MB in memory (cache capped at ${m.cacheGB} GB), the app's documents ${gb(m.storageBytes)}`
+      : `MongoDB ${esc(m.version)}: not running (the app starts it when a store uses it)`;
+    return `<h4>Stores</h4><table class="act-table ex-mini pl-stores"><thead><tr><th>Data</th><th>Store</th><th>In use</th><th>Held</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="p-muted small">${got.stores.filter((r) => r.engines.length > 1).map((r) => `${esc(r.title)}: ${esc(ENGINES[r.engines[0].name])} is optimal for ${esc(r.why)}.`).join(' ')}
+        A store left keeps its copy. SQLite ${esc(got.engines.sqlite)} · DuckDB ${got.engines.duckdb ? esc(got.engines.duckdb) : 'not installed'} · ${mongo}.</div>`;
+  }
+
+  async function chooseStore(select) {
+    const p = data.plugins.find((x) => x.name === select.dataset.storePlugin) || pubNamed(select.dataset.storePlugin);
+    const type = select.dataset.storeType, engine = select.value || null;
+    const row = storeState.data?.stores.find((r) => r.type === type);
+    const to = ENGINES[engine || row?.optimal] || engine;
+    const ask = type === 'bars'
+      ? (to === 'DuckDB' ? `Keep ${p.title}'s closed months in DuckDB? The hourly sync copies a few a run, newest first, each checked; SQLite keeps every bar.`
+        : `Read ${p.title}'s bars from SQLite alone? The DuckDB files stay until you remove them.`)
+      : `Keep ${p.title}'s ${row?.title.toLowerCase() || type} in ${to}? They are copied there now and counted, then read and written there; the store left keeps its copy.`;
+    if (!window.confirm(ask)) { render(); return; }
+    note = '';
+    try {
+      const res = await fetch('/api/plugins/store', { method: 'POST', headers: WRITE_HEADERS,
+        body: JSON.stringify({ plugin: select.dataset.storePlugin, type, engine }) });
+      const out = await res.json().catch(() => ({}));
+      if (res.ok) Object.assign(storeState, { name: select.dataset.storePlugin, data: out, at: Date.now() });
+      note = res.ok ? (out.error ? `${row?.title || type} stay where they were: ${out.error}` : `${row?.title || type} kept in ${to} from now.`)
+        : out.error || res.statusText;
+    } catch (err) { note = String(err.message || err); }
+    render();
   }
 
   // what a publisher reads: its feeds with their last and next reads, its schedule, its scrape
@@ -618,6 +700,7 @@
   });
   box.addEventListener('change', (e) => {
     if (e.target.matches('select.pl-choose')) choosePlan(e.target);
+    if (e.target.matches('select.pl-store')) chooseStore(e.target);
   });
   box.addEventListener('toggle', (e) => {  // a part's section opened or closed: kept through the refreshes
     if (e.target.matches?.('details.pl-part')) folds.set(e.target.dataset.part, e.target.open);

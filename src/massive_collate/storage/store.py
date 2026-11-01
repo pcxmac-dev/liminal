@@ -7,11 +7,11 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from ..layout import DATASETS, FEEDS
+from ..layout import DATASETS, FEEDS, HISTORY
 from .admin import AdminStore
 from .appstate import AppStateStore
 from .audits import AuditStore
-from .common import BUSY_TIMEOUT_S, add_column, write_transaction
+from .common import BUSY_TIMEOUT_S, add_column, seal, write_transaction
 from .datasets import DatasetStore
 from .directory import DirectoryStore
 from .feeds import FeedStore, OldLayout, _Feed, old_layout, tick_access
@@ -36,6 +36,7 @@ class Store(ProvenanceStore, AdminStore, FeedStore, PrunedStore, DatasetStore, D
             self.path.parent.mkdir(parents=True, exist_ok=True)
         self.feeds_dir = Path(feeds_dir) if feeds_dir else (None if memory else self.path.with_name(FEEDS))
         self.datasets_dir = Path(datasets_dir) if datasets_dir else (None if memory else self.path.with_name(DATASETS))
+        self.history_dir = self.feeds_dir.parent / HISTORY if self.feeds_dir else None  # closed months (history.py)
         self._dataset_conns: dict[str, sqlite3.Connection] = {}
         self._check_same_thread = check_same_thread
         self.conn = sqlite3.connect(str(path), check_same_thread=check_same_thread, timeout=BUSY_TIMEOUT_S)
@@ -49,6 +50,7 @@ class Store(ProvenanceStore, AdminStore, FeedStore, PrunedStore, DatasetStore, D
         self.conn.execute("PRAGMA journal_size_limit=67108864")  # cut back to 64 MB once checkpointed
         self.conn.executescript(SCHEMA)
         self._migrate()
+        seal(self.conn)  # read-only (MASSIVE_READONLY): no write from here on
         self._feeds: dict[str, _Feed] = {}
         self._feeds_lock = threading.Lock()
         self._missing: dict[str, float] = {}  # feed -> when it was found to have no files (monotonic s)
@@ -99,6 +101,8 @@ class Store(ProvenanceStore, AdminStore, FeedStore, PrunedStore, DatasetStore, D
         key_coverage_by_origin(self.conn)
 
     def close(self) -> None:
+        if self.__dict__.get("_history_reader") is not None:
+            self._history_reader.close()
         for feed in self._feeds.values():
             feed.conn.close()
         for conn in self._dataset_conns.values():

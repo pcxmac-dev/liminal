@@ -40,32 +40,41 @@ def wheres(name: str) -> list[str]:
     return [d.where for d in registry.plugin_databases(name)]
 
 
+def feed(name: str) -> list[str]:
+    """A feed's bars, its closed months in DuckDB, its trades."""
+    return [layout.bars(name), layout.history(name), layout.ticks(name)]
+
+
+NEWS = "mongodb://127.0.0.1:27017/massive.news"
+ITEMS = "mongodb://127.0.0.1:27017/massive.gov_items"
+
+
 def test_each_feed_plugin_points_to_its_feeds_files_and_its_rows_in_the_main_file():
-    assert wheres("alpaca") == ["feeds/alpaca.db", "feeds/alpaca-ticks.db", "feeds/iex.db", "feeds/iex-ticks.db",
-                                "feeds/boats.db", "feeds/boats-ticks.db", MAIN]  # its live feed's, its part's
+    assert wheres("alpaca") == [*feed("alpaca"), *feed("iex"), *feed("boats"), MAIN]  # its live feed's, its part's
     alpaca = {d.where: d for d in registry.plugin_databases("alpaca")}
     assert alpaca["feeds/iex.db"].holds == "alpaca (iex): bars" and alpaca["feeds/boats-ticks.db"].holds == "alpaca (blue ocean): trades"
     assert not alpaca["feeds/alpaca.db"].shared and alpaca[MAIN].shared
-    assert wheres("tiingo") == ["feeds/tiingo.db", "feeds/tiingo-ticks.db", "feeds/tiingoboats.db",
-                                "feeds/tiingoboats-ticks.db", "feeds/tiingofx.db", "feeds/tiingofx-ticks.db", MAIN]
-    assert wheres("bitfinex") == ["feeds/bitfinex.db", "feeds/bitfinex-ticks.db", MAIN]
+    assert alpaca["history/alpaca/"].kind == "duckdb" and not alpaca["history/alpaca/"].shared
+    assert wheres("tiingo") == [*feed("tiingo"), *feed("tiingoboats"), *feed("tiingofx"), MAIN]
+    assert wheres("bitfinex") == [*feed("bitfinex"), MAIN]
     # Massive's headlines are in it: what they read is in the main file (declared), their reads in gov.db
     massive = registry.plugin_databases("massive")
-    assert [d.where for d in massive] == ["feeds/massive.db", "feeds/massive-ticks.db", GOV, MAIN]
+    assert [d.where for d in massive] == [*feed("massive"), GOV, NEWS, MAIN]
     assert massive[-1].holds == "its rows by feed: requests a day, events, the reference it gave; Massive headlines: the news"
-    assert massive[2].holds == "the reads' record: requests, robots.txt, rechecks" and massive[2].shared
-    assert all(d.kind == "sqlite" for d in massive)
-    assert wheres("boats") == ["feeds/boats.db", "feeds/boats-ticks.db", MAIN]  # a part's: its own
+    assert massive[3].holds == "the reads' record: requests, robots.txt, rechecks" and massive[3].shared
+    assert [d.kind for d in massive] == ["sqlite", "duckdb", "sqlite", "sqlite", "mongodb", "sqlite"]
+    assert massive[4].holds == "its headlines, when its documents are in MongoDB" and massive[4].shared
+    assert wheres("boats") == [*feed("boats"), MAIN]  # a part's: its own
 
 
 def test_each_publisher_plugin_points_to_its_parts_datasets_and_what_they_read():
     federal = registry.plugin_databases("federal")
     assert [(d.where, d.kind, d.shared) for d in federal] == [
         ("datasets/cftc.db", "sqlite", False), ("sources/datasets/cftc/", "files", False),
-        (GOV, "sqlite", True), (MAIN, "sqlite", True)]
-    assert federal[2].holds == FEDERAL_READ and federal[3].holds == "its fetched files' ledger"
+        (GOV, "sqlite", True), (ITEMS, "mongodb", True), (MAIN, "sqlite", True)]
+    assert federal[2].holds == FEDERAL_READ and federal[4].holds == "its fetched files' ledger"
     assert wheres("cftc") == ["datasets/cftc.db", "sources/datasets/cftc/", MAIN]  # a part's: its own
-    assert wheres("sec") == [GOV]
+    assert wheres("sec") == [GOV, ITEMS]
     assert wheres("datahub") == ["datasets/sp500.db", "sources/datasets/sp500/", "datasets/shiller.db",
                                  "sources/datasets/shiller/", "datasets/imf.db", "sources/datasets/imf/", MAIN]
     french = registry.plugin_databases("french")
@@ -82,7 +91,7 @@ def test_a_file_of_a_plugins_own_is_no_other_plugins_and_every_feed_and_dataset_
     for name in top:
         for d in registry.plugin_databases(name):
             if d.shared:
-                assert d.where in (MAIN, GOV), (name, d)
+                assert d.where in (MAIN, GOV) or d.server, (name, d)
                 continue
             assert d.where not in owner, (d.where, owner.get(d.where), name)
             owner[d.where] = name
@@ -156,7 +165,7 @@ def test_a_plugin_pointing_off_this_machine_or_out_of_the_data_folder_is_left_ou
     assert "no engine 'oracle'" in why["acme-odd"] and "a server's address for a sqlite database" in why["acme-pg"]
     assert "the app's file, every plugin's (declare it shared)" in why["acme-main"]
     assert [(d.where, d.kind) for d in registry.plugin_databases("acme")] == [
-        ("feeds/acme.db", "sqlite"), ("feeds/acme-ticks.db", "sqlite"),
+        ("feeds/acme.db", "sqlite"), ("history/acme/", "duckdb"), ("feeds/acme-ticks.db", "sqlite"),
         ("mongodb://127.0.0.1:27017/massive.filings", "mongodb"), ("acme/closed.duckdb", "duckdb"),
         ("acme/bars.parquet/", "parquet"), (MAIN, "sqlite")]
     assert registry.plugin_databases("acme")[-1].holds == "its rows by feed: requests a day, events, the reference it gave; its rows"
@@ -179,7 +188,7 @@ def test_the_plugins_command_and_view_point_each_plugin_to_its_databases(tmp_pat
     alpaca = next(r for r in out["providers"] if r["name"] == "alpaca")
     assert alpaca["databases"][0] == {"where": "feeds/alpaca.db", "holds": "alpaca: bars", "shared": False, "engine": "sqlite"}
     federal = next(r for r in out["publishers"] if r["name"] == "federal")
-    assert [d["where"] for d in federal["databases"]] == ["datasets/cftc.db", "sources/datasets/cftc/", GOV, MAIN]
+    assert [d["where"] for d in federal["databases"]] == ["datasets/cftc.db", "sources/datasets/cftc/", GOV, ITEMS, MAIN]
 
     main = tmp_path / "massive.db"
     with Store(main, check_same_thread=False) as store:
@@ -191,9 +200,10 @@ def test_the_plugins_command_and_view_point_each_plugin_to_its_databases(tmp_pat
     assert coinbase["databases"][0].pop("bytes") >= 4096  # the file and its log (the store opened it)
     assert coinbase["databases"][0] == {"where": "feeds/coinbase.db", "holds": "coinbase: bars", "shared": False,
                                         "engine": "sqlite", "path": str(tmp_path / "feeds" / "coinbase.db")}
-    assert coinbase["databases"][1]["bytes"] is None  # its trades: none yet
+    assert coinbase["databases"][1]["bytes"] is None  # its closed months in DuckDB: none yet
+    assert coinbase["databases"][2]["bytes"] is None  # its trades: none yet
     pubs = {p["name"]: p for p in view["publishers"]}
-    assert [d["where"] for d in pubs["federal"]["databases"]] == ["datasets/cftc.db", "sources/datasets/cftc/", GOV, MAIN]
+    assert [d["where"] for d in pubs["federal"]["databases"]] == ["datasets/cftc.db", "sources/datasets/cftc/", GOV, ITEMS, MAIN]
     assert pubs["sec"]["databases"] == [] and pubs["massive-news"]["databases"] == []  # a part's: in its plugin's page
     massive = next(p for p in view["plugins"] if p["name"] == "massive")
     assert massive["databases"][-1]["path"] == str(main) and massive["databases"][-1]["shared"]

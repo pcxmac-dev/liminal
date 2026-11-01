@@ -180,7 +180,7 @@ def test_the_publications_thread_lives_through_a_file_that_will_not_open(tmp_pat
     rec = live.Recorder(tmp_path / "m.db", coins=(), publications=object(), log=lambda *_: None)
     opened = []
 
-    def locked(path):
+    def locked(path, main=None):  # as gov.open_db makes one: the file, and the main file's path
         opened.append(path)
         if len(opened) == 2:
             rec.stop.set()

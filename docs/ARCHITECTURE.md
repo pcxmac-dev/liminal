@@ -124,6 +124,51 @@ live recorder, whose "what changed since" read every bar's `stored_at`, had read
   (private bytes, working set) and disk reads, apart from Windows' file cache: active (held) and
   standby (handed back whenever anything needs it, counted as available).
 
+## Stores: SQLite, DuckDB and MongoDB by data type (2026-10-31)
+
+The user, 2026-10-31: "each module needs to support sqlite or mongo or duck db based on data type";
+"lets have a 'store' picker so i can choose manually, but lets try to use the optimal data store for
+the data type". `stores.py` lists each data type's engines, the optimal first, and keeps each
+plugin's pick per data type (the Stores section of its page in the Plugins view, or `stores pick
+PLUGIN TYPE ENGINE|auto`); left to the app, the optimal one installed here.
+
+| Data type | Engines (optimal first) | Where |
+|---|---|---|
+| Bars | DuckDB, SQLite | The open months in `feeds/<feed>.db` (where the feeds write), the closed ones in `history/<feed>/<YYYY-MM>.<n>.duckdb` |
+| Documents | MongoDB, SQLite | gov.db's `items` and the main file's `news`, or the `gov_items` and `news` collections of the `massive` database on the server here |
+| Series | SQLite | `datasets/<file>.db` |
+| Files | Folder | `sources/datasets/<file>/` |
+
+- **Bars in DuckDB** (`storage/history.py`). Measured on Massive's September 2026 (180 million
+  minute and second bars): 22% of SQLite's size, a symbol's month read twice as fast, market-wide
+  scans over 100 times faster. The hourly sync starts `history run` in a process of its own at
+  background priority. It copies each feed's closed months (closed a week, nothing written in them for
+  two days) newest first, at most three a feed, for 20 minutes. Each month is read a series at a time
+  (short reads, so the writers and checkpoints are never held up), written to a new file, checked
+  against what was read (rows, a timestamp checksum, the volume) and entered in the feed's manifest
+  (`history`, in its SQLite file) only if nothing was written in it meanwhile. Reads (`bars_window`,
+  `bar_rows`, `load_bars`) take an archived month from its file, through one in-memory DuckDB per
+  store with the month files attached read-only (256 MB, two threads, twelve months attached at most).
+  A write to an archived month in SQLite (a correction, a rebuild) marks it stale through triggers in
+  the feed's file; it is read from SQLite until it is copied again into a new file. The pruned list
+  and the revisions stay in SQLite, so filtered and as-of reads come out the same; so do the weeks,
+  months and years built from the days (`derive.py` rebuilds them whole, so a symbol's 2003 year
+  bar is written again every hour: archived, no month would ever have closed). The SQLite rows
+  stay ("we should always keep all source data"): freeing them is the user's decision.
+- **Documents in MongoDB** (`mongo.py`, `storage/documents.py`). MongoDB Community Server 9.0.4,
+  approved by the user the same day, is unpacked under `%LOCALAPPDATA%\Programs\MongoDB` with no
+  service. The app starts it when a store uses it, detached, bound to 127.0.0.1 only, with its
+  WiredTiger cache capped at 0.5 GB, its data in `mongo/` and its log in `logs/mongod.log`. A kind of
+  document has the same fields in either engine and answers the same calls, so a plugin's code does
+  not change with its store. A move (`stores.settle`: the hourly sync, or a pick in the view) copies
+  every document, counts them, and only then reads and writes there. Each pass also copies over what
+  a process from before the move still wrote to the old store. The store left keeps its copy, and
+  reads fall back to it while the server does not answer. A read never starts the server (the chart
+  app reads the news every few seconds; a ping's answer is kept three seconds); a write and a move
+  do, and a write while it does not answer goes to the SQLite copy, which the next pass copies over.
+  An agency's items are all kept (until this change only the newest 200 of a source).
+- `history status`, `mongo start|stop|status` and `stores list|pick|settle` show and manage them.
+
 ## Providers are plugins (2026-10-27)
 
 Every data provider the fetcher uses is a plugin: one `Provider` record (`sources/registry.py`)

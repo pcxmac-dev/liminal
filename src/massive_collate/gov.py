@@ -30,15 +30,18 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 from .layout import gov_db
+from .storage.common import seal
 from .sources.publisher import Feed
 
 USER_AGENT = "massive-collate/1 (personal research)"
-KEEP = 200  # items kept per source, newest first
+KEEP = 200  # items the Gov view shows per source, newest first (all are kept: the user's "keep all source data")
+ENGINES_S = 10.0  # each plugin's documents store looked up again after this (stores.py)
 Source = Feed  # a feed an agency publishes (sources/publisher.py)
 
 WAITING = "asks automated readers to identify themselves: set GOV_CONTACT (your name and email) to read it"
@@ -121,15 +124,54 @@ def db_path(main_db: Path | str) -> Path | None:
     return None if str(main_db) == ":memory:" else gov_db(p)
 
 
-class GovDB:
-    """The file of what the agencies published (gov/gov.db)."""
+def open_db(main_db: Path | str) -> "GovDB":
+    """gov.db beside the main database, its items in each plugin's documents store (the main file's)."""
+    return GovDB(db_path(main_db), None if str(main_db) == ":memory:" else Path(main_db))
 
-    def __init__(self, path: Path | None):
+
+class GovDB:
+    """The file of what the agencies published (gov/gov.db). Their items are a plugin's documents:
+    in this file, or on the MongoDB server here once the plugin's documents store moved there
+    (stores.py; `main`: the main file, where that is recorded)."""
+
+    def __init__(self, path: Path | None, main: Path | None = None):
         if path is not None:
             path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(path) if path else ":memory:", check_same_thread=False, timeout=30)
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.executescript(SCHEMA)
+        seal(self.conn)  # read-only (MASSIVE_READONLY): no write from here on
+        self.main = main
+        self._engines_seen: tuple[float, dict] | None = None
+
+    def engines(self) -> dict[str, str]:
+        """Each plugin's documents store in effect, by plugin (only ones moved from SQLite)."""
+        if self.main is None:
+            return {}
+        now = time.monotonic()
+        if self._engines_seen is not None and now - self._engines_seen[0] < ENGINES_S:
+            return self._engines_seen[1]
+        from . import stores
+
+        try:
+            c = sqlite3.connect(f"file:{Path(self.main).as_posix()}?mode=ro", uri=True, timeout=5)
+            try:
+                rows = stores.effects(c)
+            finally:
+                c.close()
+        except sqlite3.Error:
+            rows = {}
+        got = {p: e for p, e in rows.items() if e != "sqlite"}
+        self._engines_seen = (now, got)
+        return got
+
+    def _items_in(self, engine: str) -> list[str]:
+        """The item sources (feeds' keys) whose plugin keeps its documents in `engine`."""
+        from . import stores
+        from .storage.documents import GOV_ITEMS
+
+        return [k for plugin, e in self.engines().items() if e == engine
+                for kind, where in stores.document_scopes(plugin) if kind is GOV_ITEMS for k in where["source"]]
 
     def close(self) -> None:
         self.conn.close()
@@ -148,18 +190,23 @@ class GovDB:
                                modified if modified is not None else prev.get("modified"), ok_at))
 
     def save_items(self, source: str, items: list[dict], now: datetime) -> int:
-        """New items (ones already held keep their row). Returns how many were new."""
-        with self.conn:
-            before = self.conn.total_changes
-            self.conn.executemany(
-                "INSERT OR IGNORE INTO items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [(source, it["id"], it["agency"], it["title"], it.get("url"), it.get("published"), it.get("kind"),
-                  json.dumps(it.get("tags") or []), now.isoformat()) for it in items])
-            new = self.conn.total_changes - before
-            self.conn.execute(  # the newest KEEP of the source
-                "DELETE FROM items WHERE source=? AND id NOT IN (SELECT id FROM items WHERE source=? "
-                "ORDER BY published DESC LIMIT ?)", (source, source, KEEP))
-        return new
+        """New items (ones already held keep theirs), in the source's plugin's documents store. Returns
+        how many were new. Every item is kept (until 2026-10-31 only the newest KEEP of a source)."""
+        from . import stores
+        from .storage.documents import GOV_ITEMS
+
+        plugin = stores.item_plugin(source)
+        engine = self.engines().get(plugin, "sqlite") if plugin else "sqlite"
+        docs = [{"source": source, "id": it["id"], "agency": it["agency"], "title": it["title"],
+                 "url": it.get("url"), "published": it.get("published"), "kind": it.get("kind"),
+                 "tags": it.get("tags") or [], "fetched_at": now.isoformat()} for it in items]
+        if engine == "mongodb":
+            try:
+                return stores.backend("mongodb", GOV_ITEMS, data_dir=Path(self.main).parent if self.main else None,
+                                      start=True).put(docs)
+            except Exception:  # noqa: BLE001 - the server down: this file holds them, the next settle copies them over
+                pass
+        return stores.backend("sqlite", GOV_ITEMS, gov_conn=self.conn).put(docs)
 
     def save_rate(self, series: str, day: str, value: float | None, lo: float | None, hi: float | None,
                   now: datetime) -> None:
@@ -168,12 +215,28 @@ class GovDB:
                               (series, day, value, lo, hi, now.isoformat()))
 
     def items(self, limit: int = 400) -> list[dict]:
+        """The newest items across the agencies, from where each plugin keeps them (MongoDB's from
+        this file's copy while it does not answer: the copy made when they moved, and since)."""
         cols = ("source", "id", "agency", "title", "url", "published", "kind", "tags")
-        out = []
-        for r in self.conn.execute(f"SELECT {', '.join(cols)} FROM items ORDER BY published DESC LIMIT ?", (limit,)):
-            row = dict(zip(cols, r))
-            row["tags"] = json.loads(row["tags"] or "[]")
-            out.append(row)
+        moved = self._items_in("mongodb")
+        sql = f"SELECT {', '.join(cols)} FROM items{{where}} ORDER BY published DESC LIMIT ?"
+        marks = ", ".join("?" * len(moved))
+        out = [dict(zip(cols, r)) for r in self.conn.execute(
+            sql.format(where=f" WHERE source NOT IN ({marks})" if moved else ""), (*moved, limit))]
+        if moved:
+            from . import mongo
+            from .storage.documents import GOV_ITEMS, MongoDocuments
+
+            try:
+                got = [{c: d.get(c) for c in cols} for d in
+                       MongoDocuments(mongo.database(), GOV_ITEMS).find({"source": moved}, limit=limit)]
+            except Exception:  # noqa: BLE001 - the server down: this file's copy of them
+                got = [dict(zip(cols, r)) for r in self.conn.execute(
+                    sql.format(where=f" WHERE source IN ({marks})"), (*moved, limit))]
+            out = sorted(out + got, key=lambda d: d["published"] or "", reverse=True)[:limit]
+        for row in out:
+            if isinstance(row["tags"], str) or row["tags"] is None:
+                row["tags"] = json.loads(row["tags"] or "[]")
         return out
 
     def rate(self, series: str) -> dict | None:

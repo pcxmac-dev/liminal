@@ -195,6 +195,10 @@ class Settings:
     # MASSIVE_OFFLINE=1: nothing is fetched and no recorder starts (a test copy of the app on a
     # scratch database must never spend the real plan's requests: its own ledger would not know them).
     offline: bool = False
+    # MASSIVE_READONLY=1: the data is read, never written (every database connection query-only),
+    # and nothing fetched or started (offline too). The user, 2026-10-31: "lets not have testing
+    # data, lets just safely query the plugins": a test copy of the app on the real data folder.
+    read_only: bool = False
     # The variables the provider plugins declare (their keys, plans and options), as read: a
     # plugin's own settings (sources/registry.py). Keys among them: never in a repr.
     env: Mapping[str, str] = field(default_factory=dict, compare=False, repr=False)
@@ -431,7 +435,9 @@ def load_settings(
         live_coins=_live_coins(merged.get("LIVE_CRYPTO")),
         live_stocks=str(merged.get("LIVE_STOCKS", "on")).strip().lower() not in ("off", "0", "false", "no", "none"),
         live_selected_only=_live_streams(merged.get("LIVE_STREAMS")),
-        offline=str(merged.get("MASSIVE_OFFLINE", "")).strip().lower() in ("1", "true", "yes", "on"),
+        offline=any(str(merged.get(n, "")).strip().lower() in ("1", "true", "yes", "on")
+                    for n in ("MASSIVE_OFFLINE", "MASSIVE_READONLY")),
+        read_only=str(merged.get("MASSIVE_READONLY", "")).strip().lower() in ("1", "true", "yes", "on"),
         bars_only=str(merged.get("BARS_ONLY", "on")).strip().lower() not in ("off", "0", "false", "no", "none"),
         chart_cache_mb=max(64, _default(_int_setting(merged, "CHART_CACHE_MB"), 1024)),
         futures_per_run=_default(_int_setting(merged, "FUTURES_PER_RUN"), 100),

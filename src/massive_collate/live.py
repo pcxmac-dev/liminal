@@ -738,7 +738,7 @@ class Recorder:
         lock = publications.lock_path(self.db_path)
         while not self.stop.is_set():
             try:
-                gdb = gov.GovDB(gov.db_path(self.db_path))
+                gdb = gov.open_db(self.db_path)
                 try:
                     with Store(self.db_path) as store:
                         while not self.stop.is_set():

@@ -27,6 +27,7 @@ class MarketsStore:
         return len(data)
 
     def exchanges(self, source: str | None = None) -> pd.DataFrame:
+        """The exchanges each feed lists (mic_names: each MIC's name)."""
         sql = "SELECT source, id, name, acronym, mic, type, country FROM exchanges"
         params: list = []
         if source:
@@ -107,25 +108,65 @@ class MarketsStore:
             out.setdefault((product, day), []).append((event, ms))
         return [(p, date.fromisoformat(d), ev) for (p, d), ev in out.items()]
 
-    def save_news(self, source: str, items: Iterable[dict]) -> int:
-        rows = [(source, str(i["id"]), int(i["published_ms"]), i["title"], i.get("publisher"), i.get("url"),
-                 json.dumps(i.get("tickers") or [])) for i in items if i.get("id") and i.get("title")]
-        with self.conn:
-            self.conn.executemany("INSERT OR REPLACE INTO news VALUES (?, ?, ?, ?, ?, ?, ?)", rows)
-        return len(rows)
+    # A vendor's headlines are its plugin's documents (stores.py): this file's news, or the MongoDB
+    # server's once the plugin's documents store moved there (store:effect:<plugin>:documents).
+    def _news_docs(self, engine: str, start: bool = False):
+        from .. import stores
+        from .documents import NEWS
 
-    def news(self, source: str | None = None, since_ms: int = 0, limit: int = 60) -> list[dict]:
+        return stores.backend(engine, NEWS, main_conn=self.conn, start=start,
+                              data_dir=None if str(self.path) == ":memory:" else self.path.parent)
+
+    def _news_moved(self) -> list[str]:
+        from .. import stores
+
+        return stores.moved_to(self.conn, "mongodb")
+
+    def save_news(self, source: str, items: Iterable[dict]) -> int:
+        docs = [{"source": source, "id": str(i["id"]), "published_ms": int(i["published_ms"]), "title": i["title"],
+                 "publisher": i.get("publisher"), "url": i.get("url"), "tickers": i.get("tickers") or []}
+                for i in items if i.get("id") and i.get("title")]
+        if source in self._news_moved():
+            try:
+                return self._news_docs("mongodb", start=True).put(docs, replace=True)
+            except Exception:  # noqa: BLE001 - the server down: this file holds them, the next settle copies them over
+                pass
+        return self._news_docs("sqlite").put(docs, replace=True)
+
+    def _news_here(self, sources: list[str] | None, out_of: list[str], since_ms: int, limit: int) -> list[dict]:
         sql = "SELECT source, id, published_ms, title, publisher, url, tickers FROM news WHERE published_ms >= ?"
         params: list = [since_ms]
-        if source:
-            sql += " AND source=?"
-            params.append(source)
+        if sources is not None:
+            sql += f" AND source IN ({', '.join('?' * len(sources))})"
+            params += sources
+        if out_of:
+            sql += f" AND source NOT IN ({', '.join('?' * len(out_of))})"
+            params += out_of
         rows = self.conn.execute(sql + " ORDER BY published_ms DESC LIMIT ?", params + [limit]).fetchall()
         return [{"source": s, "id": i, "published_ms": t, "title": ti, "publisher": p, "url": u,
                  "tickers": json.loads(tk or "[]")} for s, i, t, ti, p, u, tk in rows]
 
+    def news(self, source: str | None = None, since_ms: int = 0, limit: int = 60) -> list[dict]:
+        """The newest headlines (of one source, or all), from where each plugin keeps them (MongoDB's
+        from this file's copy while it does not answer)."""
+        moved = self._news_moved()
+        there = [s for s in ([source] if source else moved) if s in moved]
+        out = [] if source and there else self._news_here([source] if source else None, moved, since_ms, limit)
+        if there:
+            try:
+                got = self._news_docs("mongodb").find({"source": there}, since=since_ms, limit=limit)
+            except Exception:  # noqa: BLE001 - the server down: this file's copy of them
+                got = self._news_here(there, [], since_ms, limit)
+            out = sorted(out + got, key=lambda d: d["published_ms"], reverse=True)[:limit]
+        return out
+
     def latest_news_ms(self, source: str) -> int | None:
-        return self.conn.execute("SELECT MAX(published_ms) FROM news WHERE source=?", (source,)).fetchone()[0]
+        if source in self._news_moved():
+            try:
+                return self._news_docs("mongodb").newest({"source": source})
+            except Exception:  # noqa: BLE001 - the server down: this file's copy
+                pass
+        return self._news_docs("sqlite").newest({"source": source})
 
     def save_proxy_closes(self, source: str, day: date, closes: dict[str, float]) -> int:
         with self.conn:
@@ -156,3 +197,15 @@ class MarketsStore:
                                              (source, d.isoformat())).fetchall()) for d in days)
         return {t: {"day": days[1].isoformat(), "close": c, "changePct": (c / prev[t] - 1) * 100}
                 for t, c in last.items() if prev.get(t)}
+
+
+def mic_names(exchanges: pd.DataFrame) -> dict[str, str]:
+    """Each market identifier's name: its exchange's own. A tape shares its operator's MIC (Massive lists
+    the Consolidated Tape Association under XNYS and the Unlisted Trading Privileges plan under XNAS),
+    and was shown for every NYSE stock (the user, 2026-10-31: "is this the right corp name ?"), so an
+    entry of type exchange comes first; among those, the first source's (alphabetical)."""
+    best: dict[str, tuple] = {}
+    for r in exchanges.itertuples():
+        if r.mic and (r.mic not in best or (r.type == "exchange" and best[r.mic][1] != "exchange")):
+            best[r.mic] = (r.name, r.type)
+    return {mic: name for mic, (name, _) in best.items()}
