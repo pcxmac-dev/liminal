@@ -137,6 +137,14 @@ class DatasetStore:
                 (name, url, size, values, _now(), int(closed), sha256,
                  version_at.isoformat() if version_at else None, origin, local_path))
 
+    def dataset_local_paths(self) -> list[tuple[str, str, str | None]]:
+        """(dataset, url, local_path) of every file version in the ledger."""
+        return self.conn.execute("SELECT dataset, url, local_path FROM dataset_files ORDER BY dataset, url").fetchall()
+
+    def set_dataset_local_path(self, name: str, url: str, local_path: str | None) -> None:
+        with self.conn:
+            self.conn.execute("UPDATE dataset_files SET local_path=? WHERE dataset=? AND url=?", (local_path, name, url))
+
     def clear_dataset_files(self, name: str) -> None:
         with self.conn:
             self.conn.execute("DELETE FROM dataset_files WHERE dataset=?", (name,))

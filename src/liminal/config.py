@@ -69,10 +69,15 @@ RENAMED = {f"LIMINAL_{n}": f"MASSIVE_{n}"
            for n in ("DB", "OFFLINE", "READONLY", "REFRESH_HOURS", "LIVE_LOCK", "MONGO_PORT", "DATA_REPOS")}
 
 
+def renamed(mapping: Mapping[str, str], name: str) -> str | None:
+    """A setting's value from `mapping` by its name, or by the one it had before the rename (RENAMED)."""
+    return mapping.get(name) or mapping.get(RENAMED.get(name, ""))
+
+
 def setting(name: str) -> str | None:
     """An app setting read from the process's environment alone, not through Settings (the live
     lock, the data repositories, MongoDB's port): by its name, or the one it had before the rename."""
-    return os.environ.get(name) or os.environ.get(RENAMED.get(name, ""))
+    return renamed(os.environ, name)
 
 
 @dataclass(frozen=True)
@@ -276,12 +281,21 @@ def load_settings(
     if env is None:
         merged.update(saved_user_keys())  # the process's own environment still wins
     merged.update(os.environ if env is None else env)
-    for name, old in RENAMED.items():  # the app's settings under their old names
-        if name not in merged and old in merged:
-            merged[name] = merged[old]
-    from .sources.registry import providers  # when called, not on import: the registry imports the plugins
+    for name in RENAMED:  # the app's settings under their old names
+        if name not in merged and (old := renamed(merged, name)) is not None:
+            merged[name] = old
+    from .sources.registry import leave_out, providers  # when called, not on import: the registry imports the plugins
 
-    plugins = {name: p.settings(merged) for name, p in providers().items() if p.settings}  # their own (API 1.11)
+    plugins = {}  # the plugins' own settings (API 1.11), by feed
+    for name, p in list(providers().items()):
+        if p.settings is None:
+            continue
+        try:
+            plugins[name] = p.settings(merged)
+        except ConfigError:
+            raise  # a value of yours it refuses: stops the app, as any setting's does
+        except Exception as e:  # noqa: BLE001 - the plugin's own failure: left out and reported, never fatal
+            leave_out(name, f"its settings failed ({type(e).__name__}: {e})")
 
     refresh = _float_setting(merged, "LIMINAL_REFRESH_HOURS")  # hours, fractions too (0.5)
     from .sources.registry import variables

@@ -757,6 +757,21 @@ def reload() -> dict[str, Provider]:
         return providers()
 
 
+def leave_out(name: str, why: str) -> None:
+    """A plugin found unusable after loading (its settings builder raised: config.load_settings) is
+    left out as one that fails to load is: it and the feeds part of it go from providers(), its
+    publishers from publishers(), and the cause into errors()."""
+    with _lock:
+        p = providers().get(name)
+        if p is None:
+            return
+        for feed in plugin_feeds(name):
+            _providers.pop(feed, None)
+        for pub in [n for n, q in _publishers.items() if name in (q.part_of, q.account)]:
+            _publishers.pop(pub)
+        _errors.append((p.origin, f"{name}: {why}"))
+
+
 def get(name: str) -> Provider | None:
     return providers().get(name)
 

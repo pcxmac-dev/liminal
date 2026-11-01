@@ -49,7 +49,7 @@ from typing import Iterator
 import requests
 
 from . import config
-from .layout import downloads
+from .layout import SOURCES, downloads
 from .sources.dataset import ET, Dataset, Parsed  # noqa: F401 - Parsed: the stores' and tests' import
 
 USER_AGENT = "liminal/1 (personal research; historical archive)"
@@ -140,6 +140,7 @@ def fetch(store, names: list[str] | None = None, today: date | None = None, forc
     session = session or requests.Session()
     started = {n for n in declared() if store.dataset_files(n)}
     upgrade_legacy(store, log)
+    relink_local_paths(store, log)
     done = {}
     known = declared()
     for name in names or list(known):
@@ -203,6 +204,49 @@ def _keep(store, ds: Dataset, file: str, blob: bytes, sha: str) -> Path | None:
     return dest
 
 
+def _relative(store, local: Path | None) -> str | None:
+    """A kept download's path as the ledger records it: relative to the data folder, posix-style (the
+    folder can move: it did when the project was renamed, and a path recorded absolute pointed nowhere)."""
+    return local.relative_to(store.datasets_dir.parent).as_posix() if local else None
+
+
+def local_file(store, url: str, local_path: str | None) -> Path | None:
+    """Where a ledger row's kept file is: its path relative to the data folder, or to REPOS for the
+    commit of a GitHub dataset (a `git:` url); one recorded absolute (before 2026-11-01) as it is."""
+    if not local_path:
+        return None
+    p = Path(local_path)
+    if p.is_absolute():
+        return p
+    if url.startswith("git:"):
+        return REPOS / p
+    return store.datasets_dir.parent / p if store.datasets_dir is not None else None
+
+
+def relink_local_paths(store, log=print) -> int:
+    """The ledger's kept-file paths recorded absolute (before 2026-11-01) made relative, so the data
+    folder and the repositories can move (the rename moved both): a download's by its place under
+    sources/datasets/, a commit's by its dataset's repository and file. Returns the rows changed."""
+    marker = tuple(SOURCES.split("/"))
+    known, n = declared(), 0
+    for name, url, lp in store.dataset_local_paths():
+        if not lp or not Path(lp).is_absolute():
+            continue
+        if url.startswith("git:"):
+            ds = known.get(name)
+            rel = f"{ds.git[0]}/{ds.git[1]}" if ds is not None and ds.git else None
+        else:
+            parts = Path(lp).parts
+            at = next((i for i in range(len(parts) - 1) if parts[i:i + 2] == marker), None)
+            rel = "/".join(parts[at:]) if at is not None else None
+        if rel:
+            store.set_dataset_local_path(name, url, rel)
+            n += 1
+    if n:
+        log(f"datasets: {n} kept files' paths made relative to the data folder")
+    return n
+
+
 def _fetch_files(store, ds: Dataset, today: date, force: bool, session, log) -> int:
     name, n = ds.name, 0
     single = len(ds.files(today)) == 1  # a file holding the whole dataset: what it drops is withdrawn
@@ -248,7 +292,7 @@ def _fetch_files(store, ds: Dataset, today: date, force: bool, session, log) -> 
                                             first_rule=ds.published if prev is None else None,
                                             withdraw=single and prev is not None)
         store.set_dataset_file(name, url, len(blob), _changed(counts), closed=final, sha256=sha, version_at=version,
-                               origin=sha, local_path=str(local) if local else None)
+                               origin=sha, local_path=_relative(store, local))
         _quality_prior(store, ds)
         log(f"{name}: {file} ({len(blob) / 1e6:.2f} MB, published {version:%Y-%m-%d}): {_describe(counts)}"
             + ("; final, closed" if final else ""))
@@ -358,12 +402,12 @@ def fetch_git(store, ds: Dataset, today: date, force: bool = False, log=print, u
         url = f"git:{ds.git[0]}@{sha}"
         if not parsed.values and not parsed.constituents:
             store.set_dataset_file(ds.name, url, len(blob), 0, closed=True, version_at=t, origin=sha,
-                                   local_path=str(repo / path))
+                                   local_path=f"{ds.git[0]}/{path}")
             continue
         counts = store.save_dataset_version(ds.provider, ds.name, parsed, _ms_dt(t), sha,
                                             first_rule=ds.published if not seen and n == 0 else None, withdraw=True)
         store.set_dataset_file(ds.name, url, len(blob), _changed(counts), closed=True, version_at=t, origin=sha,
-                               local_path=str(repo / path))
+                               local_path=f"{ds.git[0]}/{path}")
         totals = {k: totals[k] + counts[k] for k in totals}
         n += 1
     if commits:

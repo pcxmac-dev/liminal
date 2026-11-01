@@ -277,10 +277,38 @@ def test_downloads_are_kept_with_their_checksum_and_dated_by_last_modified(tmp_p
         fetch(store, ["french-3-factors-daily"], today=TODAY, session=session, log=lambda *_: None)
         f = next(iter(store.dataset_files("french-3-factors-daily").values()))
         assert f["version_at"] == datetime(2026, 10, 15, 14, tzinfo=timezone.utc) and len(f["sha256"]) == 64
-        assert Path(f["local_path"]).exists() and Path(f["local_path"]).parent == tmp_path / "sources" / "datasets" / "french"
+        # recorded relative to the data folder (it can move), the file named by its checksum
+        assert not Path(f["local_path"]).is_absolute() and f["local_path"].startswith("sources/datasets/french/") \
+            and f["sha256"][:12] in f["local_path"]
+        kept = datasets.local_file(store, next(iter(store.dataset_files("french-3-factors-daily"))), f["local_path"])
+        assert kept.exists() and kept.parent == tmp_path / "sources" / "datasets" / "french"
         lines = []
         fetch(store, ["french-3-factors-daily"], today=TODAY, session=session, log=lines.append, force=True)
         assert any("unchanged" in l for l in lines)  # the same bytes: no new version
+
+
+def test_kept_files_recorded_absolute_are_made_relative(tmp_path):
+    """Before 2026-11-01 the ledger held absolute paths, and the rename moved the data folder and the
+    repositories from under them: a download's is relinked by its place under sources/datasets/, a
+    commit's by its dataset's repository and file; one already relative is left alone."""
+    shiller = datasets.declared()["shiller-us-market-monthly"]
+    old_data, old_repos = tmp_path / "MassiveData", tmp_path / "source" / "massive" / "data" / "github"
+    with Store(tmp_path / "m.db") as store:
+        store.set_dataset_file("french-3-factors-daily", "https://x/F.zip", 1, 1, sha256="a" * 64,
+                               local_path=str(old_data / "sources" / "datasets" / "french" / "F.aaaaaaaaaaaa.CSV"))
+        store.set_dataset_file("french-3-factors-daily", "https://x/G.zip", 1, 1, local_path="sources/datasets/french/G.csv")
+        store.set_dataset_file(shiller.name, f"git:{shiller.git[0]}@abc", 1, 1, closed=True,
+                               local_path=str(old_repos / shiller.git[0] / shiller.git[1]))
+        assert datasets.relink_local_paths(store, log=lambda *_: None) == 2
+        files = store.dataset_files("french-3-factors-daily")
+        assert files["https://x/F.zip"]["local_path"] == "sources/datasets/french/F.aaaaaaaaaaaa.CSV"
+        assert files["https://x/G.zip"]["local_path"] == "sources/datasets/french/G.csv"
+        commit = store.dataset_files(shiller.name)[f"git:{shiller.git[0]}@abc"]["local_path"]
+        assert commit == f"{shiller.git[0]}/{shiller.git[1]}"
+        assert datasets.local_file(store, "git:x@abc", commit) == datasets.REPOS / commit
+        assert datasets.local_file(store, "https://x/G.zip", "sources/datasets/french/G.csv") == \
+            tmp_path / "sources" / "datasets" / "french" / "G.csv"
+        assert datasets.relink_local_paths(store, log=lambda *_: None) == 0  # done once
 
 
 def _git_repo(root, commits):
