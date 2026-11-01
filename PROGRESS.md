@@ -9,13 +9,15 @@ Working notes so work can resume in a fresh session. Newest first.
   `liminal-plugin-coinbase` 1.3.0 and `liminal-plugin-bitfinex` 1.2.0 (`sources.archive.venue_view`
   reads a plugin's plan and caps from its record), `liminal-plugin-tiingo` 1.4.0 (its forex and its
   Blue Ocean poller; plugin API 1.10: `sources.stream.session_at`, `sources.registry.MachineLedger`;
-  `config.PUBLIC_FEEDS` and the `tiingo_api_key` setting are gone, a plugin's key is in `Settings.env`);
+  `config.PUBLIC_FEEDS` and the `tiingo_api_key` setting are gone, a plugin's key is in `Settings.env`),
+  the dataset libraries `liminal-plugin-french` 1.1.0 and `liminal-plugin-datahub` 1.1.0 (the mirrors'
+  submodules stay in `data/github/`);
   each a public repository under pcxmac-dev, installed from its tag by the `plugins` extra, its
   clone beside the app's installed editable here. The app's suite now runs with the packages
   installed (`tests/conftest.py`; CI installs `.[dev,plugins]`), their records its fixtures; a
-  plugin's own parsing tests live in its repository. Next, in this order: french, datahub, federal,
-  alpaca (with Blue Ocean), massive (with its headlines). The recipe: docs/ARCHITECTURE.md,
-  "Splitting the built-ins into packages".
+  plugin's own parsing tests live in its repository. Next, in this order: federal, alpaca (with Blue
+  Ocean), massive (with its headlines). The recipe: docs/ARCHITECTURE.md, "Splitting the built-ins
+  into packages".
 
 ## Renamed liminal (2026-11-01)
 

@@ -53,9 +53,13 @@ def test_every_datasets_files_are_on_its_plugins_hosts():
 
 
 def _library(monkeypatch, pub: Publisher):
-    """An installed plugin; the registry looks again (built-ins and this one)."""
+    """An installed plugin beside the real packages (the dataset libraries are packages now); the
+    registry looks again (the built-ins, the packages installed, and this one)."""
+    from importlib.metadata import entry_points
+
+    real = list(entry_points(group=registry.ENTRY_POINTS))
     ep = SimpleNamespace(name=pub.name, value=f"pkg:{pub.name}", load=lambda: pub)
-    monkeypatch.setattr(registry, "_entry_points", lambda: [ep])
+    monkeypatch.setattr(registry, "_entry_points", lambda: [*real, ep])
     registry.reload()
 
 
@@ -103,7 +107,7 @@ def test_a_second_plugin_never_takes_a_datasets_name_or_file(monkeypatch, restor
     same_file = Dataset("my-own", "Mine", "", lambda t: [], lambda u, b: Parsed(), 7, "french", "research")
     for ds in (same_name, same_file):
         _library(monkeypatch, Publisher("copycat", "Copycat", "", (), Policy(hosts=("copy.example",)), api="1.4",
-                                        datasets=(ds,)))
+                                        datasets=(ds,), order=999))  # after the libraries (packages too): the first keeps the name
         assert "copycat" not in publishers()
         assert any("copycat" in why for _, why in registry.errors())
         assert datasets.DATASETS["cftc-cot-legacy"].publisher == "cftc"

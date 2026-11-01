@@ -6,7 +6,7 @@ A module in `sources/plugins/` defines `PUBLISHER` (a Publisher; `PUBLISHERS` fo
 or instead of a feed's `PLUGIN`: the federal agencies are parts of one plugin (plugins/federal/, a
 module each: fed.py, sec.py ...; `part_of`), a vendor's headlines sit in its feed's module
 (massive.py), its requests on that feed's account, and a library of datasets is a publisher with no
-feeds (french.py, datahub.py; the CFTC's in Federal).
+feeds (the French and Datahub packages; the CFTC's in Federal).
 
 Each declares its scrape checks (`Policy`), which the reader enforces before every request:
 - only the hosts it names, over HTTPS, and never a blocked site (publications.BLOCKED_HOSTS: the

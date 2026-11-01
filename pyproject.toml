@@ -31,6 +31,8 @@ plugins = [
     "liminal-plugin-coinbase @ git+https://github.com/pcxmac-dev/liminal-plugin-coinbase@v1.3.0",
     "liminal-plugin-bitfinex @ git+https://github.com/pcxmac-dev/liminal-plugin-bitfinex@v1.2.0",
     "liminal-plugin-tiingo @ git+https://github.com/pcxmac-dev/liminal-plugin-tiingo@v1.4.0",
+    "liminal-plugin-french @ git+https://github.com/pcxmac-dev/liminal-plugin-french@v1.1.0",
+    "liminal-plugin-datahub @ git+https://github.com/pcxmac-dev/liminal-plugin-datahub@v1.1.0",
 ]
 
 [project.scripts]

@@ -58,7 +58,7 @@ NOW = datetime(2026, 10, 26, 6, 0, tzinfo=timezone.utc)
 def test_each_agency_is_a_publisher_of_its_own_and_massives_headlines_sit_in_its_module():
     pubs = publishers()
     assert {"fed", "nyfed", "sec", "bls", "fedreg", "massive-news"} <= set(pubs)
-    assert all(p.origin == "built in" for p in pubs.values())
+    assert all(p.origin == "built in" or p.origin.startswith("package: liminal-plugin-") for p in pubs.values())
     assert pubs["massive-news"].kind == "vendor" and pubs["massive-news"].account == "massive"
     assert "fed" not in providers() and "massive" in providers()  # publishers are not feeds
     keys = [f.key for p in pubs.values() for f in p.feeds]

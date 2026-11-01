@@ -458,14 +458,18 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
      1.4.0 (2026-11-01, its forex feed and its Blue Ocean poller with it: API 1.10 gives a poller
      the session calendar (`sources.stream.session_at`) and a plugin the machine-wide ledger
      (`sources.registry.MachineLedger`); its key read from `Settings.env`, the app's
-     `tiingo_api_key` field and `config.PUBLIC_FEEDS` gone).
+     `tiingo_api_key` field and `config.PUBLIC_FEEDS` gone); the dataset libraries
+     `liminal-plugin-french` 1.1.0 and `liminal-plugin-datahub` 1.1.0 (2026-11-01; Datahub's
+     mirrors' git submodules stay in the app's `data/github/`, where `LIMINAL_DATA_REPOS` points:
+     the plugin names each repository and file).
 
   The repositories it would make, under `pcxmac-dev`: `liminal-plugin-massive` (Massive and its
   headlines publisher, on its key), `liminal-plugin-alpaca` (Alpaca with its overnight feed on Blue
   Ocean, reached through Alpaca's API, keys and limits), `liminal-plugin-tiingo` (Tiingo with its
   forex feed: one key and account; made), `liminal-plugin-coinbase` (made), `liminal-plugin-bitstamp` (made),
   `liminal-plugin-bitfinex` (made), `liminal-plugin-cboe` (made), and the publishers `liminal-plugin-federal`
-  (the federal agencies, one plugin) and, later, a state regulators' plugin of its own.
+  (the federal agencies, one plugin), the dataset libraries `liminal-plugin-french` (made) and
+  `liminal-plugin-datahub` (made), and, later, a state regulators' plugin of its own.
 
 ## The Federal plugin (2026-10-30)
 

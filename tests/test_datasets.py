@@ -12,11 +12,11 @@ import requests
 from liminal import datasets
 from liminal.datasets import DATASETS, due_files, fetch, status
 from liminal.sources import dataset as sdk
-from liminal.sources.plugins import datahub, french
 from liminal.sources.plugins.federal import cftc
 from liminal.sources.plugins.federal.cftc import parse_cot
-from liminal.sources.plugins.french import parse_french
 from liminal.storage import Store
+
+import liminal_plugin_french as french  # the library's URL: its package's
 
 TODAY = date(2026, 10, 23)
 
@@ -44,27 +44,6 @@ The Tbill return is the simple daily rate.
 19260706,  -99.99,    0.12,   -0.11,    0.01
 
 Copyright 2026 Kenneth R. French
-"""
-
-FRENCH_MONTHLY = """This file was created by CMPT_ME_BEME_RETS using the 202608 CRSP database.
-
-,Mkt-RF,SMB,HML,RF
-192607,    2.89,   -2.55,   -2.39,    0.22
-192608,    2.64,   -1.14,    3.81,    0.25
-
- Annual Factors: January-December
-,Mkt-RF,SMB,HML,RF
-1927,   29.47,   -2.04,   -3.81,    3.12
-"""
-
-INDUSTRIES = """  Average Equal Weighted Returns -- Daily
-,Agric,Food ,Soda
-19260701,    9.99,    9.99,    9.99
-
-  Average Value Weighted Returns -- Daily
-,Agric,Food ,Soda
-19260701,    0.56,   -0.12,  -99.99
-19260702,    1.20,    0.34,    0.10
 """
 
 COT_HEADER = ("Market and Exchange Names,As of Date in Form YYMMDD,As of Date in Form YYYY-MM-DD,"
@@ -125,20 +104,6 @@ def _web(url: str):
                           b"AAPL,Apple Inc.,Information Technology,Technology Hardware,Cupertino,1982-11-30,0000320193,1977\n"
                           b"JPM,JPMorgan Chase,Financials,Diversified Banks,New York,1975-06-30,0000019617,2000\n")
     return requests.ConnectionError("unreachable")
-
-
-def test_french_tables():
-    daily = parse_french("x.CSV", FRENCH_DAILY.encode())
-    assert daily.series["Mkt-RF"] == ("Mkt-RF", "%", "day")
-    mkt = [(ts, v) for s, ts, v in daily.values if s == "Mkt-RF"]
-    assert [v for _, v in mkt] == [0.10, 0.45]  # -99.99 is the library's missing value
-    assert mkt[0][0] == int(datetime(1926, 7, 1, 4, tzinfo=timezone.utc).timestamp() * 1000)  # ET midnight
-    monthly = parse_french("x.CSV", FRENCH_MONTHLY.encode())
-    assert {s: f for s, (_, _, f) in monthly.series.items()} == {"Mkt-RF": "month", "SMB": "month", "HML": "month", "RF": "month"}
-    assert len(monthly.values) == 8  # the annual table after it is left out
-    vw = parse_french("x.CSV", INDUSTRIES.encode(), section="Average Value Weighted Returns")
-    assert sorted(vw.series) == ["Agric", "Food", "Soda"]
-    assert ("Agric", vw.values[0][1], 0.56) in vw.values and not any(v == 9.99 for *_, v in vw.values)
 
 
 def test_cot_series_per_market_and_field():
@@ -204,13 +169,6 @@ def test_due_files_force_skips_closed(store):
     assert due_files(store, ds, TODAY, force=True) == [(cftc.CFTC + "deacot2026.zip", False)]
     with pytest.raises(ValueError):
         store.save_dataset_version("../x", "x", datasets.Parsed(), 0, "test")
-
-
-def test_commodities_skip_missing_cells():
-    parsed = datahub.parse_commodities("c.csv", b"Date,All Commodity Price Index,Gold\n1980-02-01,nan,35.2\n"
-                                                 b"1980-03-01,101.5,\n")
-    assert sorted((s, v) for s, _, v in parsed.values) == [("All Commodity Price Index", 101.5), ("Gold", 35.2)]
-    assert parsed.series["Gold"][1] == "USD (nominal)" and parsed.series["All Commodity Price Index"][1] == "index (2005 = 100)"
 
 
 def test_shiller_zeros_are_missing_and_what_a_new_version_drops_is_withdrawn(store):
@@ -393,12 +351,6 @@ def test_values_stored_before_versioning_are_carried_over(tmp_path):
         assert [v["value"] for v in got] == [400000.0]
         assert got[0]["available_at"] <= cftc.cot_published(sdk.at(date(2026, 10, 20)))
         assert store.dataset_legacy("cftc") == ([], [])
-
-
-def test_shiller_dates_in_every_format_the_files_have_used():
-    d = datahub.shiller_date
-    assert [d("2026-09-01"), d("1871.01"), d("1871.1"), d("1871.04166"), d("1871.95833")] == [
-        date(2026, 9, 1), date(1871, 1, 1), date(1871, 10, 1), date(1871, 1, 1), date(1871, 12, 1)]
 
 
 def test_cot_markets_still_reported_first_then_by_open_interest():

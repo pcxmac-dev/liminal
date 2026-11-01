@@ -196,7 +196,7 @@ def test_every_plugin_is_versioned_for_this_apps_contract():
             **dict.fromkeys(("massive", "massive-news"), ("1.3.0", "1.8")),
             **{n: (v, a) for n, (v, a, _) in PACKAGED.items()},  # the packages: their distributions' versions
             **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("1.3.0", "1.7")),
-            "french": ("1.0.0", "1.4"), "datahub": ("1.0.0", "1.4")}
+            "french": ("1.1.0", "1.4"), "datahub": ("1.1.0", "1.4")}  # the dataset libraries: packages too
     assert {p.name: (p.version, p.api) for p in plugins_} == want
     assert all(registry.api_refusal(p.api) is None for p in plugins_)
     assert registry.PLUGIN_API == "1.10"
@@ -338,7 +338,7 @@ def test_the_plugins_view_shows_each_plugins_version_and_origin(tmp_path):
     assert {(p["version"], p["api"], p["origin"]) for p in out["plugins"]} == {
         ("1.3.0", "1.6", "built in"), ("1.3.0", "1.8", "built in"),
         *((v, a, f"package: liminal-plugin-{registry.plugin_of(n)} ({e})") for n, (v, a, e) in PACKAGED.items())}
-    assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.3.0", "1.7"), ("1.3.0", "1.8"), ("1.0.0", "1.4")}
+    assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.3.0", "1.7"), ("1.3.0", "1.8"), ("1.1.0", "1.4")}
 
 
 def test_unknown_providers_are_refused_by_name():
