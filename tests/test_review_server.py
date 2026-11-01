@@ -228,8 +228,9 @@ def test_the_status_answer_is_kept_once_per_feed_for_known_feeds(store, monkeypa
             assert app.activity({"source": source, "lines": lines})["source"] in ("massive", "alpaca")
     assert set(app._activity) == {"massive", "alpaca"}  # free text made no entries of its own
     assert {s for s, _, _ in made} == {"massive", "alpaca"} and all(1 <= n <= 1000 for _, n, _ in made)
-    monkeypatch.setattr(server_module, "ACTIVITY_TTL_S", 0.0)
-    time.sleep(0.01)
+    # a negative TTL: every kept answer is past its time at once (0.0 and a 10 ms sleep were not enough on
+    # Windows with Python 3.12, whose monotonic clock moves in 15.6 ms steps: the answer stayed, CI saw it)
+    monkeypatch.setattr(server_module, "ACTIVITY_TTL_S", -1.0)
     app.activity({"source": "massive"})
     assert set(app._activity) == {"massive"}  # the expired one dropped
 
