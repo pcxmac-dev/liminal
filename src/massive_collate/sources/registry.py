@@ -48,6 +48,7 @@ from typing import TYPE_CHECKING, Callable, Iterable, Mapping
 from .. import layout
 from ..layout import MAIN, Database  # noqa: F401 - plugins import them from here
 from ..ratelimit import MachineLedger, RateLimiter
+from .fetching import Fetched, FetchContext, Fetcher, Job  # noqa: F401 - plugins import them from here
 from .keys import KeyVar  # noqa: F401 - plugins import it from here
 from .publisher import Publisher
 from .stream import Live
@@ -81,7 +82,10 @@ DEFAULT_PER_REQUEST = 1000  # bars a request returns, for a provider that does n
 # 1.8 (2026-10-31): the databases a plugin's data is in (layout.Database: plugin_databases), and
 #   Provider.databases, Publisher.databases: any its own code writes besides the standard ones (a
 #   SQLite, DuckDB or Parquet file in the data folder, or a MongoDB collection on this machine).
-PLUGIN_API = "1.8"
+# 1.9 (2026-10-31): a plugin's own fetching (sources/fetching.py: Fetcher, Job, Fetched,
+#   FetchContext; Provider.fetcher, Publisher.fetcher): its jobs on the shared fetch queue
+#   (storage/queue.py), taken by a worker of its own (runner.py).
+PLUGIN_API = "1.9"
 
 
 def api_version(api) -> tuple[int, int]:
@@ -243,6 +247,8 @@ class Provider:
     partial: bool = False
     # databases its own code writes besides its feeds' files (API 1.8; layout.Database): none built in
     databases: tuple[Database, ...] = ()
+    # its own fetching (API 1.9; sources/fetching.py); None: fetched by the app's bars sync
+    fetcher: Fetcher | None = None
     # Callbacks (None: the default described at each method).
     view: Callable[["Settings"], "Settings"] | None = None
     rate: Callable[["Settings"], tuple[int | None, float]] | None = None
@@ -759,6 +765,19 @@ def plugin_feeds(name: str) -> list[str]:
 
 def _and(names: list[str]) -> str:
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def plugin_fetchers() -> dict[str, list[tuple[str, Fetcher]]]:
+    """The plugins that fetch on their own (API 1.9), by plugin: each (part, its Fetcher), its own and
+    its feeds' and publishers' (a part's jobs are its plugin's, taken by its plugin's worker)."""
+    out: dict[str, list[tuple[str, Fetcher]]] = {}
+    for n, p in providers().items():
+        if p.fetcher is not None:
+            out.setdefault(plugin_of(n), []).append((n, p.fetcher))
+    for n, p in publishers().items():
+        if p.fetcher is not None:
+            out.setdefault(publisher_of(n), []).append((n, p.fetcher))
+    return out
 
 
 def plugin_databases(name: str) -> list[Database]:

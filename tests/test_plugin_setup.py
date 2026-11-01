@@ -138,7 +138,7 @@ def test_the_page_sets_each_plugin_up_and_shows_headlines_in_massives_page():
     assert "window.confirm(`Remove ${t.dataset.removeKey}" in js
     assert "const typed = [...box.querySelectorAll('input.pl-key')]" in js  # typing survives the refreshes
     assert "${pubs.map((q) => partHtml(q, pubs.length === 1)).join('')}" in js  # a section, open when alone
-    assert "function publishersHtml(p)" in js and "function parentOf(p)" in js and "${pubSetupHtml(p)}${readsHtml(p)}" in js
+    assert "function publishersHtml(p)" in js and "function parentOf(p)" in js and "${pubSetupHtml(p)}${fetchingHtml(p.name)}${readsHtml(p)}" in js
     css = (STATIC / "style.css").read_text(encoding="utf-8")
     assert ".pl-setup input.pl-key {" in css
 

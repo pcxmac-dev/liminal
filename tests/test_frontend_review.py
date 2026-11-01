@@ -247,7 +247,8 @@ def test_the_now_handle_drag_ends_however_the_pointer_goes():
 
 
 def test_values_reaching_html_are_escaped():
-    assert '<span class="state ${esc(s.state)}">' in _js("activity.js")
+    assert "<td class=\"sub\">${esc(r.error || r.detail || '')}</td>" in _js("activity.js")  # the queue's text
+    assert "${esc(Q_LABEL[r.state] || r.state)}</span>" in _js("activity.js")
     assert "${esc(o.status)} ${esc(fmtTime(o.done_at))}" in _js("trading.js")
     schemes = _js("schemes.js")
     assert 'min="${esc(p.lo)}" max="${esc(p.hi)}" step="${esc(p.step)}"' in schemes
@@ -606,8 +607,8 @@ def test_the_page_names_a_feed_on_a_plugins_keys_by_that_plugin():
     assert "`feed: ${m.feeds.map(feedLabel).join(' > ')}" in app
     act = _js("activity.js")
     assert "const label = (source) => (typeof feedLabel === 'function' ? feedLabel(source) : source);" in act
-    for spot in ("<b>${esc(label(l.source))}</b>", "${esc(label(f.name))}${f.closed", "<b>${esc(label(src))}</b>",
-                 "<b>${esc(label(r.source))}</b>", "(${esc(label(live.source))})"):
+    for spot in ("<b>${esc(label(src))}</b>", "<b>${esc(label(r.source))}</b>", "(${esc(label(live.source))})"):
         assert spot in act, spot
+    assert "<b>${esc(label(l.source))}</b>" in _js("plugins.js")  # its limits, on its page
     assert "(d.feeds || []).map((f) => (typeof feedLabel === 'function' ? feedLabel(f) : f)).join(' > ')" in _js("venues.js")
     assert "<td><b>${esc(f.label)}</b>" in _js("plugins.js")

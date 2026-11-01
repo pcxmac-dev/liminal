@@ -154,8 +154,7 @@
 
     <div class="view scroll-view" id="viewFetcher" data-view="fetcher" hidden>
       <div class="view-head">
-        <div><h2>Fetcher</h2><div class="p-muted small">Each span of a symbol is downloaded by one feed only, within that feed's caps.</div></div>
-        <div id="actFeeds" class="scope-tabs" role="tablist" aria-label="Feed"></div>
+        <div><h2>Fetcher</h2><div class="p-muted small">Every resource the plugins download: symbols' bars, news, dataset files. A span of a symbol is downloaded by one feed only, within its caps; each plugin's status is on its page in Plugins.</div></div>
         <div class="view-actions">
           <button type="button" id="netPause" class="net-pause" title="Pause background fetching (up to two hours): the open symbol's own fetches go on">Pause fetching</button>
           <button type="button" id="netHalt" class="net-pause" title="Halt all fetching until you resume it, the open symbol's too (the live streams go on)">Halt</button>
@@ -165,41 +164,12 @@
       </div>
       <div id="actStatus" class="act-status"></div>
       <div id="scanNote" class="small"></div>
-      <div id="actTiles" class="tiles"></div>
-      <h4>Live log — what the fetcher is gathering</h4>
-      <div id="actLog" class="act-log"></div>
-      <h4>Sources — status and limits <span class="p-muted small">ok, fetching, limited (out of requests or rate-limited), down (last run failed) or off (not set up); limits kept a little inside what each publishes, runs share each window</span></h4>
-      <div class="table-wrap"><table class="act-table limits"><thead><tr><th>Server</th><th>Status</th><th>Published</th><th>Kept to</th>
-        <th>Window now</th><th>Next request</th><th class="num">Today</th><th class="num">Per run</th>
-        <th>This month</th><th class="num">By month end</th></tr></thead>
-        <tbody id="actLimits"></tbody></table></div>
-      <h4>Symbols <span class="span-legend">Stored:<i style="background: var(--up)"></i>held<i style="background: var(--st-wait)"></i>older history to fetch<i style="background: var(--st-new)"></i>newer data to fetch</span></h4>
-      <div id="actFilters" class="filters"></div>
-      <div class="table-wrap scroll"><table class="act-table">
-        <thead><tr><th>Symbol</th><th>State</th><th>Stored</th><th>Resolution</th><th class="num">Requests left</th><th>Last synced</th></tr></thead>
-        <tbody id="actSymbols"></tbody>
+      <h4>Queue <span id="qCounts" class="p-muted small"></span></h4>
+      <div id="qFilters" class="filters q-filters"></div>
+      <div class="table-wrap"><table class="act-table queue">
+        <thead><tr><th>Resource</th><th>Plugin</th><th>State</th><th>Detail</th><th class="num">Requests</th><th>When</th></tr></thead>
+        <tbody id="qRows"></tbody>
       </table></div>
-      <h4>Dependencies <span class="p-muted">(docs/DEPENDENCIES.md · python -m massive_collate deps)</span></h4>
-      <div class="table-wrap"><table class="act-table">
-        <thead><tr><th>Area</th><th>Item</th><th>Status</th><th>Found</th><th>Action</th></tr></thead>
-        <tbody id="depsRows"></tbody>
-      </table></div>
-      <h4>Research datasets <span class="p-muted">(python -m massive_collate datasets · each provider in datasets/&lt;provider&gt;.db)</span></h4>
-      <div class="table-wrap"><table class="act-table">
-        <thead><tr><th>Dataset</th><th>Source</th><th>Span</th><th class="num">Values</th><th>Files</th><th>Fetched</th><th class="num">Quality</th></tr></thead>
-        <tbody id="datasetRows"></tbody>
-      </table></div>
-      <h4>Recent runs</h4>
-      <div class="table-wrap"><table class="act-table">
-        <thead><tr><th>Started</th><th>Command</th><th>Status</th><th class="num">Requests</th><th class="num">Rows</th><th class="num">Took</th><th>Note</th></tr></thead>
-        <tbody id="actRuns"></tbody>
-      </table></div>
-      <h4>Audits — feeds compared on the same span <span id="auditScores" class="p-muted small"></span></h4>
-      <div class="p-muted small">A second feed's copy of a stored span, compared bar by bar and never stored. Differences
-        (other feed minus stored) as box plots: whiskers min–max, box quartiles, tick median; shaded band = margin of error.</div>
-      <div class="table-wrap"><table class="act-table audits"><thead><tr><th>When</th><th>Symbol · span</th><th>Stored → checked by</th>
-        <th>Verdict</th><th>Bars</th><th>Close (bps)</th><th>High−low (bps)</th><th>Volume (%)</th><th>Timing</th></tr></thead>
-        <tbody id="actAudits"></tbody></table></div>
     </div>
 
     <div class="view scroll-view" id="viewLive" data-view="live" hidden></div>

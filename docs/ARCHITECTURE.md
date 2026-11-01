@@ -201,7 +201,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     An unknown value is Starter.
 - **The plugin contract, versioned** (2026-10-29; the user: "eventually plugins will need to be in
   their own repo with their own version"). The app offers `registry.PLUGIN_API` (major.minor, now
-  1.8). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
+  1.9). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
   major.minor.patch) and the contract it was written for (`api`: a literal such as `"1.0"`, never
   `PLUGIN_API` itself, which would always match). At discovery a plugin written for another major,
   or for a newer minor than the app offers, is left out and reported with the ones that fail to
@@ -309,6 +309,24 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     off this machine, a path out of the data folder, an unknown engine or the main file not declared
     shared is refused at loading. `plugins --json` and the Plugins view (each plugin's Databases,
     with its size here) show them (`tests/test_plugin_databases.py`).
+  - **1.9** (2026-10-31) adds a plugin's own fetching (the user: "each plugin will manage it's own
+    fetching"; "the fetcher will then just show the queue of all resources being downloaded like
+    symbols"; "the plugin status will be available in the plugins:: plugin page").
+    `sources/fetching.py`: a `Fetcher` (`Provider.fetcher`, `Publisher.fetcher`) gives `plan(ctx)`,
+    the resources it wants now (`Job`: kind, key, title, part, priority, not before), and
+    `fetch(ctx, job)` one of them (`Fetched`: requests, rows, bytes, when asked again). The fetch
+    queue (`fetch_queue` in the main file, `storage/queue.py`) holds one row per resource by plugin,
+    part, kind and key: waiting, running (with its process), done, failed or held. `runner.py`
+    gives each such plugin a worker of its own (`python -m massive_collate fetcher`), taking only
+    its own jobs and stopping between two for the fetching pause, its kill or pause, a StopRun; one
+    plugin's failure stops its worker alone. Until a plugin fetches on its own, the app's paths keep
+    the same queue: the bars sync (each symbol it plans waiting, then running, done or failed), the
+    news reader (each feed's read, and its next) and the datasets' files. The Fetcher view shows the
+    queue across plugins, by plugin, kind and state; each plugin's page its Fetching (its state,
+    queue, feeds' requests against their caps, limits, runs, audits and its lines of the log;
+    `gui/queue.py`); the dependencies moved to the Resources view (`tests/test_fetch_queue.py`).
+    Step 1 of the plan: no plugin fetches on its own yet; the datasets, the news sources, the
+    release documents and the feeds move into their plugins next, one at a time.
   - **What a plugin may rely on (API 1.0)**, and nothing else of `massive_collate`:
     `sources.registry`: `PLUGIN_API`, `Provider`, `KeyVar`, `Scanned`, and `Report`, `Limits`,
     `Capability` for a `reporter`; the helpers `limiter`, `machine_caps`, `public_client`,

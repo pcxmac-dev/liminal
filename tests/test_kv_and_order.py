@@ -74,13 +74,6 @@ def test_priority_requests_keep_each_other(store):
     assert set(asked) == {"AAPL", "MSFT"} and asked["AAPL"]["runs"] == 1
 
 
-def test_the_fetcher_page_orders_states_as_the_server_does():
-    js = (Path(activity.__file__).parent / "static" / "activity.js").read_text(encoding="utf-8")
-    body = re.search(r"const STATE_ORDER = \{([^}]*)\}", js).group(1)
-    page = {k: int(v) for k, v in re.findall(r"(\w+): (\d+)", body)}
-    assert page == activity.STATE_RANK
-
-
 def test_rows_rank_by_state_then_the_order_given():
     rows = [{"ticker": t, "state": s} for t, s in (("A", "current"), ("B", "current"), ("C", "queued"))]
     assert activity.ranked(rows, {"B": 0, "A": 1}) == [2, 1, 0]

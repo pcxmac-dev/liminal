@@ -198,7 +198,7 @@ def test_every_built_in_plugin_is_versioned_for_this_apps_contract():
             "french": ("1.0.0", "1.4"), "datahub": ("1.0.0", "1.4")}
     assert {p.name: (p.version, p.api) for p in plugins_} == want
     assert all(registry.api_refusal(p.api) is None for p in plugins_)
-    assert registry.PLUGIN_API == "1.8"
+    assert registry.PLUGIN_API == "1.9"
 
 
 def test_a_plugins_parts_are_released_with_it():

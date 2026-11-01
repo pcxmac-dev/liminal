@@ -9,14 +9,12 @@
 (() => {
   'use strict';
 
-  const { dataIcon, symbolIcon, DATA_LABEL } = window.MassiveIcons;
+  const { symbolIcon } = window.MassiveIcons;
   const POLL_FAST_MS = 1500;   // while the Fetcher or Live view is open
   const POLL_RUN_MS = 5000;    // while a run is going, or the open symbol's fetch waits for it to end (each
                                // answer is work for the server, and the sync runs nearly all the time)
   const POLL_SLOW_MS = 10000;
   const POLL_FAIL_MAX_MS = 60000;  // no answer: each poll waits twice as long as the one before, up to this
-  // As the server ranks them (gui/activity.py STATE_RANK): a blocked symbol needs attention before current ones.
-  const STATE_ORDER = { fetching: 0, next: 1, new: 2, backfilling: 3, queued: 4, held: 5, blocked: 6, current: 7, retired: 8, closed: 9 };
   const el = (id) => document.getElementById(id);
   const esc = window.MassiveIcons.esc;
   const safeUrl = window.MassiveIcons.safeUrl;
@@ -25,9 +23,7 @@
   const label = (source) => (typeof feedLabel === 'function' ? feedLabel(source) : source);
 
   let data = null;
-  let filter = 'all';
   let timer = null;
-  let followLog = true;
   let wasFetching = new Set();  // the feeds fetching at the last poll
   let scanNote = '';
   // The status bar's job: { ticker, phase: 'checking' | 'waiting' | 'downloading' | 'done' | 'current' | 'error', ... }
@@ -57,40 +53,10 @@
     const o = { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false };
     return days < 6 ? t.toLocaleString('en-US', { ...o, weekday: 'short' }) : t.toLocaleString('en-US', { ...o, month: '2-digit', day: '2-digit' });
   };
-  const day = (iso) => (iso ? iso.slice(0, 10) : '–');
   const viewOpen = (name) => document.body.dataset.view === name;
-  function meter(fraction, cls = '') {
-    const pct = Math.max(0, Math.min(100, (fraction || 0) * 100));
-    return `<span class="meter ${cls}"><span style="width:${pct.toFixed(1)}%"></span></span>`;
-  }
 
-  // A symbol's stored span on its own time line, from where its history should start (`target`) to
-  // the newest bar its plan should have published by now (`expectedThrough`): stored in green, older
-  // history still to fetch in amber, newer data still to fetch in cyan. Holes inside the stored span
-  // are not shown (the row knows its edges only).
-  const SPAN_MIN_PCT = 4;
-  function storedBar(s) {
-    const t = (v) => (v ? Date.parse(v) : null);
-    const first = t(s.first), last = t(s.last), due = t(s.expectedThrough);
-    const start = Math.min(...[t(s.target), first].filter((v) => v != null));
-    const end = Math.max(...[last, due].filter((v) => v != null));
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
-      return first ? '<span class="meter span"><span class="held" style="width:100%"></span></span>'
-        : '<span class="meter span"><span class="older" style="width:100%"></span></span>';
-    }
-    const part = (a, b) => Math.max(0, (Math.min(b, end) - Math.max(a, start)) / (end - start) * 100);
-    // what is still to fetch shows however small (a day of new data is 0.01 % of twenty years)
-    const seen = (w) => (w > 0 ? Math.max(w, SPAN_MIN_PCT) : 0);
-    const older = first == null ? 100 : seen(part(start, first));
-    const newer = last == null || due == null ? 0 : seen(part(last, due));
-    const held = first == null ? 0 : Math.max(0, 100 - older - newer);
-    const seg = (cls, w, what) => (w > 0.05 ? `<span class="${cls}" style="width:${w.toFixed(1)}%" title="${what}"></span>` : '');
-    return `<span class="meter span">${seg('older', older, 'Older history to fetch')}${seg('held', held, 'Stored')}`
-      + `${seg('newer', newer, 'Newer data to fetch')}</span>`;
-  }
-
-  // The Fetcher view shows one feed at a time; the choice is remembered, each profile its own.
-  let feed = prefs.get('fetcherFeed', 'massive');
+  // The feed the status bar's poll asks about (a page from before the queue may remember another).
+  const feed = prefs.get('fetcherFeed', 'massive');
   const RUN_START_GRACE_MS = 15_000;  // a run started for the opened symbol shows within this (its lock and row)
 
   // One poll at a time, and one timer: a call while one is on its way gets that one's answer (each
@@ -106,7 +72,7 @@
     try {
       // `open`: the chart's symbol, so the live recorder streams it (stocks, from IEX).
       const open = openTicker ? `&open=${encodeURIComponent(openTicker)}` : '';
-      const res = await fetch(`/api/activity?lines=300&source=${encodeURIComponent(feed)}${open}`,
+      const res = await fetch(`/api/activity?lines=20&source=${encodeURIComponent(feed)}${open}`,
         { headers: { 'X-Massive-Charts': '1' } });  // the app's own page: its open symbol counts
       if (!res.ok) throw new Error(String(res.status));
       data = await res.json();
@@ -358,204 +324,76 @@
     } catch (err) { showError(err); }
   });
 
-  // A feed's month against its allowance (its daily cap, every day: gui/activity.py month_allowance):
-  // used so far, and what the pace of the last days spends by the month's end. A day's cap does not
-  // carry over, so what past days left unspent is lapsed.
-  function monthHtml(m) {
-    if (!m || !m.allowance) return '<td><span class="sub">no daily cap</span></td><td></td>';
-    const share = m.share ?? 0;
-    return `<td>${meter(m.used / m.allowance, '')}<div class="sub">${num(m.used)} of ${num(m.allowance)} used`
-      + `${m.lapsed ? `, ${num(m.lapsed)} lapsed on past days` : ''}</div></td>
-      <td class="num"><span class="${share < 0.9 ? 'warn' : ''}">${Math.round(share * 100)}%</span>`
-      + `<div class="sub">at ${num(m.pace)} a day; ${num(m.left)} left</div></td>`;
+  // -- Fetcher view: the fetch queue (gui/queue.py) ------------------------------------
+  // The user, 2026-10-31: "the fetcher will then just show the queue of all resources being downloaded
+  // like symbols": every plugin's resources (symbols' bars, news reads, dataset files) waiting, being
+  // fetched, held, failed or done, filtered by plugin, kind and state. Each plugin's own status (its
+  // feeds' requests and limits, runs, log) is on its page in the Plugins view.
+  const Q_STATES = ['running', 'waiting', 'held', 'failed', 'stopped', 'done'];
+  const Q_LABEL = { running: 'fetching', waiting: 'waiting', held: 'held', failed: 'failed', stopped: 'stopped', done: 'done' };
+  const Q_CLASS = { running: 'fetching', waiting: 'queued', held: 'held', failed: 'run-error', stopped: 'run-abandoned', done: 'current' };
+  const Q_DOT = { running: 'fetching', waiting: 'queued', held: 'held', failed: 'blocked', stopped: 'retired', done: 'current' };
+  const Q_EVERY_MS = 3000;  // the queue asked at most this often while the Fetcher is open
+  const qFilter = { plugin: '', kind: '', state: '' };
+  let queue = null, queueAt = 0, queueLoading = null;
+  const size = (n) => {
+    let v = n, i = 0;
+    while (v >= 1024 && i < 4) { v /= 1024; i++; }
+    return `${i === 0 || v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${['B', 'KB', 'MB', 'GB', 'TB'][i]}`;
+  };
+
+  function loadQueue(force = false) {
+    if (queueLoading || (!force && Date.now() - queueAt < Q_EVERY_MS)) return;
+    const q = new URLSearchParams(Object.entries(qFilter).filter(([, v]) => v));
+    queueLoading = fetch(`/api/queue?${q}`).then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j) { queue = j; queueAt = Date.now(); renderQueue(); } })
+      .catch(() => {}).finally(() => { queueLoading = null; });
   }
 
-  // Every server's state and limits beside what this machine keeps to and has used.
-  const HEALTH_CLASS ={ ok: 'run-ok', fetching: 'fetching', idle: 'idle', done: 'run-ok', limited: 'backfilling',
-                         down: 'run-error', off: '', killed: 'killed' };
-  function limitsHtml(rows) {
-    const t = Date.now() / 1000;
-    const health = Object.fromEntries((data.health || []).map((h) => [h.source, h]));
-    return rows.map((l) => {
-      const h = health[l.source];
-      const status = h ? `<span class="state ${HEALTH_CLASS[h.state] ?? ''}">${esc(h.state)}</span><div class="sub">${esc(h.why)}</div>` : '';
-      const w = l.window;
-      const full = w.allowed && w.used >= w.allowed;
-      const wait = l.wait ? Math.max(0, Math.round(l.wait.until - t)) : 0;
-      const next = wait ? `<span class="warn">in ${wait} s</span> <div class="sub">${esc(l.wait.reason)}</div>`
-        : full ? `<span class="warn">in ${Math.ceil(w.freeIn)} s</span> <div class="sub">window full</div>` : 'now';
-      const live = (data.fetching || []).some((f) => f.source === l.source);  // every feed fetching now
-      return `<tr class="${live ? 'live' : ''}"><td><b>${esc(label(l.source))}</b><div class="sub">${esc(l.plan)}</div></td>
-        <td>${status}</td><td>${esc(l.published)}</td><td>${esc(l.keptTo)}</td>
-        <td>${w.allowed ? `${meter(w.used / w.allowed, full ? 'warn' : '')}<div class="sub">${num(w.used)} of ${num(w.allowed)} in the last ${w.periodSeconds >= 3600 ? 'hour' : 'minute'}</div>` : '<span class="sub">no limit</span>'}</td>
-        <td>${next}</td>
-        <td class="num">${num(l.today)} <span class="sub">/ ${num(l.perDay)}</span></td><td class="num">${num(l.perRun)}</td>
-        ${monthHtml(l.month)}</tr>`;
-    }).join('');
+  function qWhen(r) {
+    const next = r.not_before && Date.parse(r.not_before) > Date.now() ? `<div class="sub">next ${when(r.not_before)}</div>` : '';
+    if (r.state === 'running') return r.started_at ? `for ${dur((Date.now() - Date.parse(r.started_at)) / 1000)}` : '';
+    if (r.state === 'done' || r.state === 'failed' || r.state === 'held') return `${r.finished_at ? ago(r.finished_at) : ''}${next}`;
+    if (next) return `not before ${when(r.not_before)}`;
+    return r.queued_at ? `queued ${ago(r.queued_at)}` : '';
   }
 
-  // -- Fetcher view --------------------------------------------------------------------
-  function logHtml(lines) {
-    return lines.map((line) => {
-      const cls = /error|refused|stopped|cap .*reached|not available|could not/i.test(line) ? 'bad'
-        : /: source=|requests used|^.{20}scan:/.test(line) ? 'head' : /: [1-9][\d,]* rows|new data|icon saved/.test(line) ? 'good' : '';
-      return `<div class="${cls}">${esc(line)}</div>`;
-    }).join('');
+  function renderQueue() {
+    if (!queue) return;
+    const t = queue.totals || {};
+    const total = Object.values(t).reduce((a, b) => a + b, 0);
+    const sum = (o) => Object.values(o || {}).reduce((a, b) => a + b, 0);
+    const title = Object.fromEntries(queue.plugins.map((p) => [p.name, p.title]));
+    el('qCounts').textContent = total ? Q_STATES.filter((st) => t[st]).map((st) => `${num(t[st])} ${Q_LABEL[st]}`).join(' · ') : '';
+    const chips = (key, items) => items.map(([v, text, n]) => `<button type="button" data-q="${key}" data-v="${esc(v)}"
+      class="${qFilter[key] === v ? 'active' : ''}">${text}${n != null ? ` <span class="chip">${num(n)}</span>` : ''}</button>`).join('');
+    el('qFilters').innerHTML = `<div class="q-group">${chips('plugin', [['', 'All plugins', total],
+        ...queue.plugins.map((p) => [p.name, esc(p.title), sum(queue.counts.plugins[p.name])])])}</div>
+      <div class="q-group">${chips('kind', [['', 'Every kind', null], ...queue.kinds.map((k) => [k, esc(k), sum(queue.counts.kinds[k])])])}</div>
+      <div class="q-group">${chips('state', [['', 'Every state', null], ...Q_STATES.filter((st) => t[st] || st === qFilter.state)
+        .map((st) => [st, `<span class="st-dot ${Q_DOT[st]}"></span>${Q_LABEL[st]}`, t[st] || 0])])}</div>`;
+    const rows = queue.rows;
+    el('qRows').innerHTML = rows.length ? rows.map((r) => {
+      const sym = r.kind === 'bars';
+      const name = sym ? `<span class="sym-cell">${symbolIcon({ ticker: r.ticker, asset: r.asset }, 20)}<span><b>${esc(r.title)}</b>
+          <div class="sub">${esc(r.asset || 'bars')}</div></span></span>` : `<b>${esc(r.title)}</b><div class="sub">${esc(r.kind)}</div>`;
+      return `<tr${sym ? ` class="has-data" data-ticker="${esc(r.ticker)}" title="Open in the chart"` : ''}>
+        <td>${name}</td>
+        <td>${esc(title[r.plugin] || r.plugin)}${r.partLabel ? `<div class="sub">${esc(r.partLabel)}</div>` : ''}</td>
+        <td><span class="state ${Q_CLASS[r.state] || ''}">${esc(Q_LABEL[r.state] || r.state)}</span>${r.attempts > 1 ? `<div class="sub">try ${num(r.attempts)}</div>` : ''}</td>
+        <td class="sub">${esc(r.error || r.detail || '')}</td>
+        <td class="num">${r.requests ? num(r.requests) : '–'}${r.rows ? `<div class="sub">${num(r.rows)} rows</div>` : ''}${r.bytes ? `<div class="sub">${size(r.bytes)}</div>` : ''}</td>
+        <td>${qWhen(r)}</td></tr>`;
+    }).join('') + (rows.length >= queue.limit ? `<tr><td colspan="6" class="empty">The first ${num(rows.length)} shown: what is being
+        fetched, then what waits (in its order), held, failed and the newest done. Filter by plugin, kind or state for the rest.</td></tr>` : '')
+      : `<tr><td colspan="6" class="empty">${total ? 'Nothing in this filter.' : 'Nothing on the queue yet: the next run of each plugin puts what it will fetch here.'}</td></tr>`;
   }
 
   function renderFetcherView() {
-    loadDeps();
-    loadDatasets();
-    if (!data) { el('actStatus').innerHTML = statusLine(); return; }
-    const { plan, today, backfill } = data;
     el('actStatus').innerHTML = statusLine();
-    el('actFeeds').innerHTML = (data.feeds || []).map((f) => `<button type="button" data-feed="${esc(f.name)}"
-        class="${f.name === feed ? 'active' : ''}" title="${esc(f.plan)}${f.archive ? ' · public archive: fills history once per symbol, then closed' : ''}${f.keys === false
-          ? ` · ${esc(f.keysNote || 'key not set')}` : ''}${f.configured ? '' : ' · not configured here'}">${esc(label(f.name))}${f.closed ? ' <span class="chip">closed</span>' : f.keys === false ? ` <span class="chip">${esc(f.keysChip || 'no key')}</span>` : ''}</button>`).join('');
-    loadAudits();
-    el('actLimits').innerHTML = limitsHtml(data.limits || []);
-    el('scanBtn').disabled = !!data.running;
+    if (data) el('scanBtn').disabled = !!data.running;
     el('scanNote').innerHTML = scanNote ? esc(scanNote) : '';
-    const mine = data.running && data.live.source === data.source;  // a run of another feed is not this feed's
-    const runReq = mine ? data.live.requests : 0;
-    el('actTiles').innerHTML = `
-      <div class="tile"><h5>Requests today</h5><div class="big">${num(today.requests)} <small>/ ${num(plan.maxPerDay)}</small></div>
-        ${meter(today.requests / plan.maxPerDay, today.requests / plan.maxPerDay > 0.9 ? 'warn' : '')}
-        <small>${num(today.remaining)} left · resets at 00:00 UTC</small></div>
-      <div class="tile"><h5>This run</h5><div class="big">${num(runReq)} <small>/ ${num(plan.maxPerRun)}</small></div>
-        ${meter(runReq / plan.maxPerRun)}<small>${plan.requestsPerMinute ? `${plan.requestsPerMinute} requests / minute` : 'no rate limit'}</small></div>
-      <div class="tile"><h5>Backfill</h5><div class="big">${num(backfill.done)} <small>/ ${num(backfill.total)} symbols</small></div>
-        ${meter(backfill.total ? backfill.done / backfill.total : 1, 'good')}
-        <small>${backfill.requestsLeft ? `≈${num(backfill.requestsLeft)} requests left · ~${backfill.runs} run${backfill.runs === 1 ? '' : 's'}` : 'complete'}</small></div>
-      <div class="tile"><h5>New data</h5><div class="big">${num(data.newData)} <small>symbols</small></div>
-        <small>should be available now (plan calendar)</small></div>
-      ${data.source !== 'massive' ? '' : `<div class="tile"><h5>Directory icons</h5><div class="big">${num(data.directory?.icons)} <small>/ ${num(data.directory?.companies)} companies</small></div>
-        ${meter(data.directory?.companies ? data.directory.iconsChecked / data.directory.companies : 0, 'good')}
-        <small>${data.directory?.companies ? `Nasdaq + NYSE · ≈${num(data.directory.requestsLeft)} requests left (~${data.directory.days} days, leftover budget only)` : 'listing arrives with the next sync'}</small></div>`}
-      ${data.ticks ? `<div class="tile"><h5>Ticks</h5><div class="big">${(data.ticks.bytes / 1e9).toFixed(1)} <small>GB · ${num(data.ticks.series)} symbols</small></div>
-        <small>${data.ticks.paused ? `<span class="down">backfill paused: ${esc(data.ticks.paused)}</span>` : `backfill ${num(data.ticks.days)} days · new ticks always`} · ${num(Math.round(data.ticks.freeBytes / 1e9))} GB free</small></div>` : ''}
-      <div class="tile"><h5>Plan</h5><div class="big">${esc(plan.tier)}</div>
-        <small>history from ${esc(plan.historyFloor)}</small></div>`;
-
-    // Every symbol is counted (symbolCounts); the table holds the rows most worth seeing (the server
-    // picks them: being fetched, new data, backfills ... most traded first, the open symbol always).
-    const counts = { all: data.symbolTotal ?? data.symbols.length, ...(data.symbolCounts || {}) };
-    if (!data.symbolCounts) for (const s of data.symbols) counts[s.state] = (counts[s.state] || 0) + 1;
-    // A button for every state, in the table's order: one left off this list hid its rows from the filters.
-    el('actFilters').innerHTML = ['all', ...Object.keys(STATE_ORDER)]
-      .filter((k) => k === 'all' || counts[k])
-      .map((k) => `<button data-filter="${k}" class="${k === filter ? 'active' : ''}">${k === 'all' ? 'All'
-        : `<span class="st-dot ${k}"></span>${DATA_LABEL[k]}`} <span class="chip">${counts[k] || 0}</span></button>`)
-      .join('');
-    const rows = data.symbols
-      .filter((s) => filter === 'all' || s.state === filter)
-      .sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state]);  // stable: the server's order within a state
-    el('actSymbols').innerHTML = rows.length ? rows.map((s) => `
-      <tr data-ticker="${esc(s.ticker)}" class="${s.first ? 'has-data' : ''}" title="${s.first ? 'Open in the chart' : 'No data stored yet'}">
-        <td><span class="sym-cell">${symbolIcon(s, 20)}<span><b>${esc(s.exchange ? `${s.ticker}::${s.exchange}` : s.ticker)}</b>
-          <div class="sub">${esc(s.name || s.asset)}</div></span></span></td>
-        <td>${dataIcon(s, 14)} <span class="state ${esc(s.state)}">${esc(DATA_LABEL[s.state])}</span>${s.note ? `<div class="sub">${esc(s.note)}</div>` : ''}</td>
-        <td class="prog">${storedBar(s)}
-          <div class="sub">${s.first ? `${day(s.first)} → ${day(s.last)}` : 'nothing stored yet'}${s.progress < 1 ? ` · target ${day(s.target)}` : ''}</div></td>
-        <td>${esc(s.resolution)}</td>
-        <td class="num">${s.requestsLeft ? `≈${num(s.requestsLeft)}` : '–'}</td>
-        <td>${s.syncedAt ? ago(s.syncedAt) : '–'}<div class="sub">${s.nextDue ? `new data ${when(s.nextDue)}` : ''}</div></td>
-      </tr>`).join('') + (counts.all > data.symbols.length ? `<tr><td colspan="6" class="empty">Showing the ${num(data.symbols.length)}
-        most relevant of ${num(counts.all)} symbols: being fetched, new data and backfills first, the most traded first.</td></tr>` : '')
-      : '<tr><td colspan="6" class="empty">No symbols in this state among the rows shown.</td></tr>';
-    el('actRuns').innerHTML = data.runs.slice(0, 12).map((r) => `
-      <tr><td>${when(new Date(r.started_at).toISOString())}</td><td>${esc(r.command)}</td>
-        <td><span class="state run-${esc(r.status)}">${esc(r.status)}</span></td>
-        <td class="num">${num(r.requests)}</td><td class="num">${num(r.rows)}</td><td class="num">${dur(r.seconds)}</td>
-        <td class="sub">${esc(r.message || '')}</td></tr>`).join('');
-    const log = el('actLog');
-    log.innerHTML = logHtml(data.log);
-    if (followLog) log.scrollTop = log.scrollHeight;
-  }
-
-  el('actFeeds').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-feed]');
-    if (!b || b.dataset.feed === feed) return;
-    feed = b.dataset.feed;
-    prefs.set('fetcherFeed', feed);
-    poll();
-  });
-
-  // Audits: box plots of the differences, refreshed every minute while the Fetcher view is open.
-  let audits = { at: 0 };
-  async function loadAudits() {
-    if (Date.now() - audits.at < 60000) return;
-    audits.at = Date.now();
-    try { audits = { ...(await (await fetch('/api/audits')).json()), at: Date.now() }; } catch { return; }
-    renderAudits();
-  }
-  function boxSvg(b, tol) {
-    if (!b) return '<span class="p-muted">–</span>';
-    const w = 96, h = 14, lim = Math.max(Math.abs(b.min), Math.abs(b.max), tol * 2, 1e-9);
-    const x = (v) => (w / 2) + (v / lim) * (w / 2 - 2);
-    return `<svg class="boxplot" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
-      <rect class="tol" x="${x(-tol)}" y="0" width="${x(tol) - x(-tol)}" height="${h}"/>
-      <line class="zero" x1="${w / 2}" x2="${w / 2}" y1="0" y2="${h}"/>
-      <line class="whisker" x1="${x(b.min)}" x2="${x(b.max)}" y1="${h / 2}" y2="${h / 2}"/>
-      <rect class="box" x="${x(b.q1)}" y="3" width="${Math.max(1, x(b.q3) - x(b.q1))}" height="${h - 6}"/>
-      <line class="median" x1="${x(b.median)}" x2="${x(b.median)}" y1="2" y2="${h - 2}"/></svg>
-      <span class="small">${b.median >= 0 ? '+' : ''}${b.median.toFixed(2)} <span class="p-muted">p95 ${b.p95.toFixed(2)}</span></span>`;
-  }
-  function renderAudits() {
-    const rows = audits.audits || [];
-    const vcls = { pass: 'fresh', warn: 'backfilling', fail: 'run-error', 'no-data': '' };
-    el('auditScores').textContent = Object.entries(audits.scores || {}).map(([f, s]) => `${f}: ${s.passed}/${s.audits} passed`).join(' · ')
-      + (audits.queued ? ` · ${audits.queued} queued` : '');
-    el('actAudits').innerHTML = rows.length ? rows.slice(0, 20).map((a) => {
-      const r = a.report || {}, bx = r.box || {}, tol = r.tolerance || {};
-      const span = new Date(a.start_ms).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-      const tim = r.timing ? (r.timing.bestShiftSeconds ? `<span class="down">shifted ${r.timing.bestShiftSeconds}s</span>` : 'aligned')
-        + (r.timing.stampsOffTheGrid ? ` · ${r.timing.stampsOffTheGrid} off-grid` : '') : '–';
-      return `<tr title="${esc(a.reason || '')}${r.worst?.length ? ` · worst: ${esc(r.worst.map((w) => `${w.field} ${w.bps} bps`).join(', '))}` : ''}">
-        <td>${ago(a.at)}</td><td><b>${esc(a.ticker)}</b> <span class="sub">${esc(span)} ET</span></td>
-        <td>${esc(a.owner)} → ${esc(a.auditor)}</td><td><span class="state ${vcls[a.verdict] || ''}">${esc(a.verdict)}</span></td>
-        <td class="num">${num(a.matched)}<div class="sub">${num(a.only_owner)}/${num(a.only_auditor)} one-sided</div>${r.note ? `<div class="sub" title="${esc(r.note)}">cross-venue</div>` : ''}${r.ownerOrigin ? `<div class="sub" title="${esc(r.ownerOrigin)}">from ticks</div>` : ''}</td>
-        <td>${boxSvg(bx.c, tol.price_bps || 5)}</td><td>${boxSvg(bx.range, 2 * (tol.price_bps || 5))}</td>
-        <td>${boxSvg(bx.v, tol.volume_pct || 5)}</td><td class="sub">${tim}</td></tr>`;
-    }).join('') : '<tr><td colspan="9" class="empty">No audits yet: they run after new data arrives and at random, once a second feed watches the same symbols (or run <code>python -m massive_collate audit</code>).</td></tr>';
-  }
-
-  // Dependency health (deps.py), refreshed every few minutes while the Fetcher view is open.
-  let deps = { rows: [], at: 0 };
-  async function loadDeps() {
-    if (Date.now() - deps.at < 180000) return;
-    deps.at = Date.now();
-    try { deps.rows = (await (await fetch('/api/deps')).json()).checks || []; } catch { return; }
-    renderDeps();
-  }
-  function renderDeps() {
-    const cls = { OK: 'fresh', WARN: 'backfilling', FAIL: 'run-error' };
-    const order = { FAIL: 0, WARN: 1, OK: 2 };
-    el('depsRows').innerHTML = [...deps.rows].sort((a, b) => order[a.status] - order[b.status]).map((c) => `
-      <tr><td class="sub">${esc(c.area)}</td><td><b>${esc(c.item)}</b></td>
-        <td><span class="state ${cls[c.status] || ''}">${esc(c.status)}</span></td>
-        <td>${esc(c.found)}</td><td class="sub">${esc(c.action || '')}</td></tr>`).join('');
-  }
-
-  // Research datasets (datasets.py): refreshed every few minutes while the Fetcher view is open.
-  let datasets = { rows: [], at: 0 };
-  async function loadDatasets() {
-    if (Date.now() - datasets.at < 180000) return;
-    datasets.at = Date.now();
-    try { datasets.rows = (await (await fetch('/api/datasets')).json()).datasets || []; } catch { return; }
-    renderDatasets();
-  }
-  function renderDatasets() {
-    const day = (ms) => (ms == null ? '–' : new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }));
-    el('datasetRows').innerHTML = datasets.rows.map((d) => `
-      <tr><td><b>${esc(d.name)}</b><div class="sub">${esc(d.title)}</div></td>
-        <td>${esc(d.provider)} <span class="sub">(${esc(d.kind)})</span><div class="sub">${esc(d.licence)}</div></td>
-        <td>${d.files ? (d.members ? 'current members' : `${day(d.first)} → ${day(d.last)}`) : '–'}</td>
-        <td class="num">${d.files ? (d.members ? `${num(d.members)} members` : `${num(d.values)}<div class="sub">${num(d.series)} series</div>`) : '–'}</td>
-        <td>${d.files ? `${num(d.files)}${d.closed ? ` <span class="chip">${num(d.closed)} closed</span>` : ''}<div class="sub">${(d.bytes / 1e6).toFixed(1)} MB${d.due ? ` · ${num(d.due)} due` : ''}</div>`
-          : '<span class="sub">not fetched: <code>datasets fetch ' + esc(d.name) + '</code></span>'}</td>
-        <td>${d.fetched ? ago(d.fetched) : '–'}</td>
-        <td class="num">${d.quality == null ? '–' : d.quality.toFixed(2)}</td></tr>`).join('');
+    loadQueue();
   }
 
   async function startScan() {
@@ -669,18 +507,14 @@
       for (const b of fx.parentElement.querySelectorAll('button')) b.classList.toggle('active', b === fx);
       return;
     }
-    const item = e.target.closest('#actSymbols tr.has-data, #viewLive tr.has-data');
+    const item = e.target.closest('#qRows tr.has-data, #viewLive tr.has-data');
     if (item) window.dispatchEvent(new CustomEvent('massive:open-symbol', { detail: item.dataset.ticker }));
   });
-  el('actFilters').addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-filter]');
+  el('qFilters').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-q]');
     if (!b) return;
-    filter = b.dataset.filter;
-    renderFetcherView();
-  });
-  el('actLog').addEventListener('scroll', (e) => {
-    const l = e.target;
-    followLog = l.scrollHeight - l.scrollTop - l.clientHeight < 24;
+    qFilter[b.dataset.q] = b.dataset.v;
+    loadQueue(true);
   });
   window.addEventListener('massive:view', () => { render(); poll(); });
   window.Activity = { poll, get data() { return data; }, get job() { return job; } };  // job: the open symbol's fetch

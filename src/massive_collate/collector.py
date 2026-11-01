@@ -1054,6 +1054,55 @@ def needs_fetch(store: Store, ticker: str, tiers: dict[str, Tier], now: datetime
     return out
 
 
+# -- the fetch queue (storage/queue.py): each symbol a run plans, takes and ends ---------------
+class _Queue:
+    """A bars run's rows on the fetch queue (the Fetcher shows it): each symbol it plans waiting, the
+    one it fetches running, then done or failed. Kept beside the run, never its undoing: a queue
+    write that fails is logged once and the run goes on."""
+
+    def __init__(self, store: Store, feed: str, log: Log):
+        from .sources.registry import plugin_of
+
+        self.store, self.part, self.log = store, feed, log
+        self.plugin = plugin_of(feed)
+        self.current: str | None = None
+        self.broken = False
+
+    def _do(self, method: str, *args, **kw) -> None:
+        if self.broken:
+            return
+        try:
+            getattr(self.store, method)(*args, **kw)
+        except Exception as e:  # noqa: BLE001 - the queue is the view's; the run goes on
+            self.broken = True
+            self.log(f"{self.part}: the fetch queue was not kept this run ({type(e).__name__}: {e})")
+
+    def plan(self, rows: list[dict], backfilling: Callable[[dict], bool], settle: bool) -> None:
+        """The symbols this run means to fetch, in its order; with `settle`, the part's other waiting
+        rows have nothing left to fetch (up to date)."""
+        self._do("queue_reset", self.plugin, self.part, "bars")
+        items = [{"key": w["ticker"], "title": w["ticker"], "priority": i,
+                  "detail": f"{w['asset']}: {'history to fill' if backfilling(w) else 'new data'}"} for i, w in enumerate(rows)]
+        self._do("queue_put", self.plugin, self.part, "bars", items)
+        if settle:
+            self._do("queue_settle", self.plugin, self.part, "bars", [i["key"] for i in items])
+
+    def start(self, ticker: str) -> None:
+        self.skip()
+        self.current = ticker
+        self._do("queue_start", self.plugin, self.part, "bars", ticker)
+
+    def end(self, ticker: str, state: str = "done", **kw) -> None:
+        if self.current == ticker:
+            self.current = None
+        self._do("queue_end", self.plugin, self.part, "bars", ticker, state, **kw)
+
+    def skip(self, detail: str = "nothing fetched this run") -> None:
+        """The symbol taken last left without an end of its own (its listing, its resolution): done."""
+        if self.current is not None:
+            self.end(self.current, "done", detail=detail)
+
+
 # -- the symbol open in the chart goes first ------------------------------------------------
 PRIORITY_KEY = "fetch:priority"
 PRIORITY_HOURS = 6  # a request older than this has been dealt with (or given up on)
@@ -1351,6 +1400,10 @@ def sync(
         # futures first: their share of the run is capped (FUTURES_PER_RUN), the stocks take the rest
         pending = sorted(watched, key=lambda w: (w["asset"] != "future", backfilling(w), order.get(w["ticker"], len(order)),
                                                  w["ticker"]))
+        queue = _Queue(store, source.name, log)
+        queue.plan([w for w in pending if (only is None or w["ticker"] in only) and not w.get("closed_at")
+                    and source.serves(w["asset"]) and (only is not None or feed_needs(w, tier, now))],
+                   backfilling, settle=only is None)
         futures_spent, futures_left = 0, 0  # this run's futures requests; futures left for the next run
         futures_daily = _futures_kept_current(watched, order, store, now)
         paused_updates = updates_pause(store, now) if not archival else None
@@ -1424,6 +1477,7 @@ def sync(
                     if synced and ticker not in futures_daily and now - synced < timedelta(days=FUTURES_WEEKLY_DAYS):
                         result.skipped += 1  # a less traded future: refreshed weekly
                         continue
+                queue.start(ticker)
                 if on_item:
                     on_item(ticker)
                 spent = source.requests_made
@@ -1435,11 +1489,14 @@ def sync(
                         futures_spent += source.requests_made - spent
                         log(f"{ticker}: futures refused by your plan ({e.message}); skipped"
                             + refusals.note(ticker, now, e.message))
+                        queue.end(ticker, "failed", error=f"refused by your plan ({e.message})"[:300],
+                                  requests=source.requests_made - spent)
                         continue
                     futures_spent += source.requests_made - spent
                     refusals.clear(ticker)
                     result.rows += n
                     log(f"{ticker}: {n} rows ({source.requests_made - spent} requests)")
+                    queue.end(ticker, rows=n, requests=source.requests_made - spent, detail=f"future: {n:,} rows")
                     store.set_synced(source.name, ticker, at)
                     continue
                 if asset == "stock" and archival:  # an archive has no reference data: use the other feeds'
@@ -1491,6 +1548,8 @@ def sync(
                     log(f"{ticker} {resolution}: refused by your plan ({e.message}); re-checking resolution next run"
                         + refusals.note(ticker, now, e.message))
                     store.set_resolution(source.name, ticker, "auto")
+                    queue.end(ticker, "failed", error=f"{resolution}: refused by your plan ({e.message})"[:300],
+                              requests=source.requests_made - spent)
                     continue
                 refusals.clear(ticker)
                 result.rows += n
@@ -1506,7 +1565,10 @@ def sync(
                     # candles are not fetched (requests, and the same bars stored twice)
                     log(f"{ticker} {resolution}: {n} rows, daily: {n_day} rows ({source.requests_made - spent} requests)")
                 else:
+                    n_day = 0
                     log(f"{ticker} {resolution}: {n} rows ({source.requests_made - spent} requests)")
+                queue.end(ticker, rows=n + n_day, requests=source.requests_made - spent,
+                          detail=f"{resolution}: {n:,} rows" + (f", daily: {n_day:,}" if n_day else ""))
                 store.set_synced(source.name, ticker, at)  # when its fetch began: anything later is asked next time
                 verify_fetched(source, store, ticker, asset, fetch, invert, began, me, feeds, log)
                 _derive_symbol(store, source.name, ticker, asset, log)  # bad data checked first (baddata.py)
@@ -1523,6 +1585,7 @@ def sync(
             except SourceError as e:  # this symbol's own error (404, 5xx after retries, an unexpected
                 # answer): it is skipped this run, the others go on, and one failing run after run waits a day
                 log(f"{item['ticker']}: {e}; skipped this run" + refusals.note(item["ticker"], now, str(e)))
+                queue.end(item["ticker"], "failed", error=str(e)[:300])
                 from . import killswitch
 
                 if not isinstance(e, NotEntitled) and killswitch.is_refusal(e, e.status):  # no to the feed, not one symbol
@@ -1533,6 +1596,7 @@ def sync(
                                   strike=True) from e
                 continue
             server_fails = 0  # a symbol went through: the feed works
+        queue.skip()
         if closed:
             log(f"{source.name}: {closed} symbols closed (archive complete), not asked")
         if capped:

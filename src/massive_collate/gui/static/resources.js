@@ -50,11 +50,31 @@
   const meter = (f) => `<span class="meter${f > 0.9 ? ' warn' : ''}"><span style="width:${Math.min(100, f * 100).toFixed(1)}%"></span></span>`;
   const tile = (title, big, small, extra = '') => `<div class="tile"><h5>${title}</h5><div class="big">${big}</div><small>${small}</small>${extra}</div>`;
 
+  // Dependency health (deps.py: packages, tools, keys), asked every few minutes while this view is
+  // open (it was the Fetcher's, which shows the fetch queue only since 2026-10-31).
+  let deps = { rows: [], at: 0 };
+  async function loadDeps() {
+    if (Date.now() - deps.at < 180_000) return;
+    deps.at = Date.now();
+    try { deps.rows = (await api('/api/deps')).checks || []; } catch { deps.at = 0; }
+  }
+  function depsHtml() {
+    if (!deps.rows.length) return '';
+    const cls = { OK: 'fresh', WARN: 'backfilling', FAIL: 'run-error' };
+    const order = { FAIL: 0, WARN: 1, OK: 2 };
+    return `<h3 class="res-h">Dependencies <span class="p-muted small">docs/DEPENDENCIES.md · python -m massive_collate deps</span></h3>
+      <div class="table-wrap"><table class="act-table res-table"><thead><tr><th>Area</th><th>Item</th><th>Status</th><th>Found</th><th>Action</th></tr></thead>
+      <tbody>${[...deps.rows].sort((a, b) => order[a.status] - order[b.status]).map((c) => `
+        <tr><td class="sub">${esc(c.area)}</td><td><b>${esc(c.item)}</b></td>
+          <td><span class="state ${cls[c.status] || ''}">${esc(c.status)}</span></td>
+          <td>${esc(c.found)}</td><td class="sub">${esc(c.action || '')}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+
   async function load() {
     clearTimeout(timer);
     if (document.body.dataset.view !== 'resources' || document.hidden) return;
     try {
-      data = await api('/api/resources', { span });
+      [data] = await Promise.all([api('/api/resources', { span }), loadDeps()]);
     } catch (err) { showError(err); }
     render();
     clearTimeout(timer);  // one loop, however many loads overlapped
@@ -136,7 +156,8 @@
       <h3 class="res-h">Data files <span class="p-muted small">${esc(files.root)}</span></h3>
       <div class="table-wrap"><table class="act-table res-table"><thead><tr><th>Folder · file</th><th class="num">Size</th>
         <th class="num">Growth</th><th>Modified</th></tr></thead><tbody>${fileRows(files)}</tbody></table></div>
-      <div class="p-muted small res-note">Growth is over the last hour (from a minute after the app started); a folder opens to its largest files.</div>` : ''}`;
+      <div class="p-muted small res-note">Growth is over the last hour (from a minute after the app started); a folder opens to its largest files.</div>` : ''}
+      ${depsHtml()}`;
     box.scrollTop = scrolled;
   }
 

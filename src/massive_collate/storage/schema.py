@@ -323,6 +323,29 @@ CREATE TABLE IF NOT EXISTS runs (
     status      TEXT NOT NULL DEFAULT 'running',
     message     TEXT
 );
+
+CREATE TABLE IF NOT EXISTS fetch_queue (   -- every resource a plugin downloads, or will (storage/queue.py)
+    plugin      TEXT NOT NULL,             -- the plugin it is for (massive, alpaca, federal ...)
+    part        TEXT NOT NULL,             -- its feed or publisher in it (massive, boats, bls ...)
+    kind        TEXT NOT NULL,             -- bars, news, dataset file, document ...
+    key         TEXT NOT NULL,             -- the resource: a ticker, a feed's key, a file's address
+    title       TEXT NOT NULL,             -- how the Fetcher names it
+    state       TEXT NOT NULL,             -- waiting | running | done | failed | held
+    priority    INTEGER NOT NULL DEFAULT 0,  -- lower first
+    detail      TEXT,                      -- what it fetches, what it got, or why it waits
+    not_before  TEXT,                      -- not asked before (UTC): its next read, a hold's end
+    queued_at   TEXT NOT NULL,
+    started_at  TEXT,
+    finished_at TEXT,
+    requests    INTEGER NOT NULL DEFAULT 0,
+    rows        INTEGER NOT NULL DEFAULT 0,
+    bytes       INTEGER NOT NULL DEFAULT 0,
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    error       TEXT,
+    pid         INTEGER,                   -- the process fetching it (running)
+    PRIMARY KEY (plugin, part, kind, key)
+);
+CREATE INDEX IF NOT EXISTS fetch_queue_state ON fetch_queue (state, priority);
 """
 
 # Columns added after the first release: (table, column, type). Applied to older databases on open.

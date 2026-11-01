@@ -204,24 +204,32 @@ def _keep(store, ds: Dataset, file: str, blob: bytes, sha: str) -> Path | None:
 def _fetch_files(store, ds: Dataset, today: date, force: bool, session, log) -> int:
     name, n = ds.name, 0
     single = len(ds.files(today)) == 1  # a file holding the whole dataset: what it drops is withdrawn
-    for url, final in due_files(store, ds, today, force):
+    due = list(due_files(store, ds, today, force))
+    queue = _FileQueue(store, ds, log)
+    queue.plan(due)
+    for url, final in due:
         file = url.rsplit("/", 1)[-1]
         why = refusal(ds, url)
         if why:
             log(f"{name}: {file} not fetched ({why})")
+            queue.end(url, "failed", error=f"not fetched ({why})")
             continue
+        queue.start(url)
         try:
             resp = session.get(url, headers={"User-Agent": USER_AGENT}, timeout=120)
             if resp.status_code == 404 and not final:
                 log(f"{name}: {file} not published yet")
+                queue.end(url, "done", detail="not published yet", requests=1)
                 continue
             resp.raise_for_status()
             parsed = ds.parse(url, resp.content)
         except (requests.RequestException, ValueError, KeyError, zipfile.BadZipFile) as e:
             log(f"{name}: {file} not fetched ({e}); tried again next time")  # the others go on
+            queue.end(url, "failed", error=str(e)[:300], requests=1)
             continue
         if not parsed.values and not parsed.constituents:
             log(f"{name}: {file} had nothing to read (format changed?); not marked fetched")
+            queue.end(url, "failed", error="nothing to read (format changed?)", requests=1, bytes_=len(resp.content))
             continue
         blob = resp.content
         sha = hashlib.sha256(blob).hexdigest()
@@ -230,6 +238,7 @@ def _fetch_files(store, ds: Dataset, today: date, force: bool, session, log) -> 
             store.set_dataset_file(name, url, len(blob), prev["values"] or 0, closed=final, sha256=sha,
                                    version_at=prev["version_at"], origin=sha, local_path=prev["local_path"])
             log(f"{name}: {file} unchanged")
+            queue.end(url, "done", detail="unchanged", requests=1, bytes_=len(blob))
             continue
         version = _published_at(resp) or datetime.now(timezone.utc)
         local = _keep(store, ds, file, blob, sha)
@@ -241,8 +250,44 @@ def _fetch_files(store, ds: Dataset, today: date, force: bool, session, log) -> 
         _quality_prior(store, ds)
         log(f"{name}: {file} ({len(blob) / 1e6:.2f} MB, published {version:%Y-%m-%d}): {_describe(counts)}"
             + ("; final, closed" if final else ""))
+        queue.end(url, "done", detail=_describe(counts), requests=1, bytes_=len(blob), rows=_changed(counts))
         n += 1
     return n
+
+
+class _FileQueue:
+    """A dataset's files on the fetch queue (storage/queue.py; the Fetcher shows it), under its plugin
+    and the publisher that declares it (the CFTC's: Federal's, part cftc): each due file waiting, then
+    running, done or failed. Never the fetch's undoing: a queue write that fails is logged once."""
+
+    def __init__(self, store, ds: Dataset, log):
+        from .sources.registry import publisher_of
+
+        self.store, self.ds, self.log, self.broken = store, ds, log, False
+        self.part = ds.publisher or ds.provider
+        self.plugin = publisher_of(self.part)
+
+    def _do(self, method: str, *args, **kw) -> None:
+        if self.broken:
+            return
+        try:
+            getattr(self.store, method)(*args, **kw)
+        except Exception as e:  # noqa: BLE001 - the queue is the view's; the fetch goes on
+            self.broken = True
+            self.log(f"{self.ds.name}: the fetch queue was not kept ({type(e).__name__}: {e})")
+
+    def title(self, url: str) -> str:
+        return f"{self.ds.name}: {url.rsplit('/', 1)[-1]}"
+
+    def plan(self, due: list[tuple[str, bool]]) -> None:
+        self._do("queue_put", self.plugin, self.part, "dataset file",
+                 [{"key": url, "title": self.title(url), "priority": i, "detail": self.ds.title} for i, (url, _) in enumerate(due)])
+
+    def start(self, url: str) -> None:
+        self._do("queue_start", self.plugin, self.part, "dataset file", url, self.title(url))
+
+    def end(self, url: str, state: str, **kw) -> None:
+        self._do("queue_end", self.plugin, self.part, "dataset file", url, state, title=self.title(url), **kw)
 
 
 class GitError(RuntimeError):

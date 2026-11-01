@@ -203,7 +203,7 @@ def test_the_page_shows_each_plugins_databases():
     js = (STATIC / "plugins.js").read_text(encoding="utf-8")
     assert "function databasesHtml(p)" in js and "<h4>Databases</h4>" in js
     assert "${publishersHtml(p)}${databasesHtml(p)}`;" in js  # a feed plugin's, after its headlines
-    assert "${partsHtml(p)}${databasesHtml(p)}`;" in js and "${pubSetupHtml(p)}${readsHtml(p)}${databasesHtml(p)}`;" in js
+    assert "${partsHtml(p)}${databasesHtml(p)}`;" in js and "${readsHtml(p)}${databasesHtml(p)}`;" in js
     assert "${datasetsHtml(p)}${databasesHtml(p)}" in js
     assert "mongodb: 'MongoDB'" in js and "duckdb: 'DuckDB'" in js
     assert ".pl-dbs code {" in (STATIC / "style.css").read_text(encoding="utf-8")

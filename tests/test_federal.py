@@ -113,7 +113,7 @@ def test_the_page_shows_federal_once_with_its_agencies_in_its_page_and_the_gov_v
     js = (STATIC / "plugins.js").read_text(encoding="utf-8")
     assert "const top = (data.publishers || []).filter((p) => !parentOf(p));" in js
     assert "top.filter((p) => !setsOnly(p)).map(pubButton)" in js and "pl-sub" not in js
-    assert "if (p.parts.length) return `${(p.keys || []).length ? pubSetupHtml(p) : ''}${partsHtml(p)}${databasesHtml(p)}`;" in js
+    assert "if (p.parts.length) return `${(p.keys || []).length ? pubSetupHtml(p) : ''}${fetchingHtml(p.name)}${partsHtml(p)}${databasesHtml(p)}`;" in js
     assert "${partsOf(p).map((q) => partHtml(q, false)).join('')}" in js  # each agency a section
     assert '<details class="pl-part" data-part="${esc(q.name)}"' in js and "${q.feeds.length ? readsHtml(q) : datasetsHtml(q)}" in js
     assert "if (up) { folds.set(part.name, true); sel = up.id; }" in js  # a part picked: its plugin's page

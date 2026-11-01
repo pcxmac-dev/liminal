@@ -589,6 +589,36 @@ def _sync(args, settings: Settings) -> tuple[int, int]:
     return 0, ran
 
 
+def cmd_fetcher(args, settings: Settings) -> int:
+    """The plugins that fetch on their own (plugin API 1.9: runner.py), each its own worker, once
+    through their queue: one pass per plugin at a time (its run lock, a feed's when it is one)."""
+    from . import proc, runner
+    from .sources.registry import plugin_fetchers
+
+    log = Logger(settings.db_path.parent / "logs" / "massive-collate.log")
+    if settings.offline:
+        log("fetcher: offline (MASSIVE_OFFLINE): nothing fetched")
+        return 0
+    mine = [p for p in plugin_fetchers() if args.plugin in (None, p)]
+    if not mine:
+        print("no plugin fetches on its own yet" if args.plugin is None else f"{args.plugin} does not fetch on its own")
+        return 0
+    held = []
+    for p in mine:
+        if proc.acquire(proc.run_lock_path(settings.db_path, p)):
+            held.append(p)
+        else:
+            log(f"fetcher: {p} is fetching already; left to that pass")
+    try:
+        for p in held:
+            out = runner.run_all(lambda: Store(settings.db_path), settings, log, only=p).get(p, {})
+            log(f"fetcher: {p}: " + ", ".join(f"{k} {v}" for k, v in out.items() if v))
+    finally:
+        for p in held:
+            proc.release(proc.run_lock_path(settings.db_path, p))
+    return 0
+
+
 def cmd_datasets(args, settings: Settings) -> int:
     """Research datasets: list them, fetch (or refresh) them, show a dataset's series or values."""
     from . import datasets
@@ -1547,6 +1577,10 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("info", help="reference details for a ticker")
     s.add_argument("ticker")
     s.set_defaults(func=cmd_info)
+
+    s = sub.add_parser("fetcher", help="the plugins that fetch on their own: each one's queue, once through")
+    s.add_argument("--plugin", help="that plugin only")
+    s.set_defaults(func=cmd_fetcher)
 
     s = sub.add_parser("datasets", help="research datasets: list, fetch (or refresh), show NAME [SERIES]")
     s.add_argument("action", choices=["list", "fetch", "show"], nargs="?", default="list")

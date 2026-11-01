@@ -172,6 +172,87 @@
   }
 
   // -- left: the plugins ---------------------------------------------------------------------
+  // -- its fetching (gui/queue.py plugin_status): the user, 2026-10-31: "the plugin status will be
+  // available in the plugins:: plugin page". Whether it is fetching (and what), waiting, paused or
+  // stopped; its share of the queue; its feeds' requests against their caps, their limits, its runs,
+  // its lines of the log, and the audits of its feeds (a second feed's copy compared). Asked every
+  // few seconds while its page is open.
+  const FETCHING_EVERY_MS = 5000;
+  const F_STATE = { fetching: 'fetching', waiting: 'waiting', idle: 'idle', paused: 'paused', halted: 'halted', killed: 'stopped' };
+  const Q_LABEL = { running: 'fetching', waiting: 'waiting', held: 'held', failed: 'failed', stopped: 'stopped', done: 'done' };
+  const fetchState = { name: null, data: null, timer: null, audits: null, auditsAt: 0 };
+  const shown = () => (publisher() || plugin())?.name || null;
+  const meter = (f, cls = '') => `<span class="meter ${cls}"><span style="width:${Math.max(0, Math.min(100, (f || 0) * 100)).toFixed(1)}%"></span></span>`;
+  const dur = (s) => (s == null ? '–' : s < 90 ? `${Math.round(s)} s` : s < 5400 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`);
+  const label = (s) => (typeof feedLabel === 'function' ? feedLabel(s) : s);  // app.js: alpaca (blue ocean)
+  const etWhen = (iso) => (iso ? `${etDay(iso)} ${etTime(iso)}` : '–');
+
+  async function loadFetching() {
+    clearTimeout(fetchState.timer);
+    const name = shown();
+    if (!name || document.body.dataset.view !== 'plugins' || document.hidden) return;
+    try {
+      const got = await api(`/api/plugin-fetching?name=${encodeURIComponent(name)}`);
+      if (Date.now() - fetchState.auditsAt > 60_000) {
+        fetchState.audits = await api('/api/audits').catch(() => fetchState.audits);
+        fetchState.auditsAt = Date.now();
+      }
+      if (shown() === name) {
+        fetchState.name = name;
+        fetchState.data = got;
+        render();
+      }
+    } catch { /* the next try: the page keeps what it showed */ }
+    fetchState.timer = setTimeout(loadFetching, FETCHING_EVERY_MS);
+  }
+
+  function fetchingHtml(name) {
+    const f = fetchState.name === name ? fetchState.data : null;
+    if (fetchState.name !== name) setTimeout(loadFetching, 0);
+    if (!f) return '<h4>Fetching</h4><div class="p-muted small">Asking…</div>';
+    const c = f.counts || {};
+    const counts = ['running', 'waiting', 'held', 'failed', 'stopped', 'done'].filter((s) => c[s]).map((s) => `${num(c[s])} ${Q_LABEL[s]}`).join(' · ');
+    const qRow = (r) => `<tr><td><b>${esc(r.title)}</b><div class="p-muted small">${esc(r.partLabel || r.kind)}</div></td>
+      <td><span class="ex-state pl-q-${esc(r.state)}">${esc(Q_LABEL[r.state] || r.state)}</span></td>
+      <td class="small">${esc(r.error || r.detail || '')}</td>
+      <td class="num">${r.requests ? num(r.requests) : '–'}</td>
+      <td class="small">${r.state === 'running' ? `since ${etTime(r.started_at)}` : r.finished_at ? ago(r.finished_at) : r.not_before ? `not before ${etWhen(r.not_before)}` : ''}</td></tr>`;
+    const rows = (f.rows || []).filter((r) => r.state !== 'done').slice(0, 15);
+    const feeds = (f.feeds || []).map((x) => `<tr><td><b>${esc(x.label)}</b>${x.running ? ' <span class="ex-state pl-q-running">running</span>' : ''}<div class="p-muted small">${esc(x.tier)} plan</div></td>
+      <td>${x.perDay ? meter(x.today / x.perDay, x.today / x.perDay > 0.9 ? 'warn' : '') : ''}<div class="small">${num(x.today)} of ${num(x.perDay)} today</div></td>
+      <td class="num">${num(x.perRun)}</td><td>${x.rpm ? `${num(x.rpm)} a minute` : 'no rate limit'}</td></tr>`).join('');
+    const t = Date.now() / 1000;
+    const limits = (f.limits || []).map((l) => {
+      const w = l.window || {};
+      const full = w.allowed && w.used >= w.allowed;
+      const wait = l.wait ? Math.max(0, Math.round(l.wait.until - t)) : 0;
+      const next = wait ? `<span class="warn">in ${wait} s</span><div class="p-muted small">${esc(l.wait.reason || '')}</div>`
+        : full ? `<span class="warn">in ${Math.ceil(w.freeIn)} s</span><div class="p-muted small">window full</div>` : 'now';
+      const m = l.month;
+      return `<tr><td><b>${esc(label(l.source))}</b><div class="p-muted small">${esc(l.published)}</div></td><td>${esc(l.keptTo)}</td>
+        <td>${w.allowed ? `${meter(w.used / w.allowed, full ? 'warn' : '')}<div class="small">${num(w.used)} of ${num(w.allowed)}</div>` : '<span class="p-muted small">no limit</span>'}</td>
+        <td>${next}</td><td class="small">${m && m.allowance ? `${num(m.used)} of ${num(m.allowance)} this month · ${Math.round((m.share ?? 0) * 100)}% by its end` : 'no daily cap'}</td></tr>`;
+    }).join('');
+    const runs = (f.runs || []).map((r) => `<tr><td>${etWhen(r.started_at)}</td><td>${esc(label(r.source || ''))}<div class="p-muted small">${esc(r.command)}</div></td>
+      <td><span class="ex-state pl-run-${esc(r.status)}">${esc(r.status)}</span></td><td class="num">${num(r.requests)}</td><td class="num">${num(r.rows)}</td>
+      <td class="num">${dur(r.seconds)}</td><td class="small">${esc(r.message || '')}</td></tr>`).join('');
+    const mine = new Set((f.feeds || []).map((x) => x.name));
+    const audits = (fetchState.audits?.audits || []).filter((a) => mine.has(a.owner) || mine.has(a.auditor)).slice(0, 10);
+    const auditRows = audits.map((a) => `<tr><td>${ago(a.at)}</td><td><b>${esc(a.ticker)}</b></td><td>${esc(a.owner)} → ${esc(a.auditor)}</td>
+      <td><span class="ex-state pl-audit-${esc(a.verdict)}">${esc(a.verdict)}</span></td><td class="num">${num(a.matched)}</td>
+      <td class="small">${a.report?.box?.c ? `close ${a.report.box.c.median >= 0 ? '+' : ''}${a.report.box.c.median.toFixed(2)} bps (p95 ${a.report.box.c.p95.toFixed(2)})` : ''}</td></tr>`).join('');
+    const log = (f.log || []).map((line) => `<div class="${/error|refused|stopped|failed|could not/i.test(line) ? 'bad' : /: [1-9][\d,]* (rows|new)/.test(line) ? 'good' : ''}">${esc(line)}</div>`).join('');
+    return `<h4>Fetching</h4>
+      <div class="pl-fetching"><span class="ex-state pl-f-${esc(f.state)}">${esc(F_STATE[f.state] || f.state)}</span> <span class="small">${esc(f.why || '')}</span>
+        ${counts ? `<div class="p-muted small">Its queue: ${esc(counts)} · <a href="#" data-goto-fetcher="${esc(name)}">all of it in the Fetcher</a></div>` : '<div class="p-muted small">Nothing of it on the queue yet.</div>'}</div>
+      ${rows.length ? `<table class="act-table ex-mini pl-queue"><thead><tr><th>Resource</th><th>State</th><th>Detail</th><th class="num">Requests</th><th>When</th></tr></thead><tbody>${rows.map(qRow).join('')}</tbody></table>` : ''}
+      ${feeds ? `<table class="act-table ex-mini"><thead><tr><th>Feed</th><th>Requests today</th><th class="num">Per run</th><th>Rate</th></tr></thead><tbody>${feeds}</tbody></table>` : ''}
+      ${limits ? `<h4>Request windows now</h4><table class="act-table ex-mini"><thead><tr><th>Server</th><th>Kept to</th><th>Window now</th><th>Next request</th><th>Month</th></tr></thead><tbody>${limits}</tbody></table>` : ''}
+      ${runs ? `<h4>Runs</h4><table class="act-table ex-mini"><thead><tr><th>Started (ET)</th><th>Feed</th><th>Status</th><th class="num">Requests</th><th class="num">Rows</th><th class="num">Took</th><th>Note</th></tr></thead><tbody>${runs}</tbody></table>` : ''}
+      ${auditRows ? `<h4>Audits of its feeds</h4><table class="act-table ex-mini"><thead><tr><th>When</th><th>Symbol</th><th>Stored → checked by</th><th>Verdict</th><th class="num">Bars</th><th>Difference</th></tr></thead><tbody>${auditRows}</tbody></table>` : ''}
+      ${log ? `<h4>Its log</h4><div class="act-log pl-log">${log}</div>` : ''}`;
+  }
+
   function listHtml() {
     // each plugin once: its parts (Massive's headlines, Federal's agencies) are sections of its page
     const pubButton = (p) => `<button type="button" class="ex-venue${PUB + p.name === sel ? ' active' : ''}" data-plugin="${esc(PUB + p.name)}" title="${esc(p.about)}">
@@ -340,11 +421,11 @@
   }
 
   function pubMainHtml(p) {
-    if (p.parts.length) return `${(p.keys || []).length ? pubSetupHtml(p) : ''}${partsHtml(p)}${databasesHtml(p)}`;
+    if (p.parts.length) return `${(p.keys || []).length ? pubSetupHtml(p) : ''}${fetchingHtml(p.name)}${partsHtml(p)}${databasesHtml(p)}`;
     if (!p.feeds.length) {
-      return `${datasetsHtml(p)}${databasesHtml(p)}${p.policy.terms ? `<h4>Terms</h4><div class="small">${esc(p.policy.terms)}</div>` : ''}`;
+      return `${fetchingHtml(p.name)}${datasetsHtml(p)}${databasesHtml(p)}${p.policy.terms ? `<h4>Terms</h4><div class="small">${esc(p.policy.terms)}</div>` : ''}`;
     }
-    return `${pubSetupHtml(p)}${readsHtml(p)}${databasesHtml(p)}`;
+    return `${pubSetupHtml(p)}${fetchingHtml(p.name)}${readsHtml(p)}${databasesHtml(p)}`;
   }
 
   // where a plugin's data is (registry.plugin_databases, API 1.8; the user, 2026-10-31: "the plugin
@@ -468,7 +549,7 @@
     if (pub) return pubMainHtml(pub);
     const p = plugin();
     if (!p) return '<div class="empty">No plugin found.</div>';
-    return `${setupHtml(p.name, p.keys)}${feedsHtml(p)}${planHtml(p)}${limitsHtml(p)}${capabilitiesHtml(p)}${scanHtml(p)}
+    return `${setupHtml(p.name, p.keys)}${fetchingHtml(p.name)}${feedsHtml(p)}${planHtml(p)}${limitsHtml(p)}${capabilitiesHtml(p)}${scanHtml(p)}
       ${p.notes.length ? `<h4>Notes</h4>${p.notes.map((n) => `<div class="small">${esc(n)}</div>`).join('')}` : ''}${publishersHtml(p)}${databasesHtml(p)}`;
   }
 
@@ -542,6 +623,12 @@
     if (e.target.matches?.('details.pl-part')) folds.set(e.target.dataset.part, e.target.open);
   }, true);
   box.addEventListener('click', (e) => {
+    const goto = e.target.closest('[data-goto-fetcher]');
+    if (goto) {  // its queue in the Fetcher
+      e.preventDefault();
+      document.getElementById('railFetcher')?.click();
+      return;
+    }
     const t = e.target.closest('[data-plugin],[data-rescan],[data-recheck],[data-pause],[data-save-key],[data-remove-key]');
     if (!t || t.disabled) return;
     if (t.dataset.saveKey) {
@@ -565,7 +652,10 @@
       post(`/api/plugins/pause?name=${encodeURIComponent(t.dataset.pause)}&on=${on ? 1 : 0}`, on ? 'Paused.' : 'Resumed.');
     }
   });
-  window.addEventListener('massive:view', (e) => { if (e.detail.view === 'plugins') load(); else clearTimeout(timer); });
+  window.addEventListener('massive:view', (e) => {
+    if (e.detail.view === 'plugins') load();
+    else { clearTimeout(timer); clearTimeout(fetchState.timer); }
+  });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
   if (document.body.dataset.view === 'plugins') load();  // the page opened on this view (before this script listened)
 })();

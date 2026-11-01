@@ -1024,6 +1024,15 @@ main > .view.ex-view:not([hidden]) { display: grid; }
 .pl-setup td { vertical-align: middle; }
 .pl-setup input.pl-key { width: 100%; min-width: 140px; font-size: 12px; padding: 2px 6px; box-sizing: border-box; }
 .pl-dbs code { white-space: nowrap; }
+/* Fetcher: the queue's filters, one row each (plugin, kind, state) */
+.q-filters { flex-direction: column; gap: 4px; }
+.q-filters .q-group { display: flex; gap: 4px; flex-wrap: wrap; }
+/* A plugin's fetching (its page): its state, queue, feeds, limits, runs and log */
+.pl-fetching { margin-bottom: 6px; }
+.pl-log { max-height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
+.ex-state.pl-f-fetching, .ex-state.pl-q-running { color: var(--up); border-color: var(--up); }
+.ex-state.pl-f-killed, .ex-state.pl-q-failed, .ex-state.pl-q-stopped, .ex-state.pl-run-error, .ex-state.pl-audit-fail { color: var(--down); border-color: var(--down); }
+.ex-state.pl-f-paused, .ex-state.pl-f-halted, .ex-state.pl-q-held, .ex-state.pl-audit-warn { color: var(--st-wait); border-color: var(--st-wait); }
 .pl-dbs td { vertical-align: top; }
 .pl-key-btns { white-space: nowrap; text-align: right; }
 .pl-key-btns button + button { margin-left: 4px; }

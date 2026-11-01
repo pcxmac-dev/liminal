@@ -231,16 +231,26 @@ def test_the_status_is_polled_fast_only_while_its_views_are_open():
     assert tail.index("clearTimeout(timer);") < tail.index("timer = setTimeout(poll,")  # one timer, never two
 
 
-def test_the_stored_bar_shows_what_is_held_and_what_is_still_to_fetch():
+def test_the_fetcher_shows_the_queue_of_every_plugins_resources():
+    """The user, 2026-10-31: "the fetcher will then just show the queue of all resources being
+    downloaded like symbols": its per-feed tabs, tiles, limits, symbols, runs and log are gone (each
+    plugin's are on its page); the queue across plugins, filtered by plugin, kind and state."""
+    html = _js("index.html").split('id="viewFetcher"', 1)[1].split('id="viewLive"', 1)[0]
+    assert 'id="qRows"' in html and 'id="qFilters"' in html and 'id="qCounts"' in html
+    for gone in ("actFeeds", "actTiles", "actLimits", "actSymbols", "actRuns", "actLog", "actAudits", "depsRows", "datasetRows"):
+        assert gone not in html and gone not in _js("activity.js"), gone
     act = _js("activity.js")
-    bar = act.split("function storedBar(s) {", 1)[1].split("\n  }\n", 1)[0]
-    assert "seg('older'" in bar and "seg('held'" in bar and "seg('newer'" in bar
-    assert "s.expectedThrough" in bar  # newer data only up to what the plan should have published
-    assert "Math.max(w, SPAN_MIN_PCT)" in bar  # a day to fetch shows on a twenty-year line
-    assert "${storedBar(s)}" in act
+    assert "fetch(`/api/queue?${q}`)" in act and "Date.now() - queueAt < Q_EVERY_MS" in act  # asked at most every 3 s
+    assert "e.target.closest('#qRows tr.has-data, #viewLive tr.has-data')" in act  # a symbol's row opens it
+    states = act.split("const Q_STATES = [", 1)[1].split("];", 1)[0]
     css = _js("style.css")
-    for part, colour in (("held", "--up"), ("older", "--st-wait"), ("newer", "--st-new")):
-        assert re.search(r"\.meter\.span > \." + part + r" \{ background: var\(" + colour + r"\)", css), part
+    for name, table in (("Q_CLASS", ".state."), ("Q_DOT", ".st-dot.")):
+        body = act.split(f"const {name} = {{", 1)[1].split("};", 1)[0]
+        got = dict(re.findall(r"(\w+): '([\w-]+)'", body))
+        assert set(got) == set(re.findall(r"'(\w+)'", states)), name  # every state its look
+        for cls in got.values():
+            assert f"{table}{cls}" in css, (name, cls)
+    assert "Dependencies" in _js("resources.js") and "/api/deps" in _js("resources.js")  # moved to Resources
 
 
 def test_the_fetchers_disk_turns_while_fetching_without_restarting_each_poll():
@@ -336,17 +346,13 @@ def test_views_restored_on_opening_the_page_load_their_content():
         assert f"if (document.body.dataset.view === '{view}')" in _js(name).split("massive:view", 1)[1]
 
 
-def test_every_fetcher_state_has_its_name_icon_and_filter():
+def test_every_symbol_state_has_its_name_and_icon():
     from massive_collate.gui.activity import STATE_RANK
 
-    icons, page = _js("icons.js"), _js("activity.js")
+    icons = _js("icons.js")
     labels = icons.split("const DATA_LABEL = {", 1)[1].split("};", 1)[0]
     named = set(re.findall(r"(\w+): '", labels))
-    order = page.split("const STATE_ORDER = {", 1)[1].split("};", 1)[0]
-    ranked = dict((k, int(v)) for k, v in re.findall(r"(\w+): (\d+)", order))
-    assert ranked == STATE_RANK  # the table sorts as the server ranks
     assert set(STATE_RANK) <= named  # "next" and "held" had none: an empty chip
-    assert "['all', ...Object.keys(STATE_ORDER)]" in page  # a filter button for each, rows hidden by none
     icon = icons.split("function dataIcon(", 1)[1].split("\n  }\n", 1)[0]
     assert "d.state === 'next' ? icon('next'" in icon and "d.state === 'held' ? icon('pause'" in icon
     css = _js("style.css")
@@ -370,7 +376,7 @@ def test_the_page_follows_every_feed_fetching_side_by_side():
     # over once seen going and ended, not on the poll 400 ms after the start (before its lock and row)
     assert "const mine = data.symbolRun?.ticker === job.ticker;" in poll and "if (mine && data.symbolRun.going) job.seen = true;" in poll
     assert "job.seen ? !(mine && data.symbolRun.going) : !data.running && Date.now() - job.since > RUN_START_GRACE_MS" in poll
-    assert "wasRunning" not in page and "(data.fetching || []).some((f) => f.source === l.source)" in page
+    assert "wasRunning" not in page
     assert "Running ${going.length} feeds" in page.split("function statusLine()", 1)[1].split("\n  }\n", 1)[0]
 
 
@@ -385,13 +391,11 @@ def test_the_sessions_are_picked_by_name():
     assert "state.session = SESSIONS.includes(e.target.value) ? e.target.value : 'regular';" in app
 
 
-def test_the_fetchers_limits_show_each_feeds_month_against_its_allowance():
-    head = _js("index.html").split('class="act-table limits"', 1)[1].split("</thead>", 1)[0]
-    assert "<th>This month</th>" in head and '<th class="num">By month end</th>' in head
-    page = _js("activity.js")
-    assert "${monthHtml(l.month)}</tr>" in page.split("function limitsHtml(rows)", 1)[1]
-    month = page.split("function monthHtml(m)", 1)[1].split("\n  }\n", 1)[0]
-    assert "lapsed on past days" in month and "a day; ${num(m.left)} left" in month
+def test_a_plugins_page_shows_its_limits_with_its_month_against_its_allowance():
+    """The Fetcher's limits moved to each plugin's page (its Fetching section)."""
+    page = _js("plugins.js").split("function fetchingHtml(name) {", 1)[1].split("\n  }\n", 1)[0]
+    assert "<th>Month</th>" in page and "this month · ${Math.round((m.share ?? 0) * 100)}% by its end" in page
+    assert "of ${num(x.perDay)} today" in page  # each feed's requests against its daily cap
 
 
 def test_the_status_line_spans_the_open_views_own_area_in_every_view():

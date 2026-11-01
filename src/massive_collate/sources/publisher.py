@@ -29,6 +29,7 @@ from typing import Callable
 
 from ..layout import Database
 from .dataset import Dataset
+from .fetching import Fetcher
 from .keys import KeyVar
 
 
@@ -103,6 +104,9 @@ class Publisher:
     # databases its own code writes besides gov/gov.db and its datasets' files (API 1.8;
     # layout.Database): a vendor's `read` saving elsewhere (Massive's headlines: the main file's news)
     databases: tuple[Database, ...] = ()
+    # its own fetching (API 1.9; sources/fetching.py); None: read by the app's news reader
+    # (publications.py) and its datasets fetched by `datasets`
+    fetcher: Fetcher | None = None
     # its own version and the plugin contract it was written for (sources/registry.py: PLUGIN_API)
     version: str = ""
     api: str = "1.0"

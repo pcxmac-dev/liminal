@@ -1205,6 +1205,22 @@ class ChartApp:
         out["symbolRun"] = {"ticker": run[0], "going": run[1].poll() is None} if run else None
         return out
 
+    def queue(self, q: dict[str, str]) -> dict:
+        """The Fetcher: the fetch queue across plugins (gui/queue.py), filtered by plugin, kind, state."""
+        from . import queue
+
+        limit = max(1, min(int(q.get("limit", 300)), 2000))
+        with self._status_lock:
+            return queue.view(self._status_store, q.get("plugin") or None, q.get("kind") or None,
+                              q.get("state") or None, limit)
+
+    def plugin_fetching(self, name: str) -> dict:
+        """A plugin's fetching status for its page (gui/queue.py): its state, queue, feeds, limits, runs, log."""
+        from . import queue
+
+        with self._status_lock:
+            return queue.plugin_status(self._status_store, self.settings, self.store.path, name)
+
     def datasets(self) -> dict:
         """The research datasets: what is held, its span, files fetched and closed, quality."""
         from .. import datasets
@@ -1960,6 +1976,10 @@ def make_handler(app: ChartApp, port_ref: list[int]):
                     return self._json(app.exchanges())
                 if url.path == "/api/audits":
                     return self._json(app.audit_summary(q.get("ticker")))
+                if url.path == "/api/queue":
+                    return self._json(app.queue(q))
+                if url.path == "/api/plugin-fetching":
+                    return self._json(app.plugin_fetching(q["name"]))
                 if url.path == "/api/datasets":
                     return self._json(app.datasets())
                 if url.path == "/api/dataset/series":

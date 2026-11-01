@@ -187,6 +187,52 @@ class Reader:
         self.gdb, self.settings, self.store, self.log, self.sleep = gdb, settings, store, log, sleep
         self.session = session or requests.Session()
         self.contact = contact if contact is not None else getattr(settings, "gov_contact", None)
+        self._queued: set[str] = set()  # feeds put on the fetch queue by this reader
+        self._queue_broken = False
+
+    # -- the fetch queue (storage/queue.py: the Fetcher shows it) -----------------------------------------
+    QUEUE_STATE = {"ok": "done", "unchanged": "done", "waiting": "held", "refused": "held", "failed": "failed"}
+
+    def _queue(self, method: str, pub: Publisher, feed: Feed, *args, **kw) -> None:
+        """Each feed's reads on the fetch queue, under its plugin (Federal's, for the Fed's; Massive's,
+        for its headlines): never the reader's undoing (a write that fails is logged once)."""
+        if self.store is None or self._queue_broken:
+            return
+        from .sources.registry import publisher_of
+
+        try:
+            getattr(self.store, method)(publisher_of(pub.name), pub.name, "news", feed.key, *args,
+                                        title=f"{feed.agency}: {feed.title}", **kw)
+            self._queued.add(feed.key)
+        except Exception as e:  # noqa: BLE001 - the queue is the view's; the reads go on
+            self._queue_broken = True
+            self.log(f"publications: the fetch queue was not kept ({type(e).__name__}: {e})")
+
+    def _queue_wait(self, pub: Publisher, feed: Feed, nxt: datetime, now: datetime) -> None:
+        """A feed not due: on the queue, waiting for its next read (a row kept from before stays as it is)."""
+        if self.store is None or self._queue_broken:
+            return
+        from .sources.registry import publisher_of
+
+        try:
+            self.store.queue_put(publisher_of(pub.name), pub.name, "news", [
+                {"key": feed.key, "title": f"{feed.agency}: {feed.title}", "not_before": nxt, "detail": "next read"}],
+                now=now, replace=False)
+            self._queued.add(feed.key)
+        except Exception as e:  # noqa: BLE001 - the queue is the view's; the reads go on
+            self._queue_broken = True
+            self.log(f"publications: the fetch queue was not kept ({type(e).__name__}: {e})")
+
+    def _queue_read(self, pub: Publisher, feed: Feed, now: datetime, nxt: datetime) -> None:
+        """A read's end on the queue, as the feed's state says (done, held, failed), asked next at `nxt`."""
+        if self.store is None or self._queue_broken:
+            return
+        row = self.gdb.fetched().get(feed.key) or {}
+        status = row.get("status") or "ok"
+        state = self.QUEUE_STATE.get(status, "done")
+        detail = row.get("message") or status
+        self._queue("queue_end", pub, feed, state, detail=detail, error=detail if state == "failed" else None,
+                    not_before=nxt, now=now)
 
     # -- set up, stopped, held, its limits --------------------------------------------------------------
     def set_up(self, pub: Publisher) -> bool:
@@ -348,12 +394,16 @@ class Reader:
                 else:
                     self.read(pub, feed, now)
                     nxt = self.next_read(pub, feed, now)
+            elif feed.key not in self._queued:  # on the queue from its first pass: its next read
+                self._queue_wait(pub, feed, nxt, now)
             soonest = min(soonest, nxt)
         return soonest
 
     def read(self, pub: Publisher, feed: Feed, now: datetime) -> int:
         """Read one feed under the checks; returns requests sent. Never raises: whatever goes wrong
-        (a plugin's or a parser's surprise) is noted on the feed and asked again after its cadence."""
+        (a plugin's or a parser's surprise) is noted on the feed and asked again after its cadence.
+        On the fetch queue while it reads, then as its state says (a recheck's read too)."""
+        self._queue("queue_start", pub, feed, now=now)
         try:
             if pub.kind == "vendor" or feed.kind == "headlines":
                 return self._read_vendor(pub, feed, now)
@@ -362,6 +412,9 @@ class Reader:
             self._failed(pub, feed, now, f"{type(e).__name__}: {e}", lasting=True)
             self.log(f"publications: {pub.title} {feed.title}: {type(e).__name__}: {e}")
             return 0
+        finally:
+            if self.store is not None:
+                self._queue_read(pub, feed, now, self.next_read(pub, feed, now))
 
     def _failed(self, pub: Publisher, feed: Feed, now: datetime, why: str, lasting: bool = False) -> None:
         """A failure noted with when it is asked again: one that lasts (a 4xx, not a feed, an

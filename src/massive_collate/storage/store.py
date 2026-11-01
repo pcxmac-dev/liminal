@@ -19,12 +19,13 @@ from .ledger import LedgerStore, key_coverage_by_origin
 from .markets import MarketsStore
 from .provenance import ProvenanceStore
 from .pruned import PrunedStore
+from .queue import QueueStore
 from .schema import MIGRATIONS, SCHEMA
 from .watchlist import WatchlistStore
 
 
 class Store(ProvenanceStore, AdminStore, FeedStore, PrunedStore, DatasetStore, DirectoryStore, MarketsStore,
-            WatchlistStore, LedgerStore, AuditStore, AppStateStore):
+            WatchlistStore, LedgerStore, AuditStore, AppStateStore, QueueStore):
     def __init__(self, path: Path | str, check_same_thread: bool = True, feeds_dir: Path | str | None = None,
                  datasets_dir: Path | str | None = None, ticks: bool | None = None):
         self.path = Path(path)
