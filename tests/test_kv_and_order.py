@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from massive_collate import collector
-from massive_collate.gui import activity
-from massive_collate.storage import Store
+from liminal import collector
+from liminal.gui import activity
+from liminal.storage import Store
 
 
 @pytest.fixture

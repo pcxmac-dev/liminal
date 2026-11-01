@@ -6,12 +6,12 @@ import socket
 import struct
 import threading
 
-from massive_collate import live
-from massive_collate.storage import Store
-from massive_collate.wsclient import OP_PING, OP_PONG, OP_TEXT, WebSocket, encode_frame
-from massive_collate.sources.plugins.coinbase import CoinbaseStream
-from massive_collate.sources.plugins.bitstamp import BitstampStream
-from massive_collate.sources import stream
+from liminal import live
+from liminal.storage import Store
+from liminal.wsclient import OP_PING, OP_PONG, OP_TEXT, WebSocket, encode_frame
+from liminal.sources.plugins.coinbase import CoinbaseStream
+from liminal.sources.plugins.bitstamp import BitstampStream
+from liminal.sources import stream
 
 
 def _server_frame(opcode: int, payload: bytes, fin: bool = True) -> bytes:

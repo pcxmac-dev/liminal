@@ -10,11 +10,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from massive_collate import datasets, killswitch, publications
-from massive_collate.sources import publishers, registry
-from massive_collate.sources.dataset import Dataset, Parsed
-from massive_collate.sources.publisher import Policy, Publisher
-from massive_collate.storage import Store
+from liminal import datasets, killswitch, publications
+from liminal.sources import publishers, registry
+from liminal.sources.dataset import Dataset, Parsed
+from liminal.sources.publisher import Policy, Publisher
+from liminal.storage import Store
 
 from .test_datasets import TODAY, _cot, _Resp, _Session, _zip
 
@@ -122,7 +122,7 @@ def test_the_datasets_list_names_each_ones_plugin(tmp_path):
 def test_the_plugins_view_lists_the_dataset_libraries_apart():
     from pathlib import Path
 
-    js = (Path(__file__).resolve().parents[1] / "src" / "massive_collate" / "gui" / "static" / "plugins.js").read_text(encoding="utf-8")
+    js = (Path(__file__).resolve().parents[1] / "src" / "liminal" / "gui" / "static" / "plugins.js").read_text(encoding="utf-8")
     assert "const setsOnly = (p) => !p.feeds.length && !p.parts.length && p.datasets.length > 0;" in js
     assert "`<h4 class=\"ex-group\">Datasets</h4>${sets}`" in js  # a group of their own, after the news
     assert "${tile('Datasets', num(p.datasets.length), 'fetched with datasets fetch')}" in js

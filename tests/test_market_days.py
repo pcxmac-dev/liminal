@@ -9,12 +9,12 @@ from datetime import date, datetime
 
 import pytest
 
-from massive_collate import collector
-from massive_collate.collector import ET, MARKET_DAYS_BACK, fetch_market_moves, market_days, sync_bars
-from massive_collate.config import TIERS
-from massive_collate.coverage import FeedProfile, day_start_ms
-from massive_collate.errors import NotEntitled
-from massive_collate.storage import Store
+from liminal import collector
+from liminal.collector import ET, MARKET_DAYS_BACK, fetch_market_moves, market_days, sync_bars
+from liminal.config import TIERS
+from liminal.coverage import FeedProfile, day_start_ms
+from liminal.errors import NotEntitled
+from liminal.storage import Store
 
 NOW = datetime(2026, 10, 28, 21, 0, tzinfo=ET)  # a Wednesday, the session over
 # the ten trading days back from it (no market holiday among them)

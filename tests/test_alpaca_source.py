@@ -3,10 +3,10 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from massive_collate.config import load_settings
-from massive_collate.errors import NotEntitled
-from massive_collate.sources import build_source
-from massive_collate.sources.plugins.alpaca.client import AlpacaClient, AlpacaSource, _ns, normalize_trade
+from liminal.config import load_settings
+from liminal.errors import NotEntitled
+from liminal.sources import build_source
+from liminal.sources.plugins.alpaca.client import AlpacaClient, AlpacaSource, _ns, normalize_trade
 
 from .conftest import FakeResponse, FakeSession
 

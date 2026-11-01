@@ -9,11 +9,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from massive_collate import live
-from massive_collate.config import load_settings
-from massive_collate.sources import providers, registry
-from massive_collate.sources.plugins.tiingo import BoatsPoller
-from massive_collate.sources.stream import Live
+from liminal import live
+from liminal.config import load_settings
+from liminal.sources import providers, registry
+from liminal.sources.plugins.tiingo import BoatsPoller
+from liminal.sources.stream import Live
 
 ALPACA_KEYS = {"ALPACA_API_KEY_ID": "PKTESTKEY", "ALPACA_API_SECRET_KEY": "test-secret"}
 
@@ -47,7 +47,7 @@ def test_the_night_is_polled_by_its_plugin_only_where_set_up():
     assert isinstance(poller, BoatsPoller) and poller.source == "tiingoboats" and poller.account == "tiingo"
     assert poller.url("BRK.B") == "https://api.tiingo.com/boats/brk-b/prices"  # its provenance: the plugin's
     assert live.night_poller(load_settings(env={"TIINGO_API_KEY": "k", "TIINGO_PLAN": "power",
-                                                "MASSIVE_OFFLINE": "1"}, env_file=None)) is None
+                                                "LIMINAL_OFFLINE": "1"}, env_file=None)) is None
 
 
 @dataclass

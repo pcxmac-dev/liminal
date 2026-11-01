@@ -2,6 +2,28 @@
 
 Working notes so work can resume in a fresh session. Newest first.
 
+## Renamed liminal (2026-11-01)
+
+- **The project is liminal** (the user: "i want to rename the project from massive to liminal";
+  everything, the data too). Renamed: the package `liminal` (`python -m liminal`; was
+  `massive_collate`), the distribution and command `liminal` (was `massive-collate`), the entry
+  point group `liminal.providers`, the app's settings `LIMINAL_DB`, `LIMINAL_OFFLINE`,
+  `LIMINAL_READONLY`, `LIMINAL_REFRESH_HOURS`, `LIMINAL_LIVE_LOCK`, `LIMINAL_MONGO_PORT` and
+  `LIMINAL_DATA_REPOS` (the old names are still read where the new is not set: `config.RENAMED`),
+  the data folder `~/LiminalData` with the main file `liminal.db`, the log `logs/liminal.log`, the
+  locks `liminal.lock`, `liminal-fetch-<feed>.lock` and `liminal-live.lock` (the machine's in
+  `~/.liminal/`), the MongoDB database `liminal`, the write header `X-Liminal-Charts`, the
+  browser's saved settings under `liminal:` (moved from `massive:` once, by app.js), the chart
+  app's title "Liminal Charts", the scheduled tasks `LiminalSync` and `LiminalCharts`, the
+  repository `pcxmac-dev/liminal` and its folder `C:\Users\ciara\source\liminal`, the plugin
+  packages `liminal-plugin-<name>`. Kept: the Massive data provider's names (the plugin `massive`,
+  `MASSIVE_API_KEY`, `MASSIVE_TIER*`, `MASSIVE_RPM`, `MASSIVE_BASE_URL`, its caps, `feeds/massive.db`).
+  `tests/test_names.py` keeps the app free of the old names and the old settings read.
+- **Cboe is the first plugin package** (283db7b): `liminal-plugin-cboe` 1.2.0 in its own repository,
+  installed by the `plugins` extra. The user, the same day: "all the plugins should be
+  liminal-plugin-xxxx and have a separate repo": the others follow (docs/ARCHITECTURE.md:
+  Providers are plugins, the plan).
+
 ## State (2026-10-27)
 
 - **News and publications are plugins (2026-10-28, the user's request):** each agency a publisher
@@ -48,11 +70,11 @@ Working notes so work can resume in a fresh session. Newest first.
   2020-01-01 (Tiingo's first), three UTC days a request, history through the day before; its own
   feed file and market, on Tiingo's key, rate window and daily cap. The app's 7 pairs: about 3,100
   requests and ~2 GB of Tiingo's 40 GB a month. More pairs would need a guard on that transfer cap.
-- **Feeds in parallel** (docs/APPRAISAL.md #6): a run lock per feed (`massive-fetch-<feed>.lock`;
-  `massive.lock` is now the whole database's, for moves of the data). The hourly sync starts each
+- **Feeds in parallel** (docs/APPRAISAL.md #6): a run lock per feed (`liminal-fetch-<feed>.lock`;
+  `liminal.lock` is now the whole database's, for moves of the data). The hourly sync starts each
   feed that is set up and not fetching in a process of its own, does not wait for them, and builds
   the derived frames once an hour; a symbol opened in the chart fetches at once on the feeds it
-  needs that are idle. A sync from before this change still holds `massive.lock`: the new hourly
+  needs that are idle. A sync from before this change still holds `liminal.lock`: the new hourly
   syncs start no feed until it ends.
 - **Plans chosen in the app** (2026-10-29): the Plugins view's Plan dropdowns save a plugin's plan
   variable like the key script (TIINGO_PLAN=commercial is the user's, set 2026-10-29). Direction (the
@@ -67,8 +89,8 @@ Working notes so work can resume in a fresh session. Newest first.
 - **Providers are plugins** (docs/ARCHITECTURE.md, "Providers are plugins"; `sources/registry.py`,
   `sources/plugins/`): one module per provider holds its build, keys, plan, rate, markets and every
   fact the app asked about it by name; installed packages add providers through the
-  `massive_collate.providers` entry points. `tools/set-key.ps1` is a menu of the plugins (set,
-  replace or remove a provider's keys); `python -m massive_collate plugins` lists them. Not moved
+  `liminal.providers` entry points. `tools/set-key.ps1` is a menu of the plugins (set,
+  replace or remove a provider's keys); `python -m liminal plugins` lists them. Not moved
   yet: the live recorder's streams. The chart app on 8765 and the live recorder run it once restarted.
 - **Live streams only for what is selected** (LIVE_STREAMS=selected, default): coins and stocks
   stream only while open on a chart; with none open nothing is connected. `always` keeps the old way.
@@ -76,7 +98,7 @@ Working notes so work can resume in a fresh session. Newest first.
 - **Delivery scheme** (docs/ARCHITECTURE.md, "Which source delivers what"; `sourcing.py`): every
   plugin's standard report (plan, limits, capabilities, streams), eras unique or common per job and
   market, given to sources by cost (days of their limits) in the user's order; the fetcher follows
-  it. `python -m massive_collate sourcing` shows it. Not done: a Fetcher panel for it.
+  it. `python -m liminal sourcing` shows it. Not done: a Fetcher panel for it.
 - **Overnight session** (docs/ARCHITECTURE.md, "The fourth session"): Blue Ocean's overnight minute
   bars through Alpaca (`boats` feed, free Basic plan, Alpaca's limits shared), the calendar's
   overnight, the chart's ETH+ON. Symbols go on the feed as they are opened in the chart (or with
@@ -135,7 +157,7 @@ Working notes so work can resume in a fresh session. Newest first.
 - **Appraisal quick wins** (docs/APPRAISAL.md says which): `Store.kv_json` / `kv_update` (atomic
   across processes), 30 s SQLite busy wait, one `clear_denied`, the Fetcher's state order one
   list. `synchronous=NORMAL` deliberately not done (bars and coverage are in different files).
-- **Per-symbol data across feeds**: `inventory.py` → `python -m massive_collate inventory TICKER`,
+- **Per-symbol data across feeds**: `inventory.py` → `python -m liminal inventory TICKER`,
   `/api/inventory`, "Data by feed" in the side panel (● sent, * derived, ○ not built yet, with a
   "Build missing" button that runs `derive --tickers` locally). The sync now builds each symbol's
   derived frames right after its fetch (`derive.build_symbol`); a rebuild covers only the changed
@@ -155,7 +177,7 @@ Working notes so work can resume in a fresh session. Newest first.
 
 ## State (2026-10-24, evening)
 
-- **Plans and caps**: Massive **Advanced** for stocks (`python -m massive_collate plan` probes it:
+- **Plans and caps**: Massive **Advanced** for stocks (`python -m liminal plan` probes it:
   trades, quotes, seconds, history from 2003-09-10); the other Massive classes stay on the free
   plan (`MASSIVE_TIER_INDICES/_CURRENCIES/_CRYPTO/_FUTURES`, each with its own history, delay and
   5 req/min rate). Saved user env vars (read from the registry by running processes):
@@ -172,7 +194,7 @@ Working notes so work can resume in a fresh session. Newest first.
   endpoints (a 60/s retry loop sent 1.8 M requests); live streams back off up to 5 min; a symbol
   refused 3 runs in a row waits a day (`refusals:<feed>`); empty history walked by a capped run is
   recorded (Coinbase windows); symbols still backfilling are never skipped; one live recorder per
-  machine (`MASSIVE_LIVE_LOCK`). Stray recorders from old test runs (~35, old code) still need
+  machine (`LIMINAL_LIVE_LOCK`). Stray recorders from old test runs (~35, old code) still need
   stopping by the user (Claude is not allowed to stop processes).
 - **Live**: Alpaca IEX stream for the open stock and the rail's watchlists (≤30, own `iex` feed,
   ranked below whole-market feeds); the Live icon pulses red while data arrives (blue/white selected).
@@ -188,7 +210,7 @@ Working notes so work can resume in a fresh session. Newest first.
 
 ## State (2026-10-24)
 
-- **Live charts**: the live recorder (`python -m massive_collate live`, started by `sync`) streams
+- **Live charts**: the live recorder (`python -m liminal live`, started by `sync`) streams
   Coinbase and Bitstamp trades for 8 coins. The chart server pushes a live symbol's new bars over
   `/api/stream` (server-sent events) and keeps cached series current by splicing in only what was
   stored since (`BarEngine._refresh_tail`); fingerprints are per feed. The time axis has a handle
@@ -208,20 +230,20 @@ Working notes so work can resume in a fresh session. Newest first.
   is the Markets view's wireframe globe in miniature (1:50m coastlines and borders), turned so
   the point where it is noon faces you (24 hourly frames). The NASA images in `vendor/world` are
   kept but unused.
-- **Testing**: `massive-charts-test` (sessions folder `.claude/launch.json`) serves an empty
+- **Testing**: `liminal-charts-test` (sessions folder `.claude/launch.json`) serves an empty
   scratch database on port 8766; the old scratch copy predates the per-feed split.
 
 ## State (2026-10-22)
 
-- **Collector** (`python -m massive_collate ...`): runs hourly via Windows Task Scheduler
-  (`MassiveCollateSync`, `.venv\Scripts\pythonw.exe -m massive_collate sync`). Free Massive plan.
-  Data in `~/MassiveData`: shared tables in `massive.db`, each feed's bars in `feeds/<feed>.db`, its ticks in
+- **Collector** (`python -m liminal ...`): runs hourly via Windows Task Scheduler
+  (`LiminalSync`, `.venv\Scripts\pythonw.exe -m liminal sync`). Free Massive plan.
+  Data in `~/LiminalData`: shared tables in `liminal.db`, each feed's bars in `feeds/<feed>.db`, its ticks in
   `feeds/<feed>-ticks.db` (split 2026-10-23; pre-split backups `backups/pre-split-20261023-215938*.db`, 12 GB);
-  log in `~/MassiveData/logs/massive-collate.log`.
+  log in `~/LiminalData/logs/liminal.log`.
 - **Watchlist**: `SPCX::NASDAQ` (SpaceX Class A, listed 2026-06-12). Free plan gives 1-minute bars
   (ticks and 1-second refused). Stored: 85k minute bars 04:00–20:00 ET + 91 official daily bars.
   Overnight (BOATS, 20:00–04:00) is not in Massive's data; needs another source.
-- **Chart app** (`python -m massive_collate gui`, http://127.0.0.1:8765): KLineChart 10.1.0 vendored
+- **Chart app** (`python -m liminal gui`, http://127.0.0.1:8765): KLineChart 10.1.0 vendored
   under `gui/static/vendor/klinecharts`. Intervals built exactly from the finest stored data; official
   daily bars for D/W/M; regular/extended hours toggle; feed picker (single feed or merged);
   drawing tools incl. custom `measure`; drawings saved per ticker in browser localStorage.
@@ -241,7 +263,7 @@ Working notes so work can resume in a fresh session. Newest first.
   free plan. Free Futures Basic data is 8 h behind.
 - **Layouts** (TradingView-style menu, top right): up to 5 saved markups in the `layouts` table —
   symbol, feed, interval, chart type + params, session, adjustment, indicators, drawings per ticker.
-  Autosave (1.5 s debounce), Ctrl+S, rename, copy, new, delete. Writes need the `X-Massive-Charts`
+  Autosave (1.5 s debounce), Ctrl+S, rename, copy, new, delete. Writes need the `X-Liminal-Charts`
   header (blocks cross-site writes).
 
 - **Rendering performance (night of 2026-10-22)**: goal 60 fps on modest hardware.
@@ -275,7 +297,7 @@ Working notes so work can resume in a fresh session. Newest first.
   bar/minute/hour/day, reset at gaps. Drawings are stored per model (`drawingsKey()` in app.js).
 - **Watchlist**: the top 100 S&P 500 stocks by market cap (stockanalysis.com ranking, Oct 2026;
   re-rank later from `market_cap` in `instrument_details`) plus SPCX, IXIC, USDEUR, NQ1!, CL1!, NG1!.
-  First backfill ≈1,200 requests (~5 hourly runs at 250/run). `MASSIVE_REFRESH_HOURS` (default 12 on
+  First backfill ≈1,200 requests (~5 hourly runs at 250/run). `LIMINAL_REFRESH_HOURS` (default 12 on
   free) skips symbols synced recently so 100+ symbols stay under 2,000 requests/day; plan entitlements
   are probed once per asset class and kept 7 days (`entitlements` table). A stock's exchange is pinned
   from its first listing check.
@@ -302,7 +324,7 @@ Working notes so work can resume in a fresh session. Newest first.
 - **Topo data for the globe**: `static/vendor/world/countries-110m.json` (world-atlas, Natural Earth)
   is optional; without it the globe draws the graticule only.
 - Testing without disturbing the user's open app: `.claude/launch.json` in the sessions folder has a
-  `massive-charts-test` config (port 8766) pointing `MASSIVE_DB` at a scratch copy of the database.
+  `liminal-charts-test` config (port 8766) pointing `LIMINAL_DB` at a scratch copy of the database.
 
 ## Next
 

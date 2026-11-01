@@ -5,12 +5,12 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from massive_collate.collector import ET, Refusals, history_floor
-from massive_collate.config import asset_tier, load_settings
-from massive_collate.freshness import plan_delay
-from massive_collate.sources import build_source
-from massive_collate.sources.plugins.massive.client import asset_class
-from massive_collate.storage import Store
+from liminal.collector import ET, Refusals, history_floor
+from liminal.config import asset_tier, load_settings
+from liminal.freshness import plan_delay
+from liminal.sources import build_source
+from liminal.sources.plugins.massive.client import asset_class
+from liminal.storage import Store
 
 from .conftest import FakeResponse, FakeSession
 

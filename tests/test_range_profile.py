@@ -6,11 +6,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from massive_collate import derive
-from massive_collate.calc.profile import major_prices
-from massive_collate.gui.server import ChartApp
-from massive_collate.gui.window import WindowReader
-from massive_collate.storage import Store
+from liminal import derive
+from liminal.calc.profile import major_prices
+from liminal.gui.server import ChartApp
+from liminal.gui.window import WindowReader
+from liminal.storage import Store
 
 ET = "America/New_York"
 

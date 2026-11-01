@@ -13,7 +13,7 @@ Points are quantised relative to the tile: value = (deg - origin + MARGIN) / SPA
 MARGIN either side so a segment's end in the next tile still fits (~34 m steps; the data is ~200 m).
 All integers little-endian.
 
-    python tools/build_coastlines.py ~/MassiveData/sources/gshhg-bin-2.3.7.zip OUT_DIR
+    python tools/build_coastlines.py ~/LiminalData/sources/gshhg-bin-2.3.7.zip OUT_DIR
 """
 from __future__ import annotations
 

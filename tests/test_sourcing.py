@@ -5,12 +5,12 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from massive_collate import sourcing
-from massive_collate.config import TIERS, load_settings
-from massive_collate.coverage import FeedProfile, day_start_ms, plan
-from massive_collate.sessions import ET
-from massive_collate.sources import capacity, feed_profiles, providers, registry
-from massive_collate.sources.registry import Capability, Limits, Provider, Report
+from liminal import sourcing
+from liminal.config import TIERS, load_settings
+from liminal.coverage import FeedProfile, day_start_ms, plan
+from liminal.sessions import ET
+from liminal.sources import capacity, feed_profiles, providers, registry
+from liminal.sources.registry import Capability, Limits, Provider, Report
 
 TODAY = date(2026, 10, 27)
 NOW = datetime(2026, 10, 27, 12, 0, tzinfo=ET)
@@ -49,7 +49,7 @@ def test_every_plugin_reports_in_the_same_standard_form():
 def test_a_plugin_that_declares_nothing_reports_the_defaults_and_can_amend_its_report():
     from dataclasses import replace
 
-    from massive_collate.config import Tier
+    from liminal.config import Tier
 
     tier = Tier("acme-pro", requests_per_minute=60, history_years=5)
     plain = Provider(name="acme", title="Acme", build=lambda s, b: None, assets=frozenset({"stock", "fx"}))

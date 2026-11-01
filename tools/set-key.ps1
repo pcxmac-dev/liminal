@@ -3,13 +3,13 @@
     Sets or removes a data provider's API keys as user environment variables, typed hidden.
 
 .DESCRIPTION
-    Every data provider is a plugin of the app (src/massive_collate/sources/registry.py). The
-    script asks the app which there are (python -m massive_collate plugins --json: names only,
+    Every data provider is a plugin of the app (src/liminal/sources/registry.py). The
+    script asks the app which there are (python -m liminal plugins --json: names only,
     never a key's value) and offers a menu: each provider, its keys and whether they are set.
     Pick one to set or replace its keys, or to remove them, to choose its plan, or to rescan it;
     a provider added as a plugin appears here by itself.
 
-    Each plugin refreshes its own plan info: a rescan (python -m massive_collate capabilities
+    Each plugin refreshes its own plan info: a rescan (python -m liminal capabilities
     <name>, a few requests) asks the provider what the key really gets, and a plan it finds is used
     wherever you have not set one. A plan you choose here always wins; Tiingo's API cannot tell
     its plans apart (starter, power, commercial), so its plan (TIINGO_PLAN) is only what you choose.
@@ -59,13 +59,13 @@ function Get-Providers {
     $py = Get-Python
     Push-Location $Root
     try {
-        $json = & $py -m massive_collate plugins --json
+        $json = & $py -m liminal plugins --json
         $code = $LASTEXITCODE
     } finally {
         Pop-Location
     }
     if ($code -ne 0 -or -not $json) {
-        throw "Could not list the providers ($py -m massive_collate plugins --json)."
+        throw "Could not list the providers ($py -m liminal plugins --json)."
     }
     $listed = ($json | Out-String) | ConvertFrom-Json
     $script:PluginApi = $listed.api
@@ -140,7 +140,7 @@ function Invoke-Rescan($p) {
     $py = Get-Python
     Push-Location $Root
     try {
-        & $py -m massive_collate capabilities $p.name
+        & $py -m liminal capabilities $p.name
     } finally {
         Pop-Location
     }

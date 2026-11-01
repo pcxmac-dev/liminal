@@ -8,10 +8,10 @@ import time
 
 import pytest
 
-from massive_collate import cli, live, proc
-from massive_collate.config import ConfigError, load_settings
-from massive_collate.storage import Store
-from massive_collate.sources import stream
+from liminal import cli, live, proc
+from liminal.config import ConfigError, load_settings
+from liminal.storage import Store
+from liminal.sources import stream
 
 
 # -- locks ------------------------------------------------------------------------------------
@@ -53,7 +53,7 @@ def test_the_run_lock_refuses_while_another_live_process_holds_it(tmp_path):
 
 
 def test_an_interrupted_run_is_not_recorded_ok(tmp_path):
-    settings = load_settings(env={"MASSIVE_API_KEY": "k", "MASSIVE_DB": str(tmp_path / "m.db")}, env_file=None)
+    settings = load_settings(env={"MASSIVE_API_KEY": "k", "LIMINAL_DB": str(tmp_path / "m.db")}, env_file=None)
 
     class Args:
         source = "massive"
@@ -165,7 +165,7 @@ def test_unknown_live_coins_are_refused():
 
 
 def test_two_exchanges_streaming_one_pair_are_not_a_double_download(tmp_path):
-    from massive_collate.deps import coverage_overlaps
+    from liminal.deps import coverage_overlaps
 
     with Store(tmp_path / "m.db") as store:
         store.add_coverage("coinbase", "BTCUSD", "trades", 0, 100)
@@ -191,7 +191,7 @@ def test_a_class_plan_change_finds_resolutions_again(tmp_path):
 def test_the_sync_lets_go_of_the_run_lock_before_building_derived_frames(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    from massive_collate import cli, proc
+    from liminal import cli, proc
 
     db = tmp_path / "m.db"
     settings = SimpleNamespace(db_path=db)
@@ -214,7 +214,7 @@ def test_the_sync_lets_go_of_the_run_lock_before_building_derived_frames(tmp_pat
 def test_one_pass_of_derived_frames_at_a_time(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    from massive_collate import cli, proc
+    from liminal import cli, proc
 
     db = tmp_path / "m.db"
     lock = db.with_name(cli.POST_LOCK)

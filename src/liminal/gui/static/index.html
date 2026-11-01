@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Liminal Charts</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="topbar">
+    <!-- The top bar's tools in strips, each a panel on the page's lighter grey (style.css, "Panels") -->
+    <div class="strip">
+    <button id="symbolBtn" class="symbol" title="Switch symbol (/)"><span id="symbolLabel">Select symbol</span></button>
+    <select id="feedSelect" title="Data feed" hidden></select><!-- picked in Preferences (prefs.js) -->
+    </div>
+    <div class="strip">
+    <div id="periods" class="group" role="toolbar" aria-label="Interval"></div>
+    <!-- picked in Preferences (prefs.js); a price-based type's settings stay here (typeParams) -->
+    <select id="typeSelect" hidden title="Chart type">
+      <optgroup label="Time based">
+        <option value="bars">Bars</option>
+        <option value="candles">Candles</option>
+        <option value="hollow">Hollow candles</option>
+        <option value="volume_candles">Volume candles</option>
+        <option value="line">Line</option>
+        <option value="line_markers">Line with markers</option>
+        <option value="step">Step line</option>
+        <option value="area">Area</option>
+        <option value="hlc_area">HLC area</option>
+        <option value="baseline">Baseline</option>
+        <option value="columns">Columns</option>
+        <option value="high_low">High-low</option>
+        <option value="box" title="Each bar's quartiles of traded price (derived from finer bars)">Box plots*</option>
+        <option value="heikin_ashi">Heikin Ashi</option>
+      </optgroup>
+      <optgroup label="Price based">
+        <option value="renko">Renko</option>
+        <option value="line_break">Line break</option>
+        <option value="kagi">Kagi</option>
+        <option value="point_figure">Point &amp; figure</option>
+        <option value="range">Range</option>
+      </optgroup>
+    </select>
+    <span id="typeParams" class="params"></span>
+    </div>
+    <div class="strip">
+    <label class="model-label" for="modelSelect">Model</label>
+    <select id="modelSelect" title="Model: the price, its derivatives, its integral, or its slower Fourier cycles">
+      <option value="price">Price</option>
+      <option value="d1">1st derivative (slope)</option>
+      <option value="d2">2nd derivative (acceleration)</option>
+      <option value="integral">Integral (area)</option>
+      <option value="fourier">Fourier (slow cycles)</option>
+    </select>
+    <span id="modelParams" class="params" hidden>
+      <select id="modelBasis" title="Differentiate the price itself, or log price (percent terms)">
+        <option value="price">price</option><option value="log">log %</option>
+      </select>
+      <label>per <select id="modelPer" title="Time unit of slopes and areas">
+        <option value="bar">bar</option><option value="minute">minute</option>
+        <option value="hour">hour</option><option value="day">day</option>
+      </select></label>
+      <label title="Detail: smooth (left) to full resolution (right)" hidden>smooth
+        <input id="modelDetail" type="range" min="0" max="100" step="1">
+      detail</label>
+      <span id="modelWindow" class="p-muted"></span>
+      <label title="Start fresh after overnight/weekend gaps so they never show as spikes">
+        <input id="modelGaps" type="checkbox"> gaps</label>
+    </span>
+    <select id="adjustSelect" title="Continuous futures: back-adjust at contract rolls" hidden>
+      <option value="none">Unadjusted (as traded)</option>
+      <option value="difference">Back-adjusted (difference)</option>
+      <option value="ratio">Back-adjusted (ratio)</option>
+    </select>
+    </div>
+    <div class="strip">
+    <select id="sessionSelect" hidden aria-label="Sessions shown" title="Sessions shown: regular hours 09:30-16:00; extended adds pre-market from 04:00 and after-hours to 20:00; overnight adds 20:00-04:00 on Blue Ocean">
+      <option value="regular">RTH: regular hours</option>
+      <option value="extended">ETH: + pre and after hours</option>
+      <option value="all">All four: + overnight</option>
+    </select>
+    <!-- All data and the indicators are picked in Preferences (prefs.js) through these hidden controls:
+         the user, 2026-10-31: "all data should be a preference, indicators should be a preference too" -->
+    <button id="unfilteredBtn" class="toggle" hidden title="Unfiltered: all data, bad data included. Off: filtered, the target data (bad data is on each feed's pruned list, in the Data panel)">All data</button>
+    <div class="menu" hidden>
+      <button id="indBtn" hidden aria-haspopup="true">Indicators</button>
+      <div id="indMenu" class="dropdown" hidden></div>
+    </div>
+    <button id="replayBtn" class="toggle analysis-only" title="Replay (Analysis view): click a bar to start from, then play the bars after it as if live">Replay</button>
+    </div>
+    <div class="strip">
+    <div class="menu layout-menu">
+      <button id="layoutBtn" aria-haspopup="true" title="Layouts: saved markups">
+        <span id="layoutName">Layout</span> <span id="layoutDirty" class="dirty" title="Unsaved changes" hidden>●</span> ▾
+      </button>
+      <div id="layoutMenu" class="dropdown right" hidden></div>
+    </div>
+    </div>
+    <!-- The GPU switch and the theme are picked in Preferences (prefs.js); zoom and the latest bar are the
+         keys (+, -, End) and the mouse (the user, 2026-10-31: "lets get rid of the zoom buttons, also get
+         rid of PNG and move GPU to preferences and also theme should be in preferences") -->
+    <div class="strip" hidden>
+    <button id="gpuBtn" class="toggle" hidden title="GPU rendering (WebGL2 / OpenGL ES 3)">GPU</button>
+    <select id="themeSelect" hidden title="Theme" aria-label="Theme">
+      <option value="dark">Dark</option>
+      <option value="midnight">Midnight</option>
+      <option value="graphite">Graphite</option>
+      <option value="light">Light</option>
+      <option value="paper">Paper</option>
+    </select>
+    </div>
+  </header>
+  <main>
+    <div class="view" id="viewChart" data-view="chart">
+      <nav id="tools" aria-label="Drawing tools"></nav>
+      <div id="chart"></div>
+      <div id="panelResizer" role="separator" aria-orientation="vertical" aria-label="Resize side panel" tabindex="0"></div>
+      <aside id="sidePanel" aria-label="Side panel">
+        <div class="pane" id="paneStock" data-pane="stock">
+          <section id="pSymbol"></section>
+          <section id="pStats"></section>
+          <section id="pBusiness"></section>
+          <section id="pData"></section>
+          <section id="pInventory"></section>
+          <section id="pPruned"></section>
+        </div>
+        <div class="pane" id="paneWatch" data-pane="watchlist" hidden>
+          <section id="pWatch"></section>
+        </div>
+        <div class="pane" id="paneAnalysis" data-pane="analysis" hidden>
+          <section id="pLevel2"></section>
+          <section id="pHighlight"></section>
+          <section id="pSchemes"></section>
+          <section id="pCursor"></section>
+        </div>
+        <div class="pane" id="paneTrading" data-pane="trading" hidden>
+          <section id="pTrading"></section>
+        </div>
+        <div class="pane" id="panePrefs" data-pane="prefs" hidden>
+          <section id="pPrefs"></section>
+        </div>
+      </aside>
+    </div>
+
+    <div class="view" id="viewMarkets" data-view="markets" hidden>
+      <div class="globe-wrap">
+        <canvas id="globeGL" aria-hidden="true"></canvas>
+        <canvas id="globe" aria-label="Globe: the sun's noon position faces you; open markets glow"></canvas>
+        <div id="globeInfo" class="globe-info"></div>
+        <div id="newsTicker" class="news-ticker" aria-live="polite" title="Announcements at the world's exchanges"></div>
+        <div class="globe-hint p-muted small">Drag to turn · scroll to zoom · click the sun to recentre</div>
+      </div>
+      <div id="marketsList" class="markets-list"></div>
+    </div>
+
+    <div class="view scroll-view" id="viewFetcher" data-view="fetcher" hidden>
+      <div class="view-head">
+        <div><h2>Fetcher</h2><div class="p-muted small">Every resource the plugins download: symbols' bars, news, dataset files. A span of a symbol is downloaded by one feed only, within its caps; each plugin's status is on its page in Plugins.</div></div>
+        <div class="view-actions">
+          <button type="button" id="netPause" class="net-pause" title="Pause background fetching (up to two hours): the open symbol's own fetches go on">Pause fetching</button>
+          <button type="button" id="netHalt" class="net-pause" title="Halt all fetching until you resume it, the open symbol's too (the live streams go on)">Halt</button>
+          <button type="button" id="netUpdates" class="net-pause" title="For 7 days, symbols you have not picked (opened in the chart or on a watchlist) get no updates unless they are more than 7 days behind; history goes on">Pause updates 7 d</button>
+          <button id="scanBtn" class="primary" title="Check which symbols should have new data (free), confirm each with Massive (1 request) and download what is there">Scan for new data</button>
+        </div>
+      </div>
+      <div id="actStatus" class="act-status"></div>
+      <div id="scanNote" class="small"></div>
+      <h4>Queue <span id="qCounts" class="p-muted small"></span></h4>
+      <div id="qFilters" class="filters q-filters"></div>
+      <div class="table-wrap"><table class="act-table queue">
+        <thead><tr><th>Resource</th><th>Plugin</th><th>State</th><th>Detail</th><th class="num">Requests</th><th>When</th></tr></thead>
+        <tbody id="qRows"></tbody>
+      </table></div>
+    </div>
+
+    <div class="view scroll-view" id="viewLive" data-view="live" hidden></div>
+
+    <div class="view scroll-view" id="viewNews" data-view="news" hidden></div>
+    <div class="view scroll-view" id="viewGov" data-view="gov" hidden></div>
+    <div class="view scroll-view" id="viewResources" data-view="resources" hidden></div>
+    <div class="view ex-view" id="viewExchanges" data-view="exchanges" hidden></div>
+    <div class="view ex-view pl-view" id="viewPlugins" data-view="plugins" hidden></div>
+
+    <div class="view ds-view" id="viewDatasets" data-view="datasets" hidden></div>
+
+    <nav id="rail" aria-label="Views">
+      <button data-pane="stock" id="railStock" title="Stock: chart with the symbol, key statistics and business"></button>
+      <button data-pane="analysis" id="railAnalysis" title="Analysis: chart with the highlight and cursor statistics"></button>
+      <button data-pane="trading" id="railTrading" title="Trading: chart with the paper account beside it (simulated; Interactive Brokers planned; live trading is off)"></button>
+      <button data-pane="watchlist" id="railWatch" title="Watchlist: every collected symbol and your own lists, beside the chart"></button>
+      <button data-pane="prefs" id="railPrefs" title="Preferences: the sessions shown, the time zone, the theme, and each session's shading on the chart"></button>
+      <hr>
+      <button data-pane="exchanges" id="railExchanges" title="Exchanges: every tracked exchange, its products, and insight into them"></button>
+      <button data-pane="markets" id="railMarkets" title="Markets: the world's exchanges on a globe, what is open now"></button>
+      <button data-pane="news" id="railNews" title="News: exchange events and headlines"></button>
+      <button data-pane="gov" id="railGov" title="Federal: the federal agencies and regulators (the Fed, SEC, FINRA's filings, BLS, CFTC ...), their news, releases and current regulatory parameters"></button>
+      <button data-pane="datasets" id="railDatasets" title="Datasets: research series (Fama/French factors, Shiller CAPE, COT positioning, commodities)"></button>
+      <hr>
+      <button data-pane="fetcher" id="railFetcher" title="Fetcher: historical data (past sessions)"></button>
+      <button data-pane="live" id="railLive" title="Live feeds: the current session"></button>
+      <button data-pane="plugins" id="railPlugins" title="Plugins: every data provider (feed or source), its plan, limits and capabilities; rescan what each key gets"></button>
+      <button data-pane="resources" id="railResources" title="Resources: the app's processes (CPU, memory, disk, connections), the machine's bandwidth, and the data files"></button>
+      <hr>
+      <button type="button" id="railProfile" class="rail-profile" title="Profile: switch to another">?</button>
+    </nav>
+  </main>
+  <footer id="status">
+    <span id="statusText">Loading…</span>
+    <span id="error" role="alert"></span>
+    <span id="netStatus" class="net-status" aria-live="polite"><span id="netText"></span><span id="netBar" class="net-bar" hidden><span></span></span></span>
+  </footer>
+
+  <dialog id="symbolDialog" class="switcher" aria-label="Switch symbol">
+    <form method="dialog" class="dialog-head">
+      <input id="symbolSearch" type="search" placeholder="Search ticker, name or exchange" autocomplete="off">
+      <span id="scopeTabs" class="scope-tabs" role="tablist">
+        <button type="button" data-scope="watch" role="tab">Watchlist</button>
+        <button type="button" data-scope="stocks" role="tab" title="Every Nasdaq and NYSE listing">Nasdaq &amp; NYSE</button>
+        <button type="button" data-scope="futures" role="tab" title="Futures products">Futures</button>
+      </span>
+      <button type="button" id="switcherView" title="Market map or tiles"></button>
+      <button type="button" id="sortBtn" title="Sort order"></button>
+      <button value="close" aria-label="Close">&times;</button>
+    </form>
+    <div id="symbolList" role="listbox" aria-label="Symbols"></div>
+  </dialog>
+
+  <script src="vendor/klinecharts/klinecharts.min.js"></script>
+  <script src="gpu.js"></script>
+  <script src="icons.js"></script>
+  <script src="throbber.js"></script>
+  <script src="treemap.js"></script>
+  <script src="app.js"></script>
+  <script src="timeaxis.js"></script>
+  <script src="activity.js"></script>
+  <script src="liveicon.js"></script>
+  <script src="globeicon.js"></script>
+  <script src="panels.js"></script>
+  <script src="globe-gl.js"></script>
+  <script src="globe.js"></script>
+  <script src="news.js"></script>
+  <script src="gov.js"></script>
+  <script src="resources.js"></script>
+  <script src="venues.js"></script>
+  <script src="plugins.js"></script>
+  <script src="datasets.js"></script>
+  <script src="level2.js"></script>
+  <script src="schemes.js"></script>
+  <script src="replay.js"></script>
+  <script src="trading.js"></script>
+  <script src="drawclip.js"></script>
+  <script src="watchlist.js"></script>
+  <script src="prefs.js"></script>
+</body>
+</html>

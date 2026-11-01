@@ -3,14 +3,14 @@ from __future__ import annotations
 import pytest
 import requests
 
-from massive_collate import cli
-from massive_collate.storage import Store
+from liminal import cli
+from liminal.storage import Store
 
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)  # no stray .env
-    monkeypatch.setenv("MASSIVE_DB", str(tmp_path / "data" / "m.db"))
+    monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "data" / "m.db"))
     monkeypatch.setenv("MASSIVE_API_KEY", "FAKE")
     for name in ("MASSIVE_TIER", "MASSIVE_RPM", "MASSIVE_MAX_REQUESTS_PER_RUN", "MASSIVE_MAX_REQUESTS_PER_DAY"):
         monkeypatch.delenv(name, raising=False)
@@ -129,10 +129,10 @@ def test_tick_backups_and_tick_charts_wait_for_bars_only_to_be_off(env, capsys):
 
 
 def test_offline_copies_of_the_app_fetch_nothing(env, monkeypatch, capsys):
-    monkeypatch.setenv("MASSIVE_OFFLINE", "1")
+    monkeypatch.setenv("LIMINAL_OFFLINE", "1")
     cli.main(["watch", "add", "SPCX"])
     assert cli.main(["sync"]) == 0  # requests.Session.get would fail the test if anything were sent
-    assert "offline (MASSIVE_OFFLINE)" in capsys.readouterr().out
+    assert "offline (LIMINAL_OFFLINE)" in capsys.readouterr().out
     assert cli.main(["live", "start"]) == 0
     assert "live recording is off" in capsys.readouterr().out
 
@@ -140,7 +140,7 @@ def test_offline_copies_of_the_app_fetch_nothing(env, monkeypatch, capsys):
 def test_each_feed_has_its_own_run_lock_and_a_move_of_the_data_waits_for_them_all(env):
     import os
 
-    from massive_collate import proc
+    from liminal import proc
 
     db = env / "data" / "m.db"
     db.parent.mkdir(parents=True, exist_ok=True)
@@ -169,7 +169,7 @@ def test_the_hourly_sync_starts_each_idle_feed_in_a_process_of_its_own_without_w
     # second sync while one goes on, so the sync no longer waits for its feeds
     import os
 
-    from massive_collate import proc
+    from liminal import proc
 
     db = env / "data" / "m.db"
     cli.main(["watch", "add", "SPCX"])
@@ -187,7 +187,7 @@ def test_a_run_for_an_opened_symbol_leaves_the_feeds_fetching_to_their_own_runs(
     import os
     from contextlib import contextmanager
 
-    from massive_collate import proc
+    from liminal import proc
 
     db = env / "data" / "m.db"
     cli.main(["watch", "add", "SPCX"])

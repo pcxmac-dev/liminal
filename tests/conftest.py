@@ -5,11 +5,11 @@ from typing import Iterator
 
 import pytest
 
-from massive_collate import live
-from massive_collate.errors import NotEntitled
-from massive_collate.models import Exchange, Instrument, country
-from massive_collate.sources.base import DataSource
-from massive_collate.storage import Store
+from liminal import live
+from liminal.errors import NotEntitled
+from liminal.models import Exchange, Instrument, country
+from liminal.sources.base import DataSource
+from liminal.storage import Store
 
 
 @pytest.fixture(autouse=True)
@@ -17,8 +17,8 @@ def no_saved_keys(monkeypatch):
     """Tests never read the user's real API keys: neither the saved user environment variables nor
     the process's own (a shell started after the keys were saved has them), for every provider
     plugin's keys and plans. A test that wants one sets it."""
-    from massive_collate import config
-    from massive_collate.sources.registry import variables
+    from liminal import config
+    from liminal.sources.registry import variables
 
     monkeypatch.setattr(config, "saved_user_keys", lambda: {})
     for name in variables():
@@ -30,7 +30,7 @@ def no_found_limits(monkeypatch):
     """A feed's limiter keeps inside the limits its servers' headers gave on its account's last
     scans, read from the database the settings name (registry.found_limits): tests never read the
     real one's; test_plugins.py tests the reading on its own."""
-    from massive_collate.sources import registry
+    from liminal.sources import registry
 
     monkeypatch.setattr(registry, "found_limits", lambda name, settings: [])
 
@@ -38,10 +38,10 @@ def no_found_limits(monkeypatch):
 @pytest.fixture(autouse=True)
 def no_installed_plugins(monkeypatch):
     """The suite tests the app and its built-in plugins, never the plugin packages installed beside
-    it (massive-plugin-cboe ...: each tested in its own repository): their entry points are hidden,
+    it (liminal-plugin-cboe ...: each tested in its own repository): their entry points are hidden,
     a test gives its own (test_plugins.py: `installed`), and test_plugins.py loads the installed ones
     on their own. Plugins found with a package's (on collection, or by a test) are found again."""
-    from massive_collate.sources import registry
+    from liminal.sources import registry
 
     monkeypatch.setattr(registry, "_entry_points", lambda: ())
     if registry._providers is not None and any(
@@ -54,7 +54,7 @@ def no_agency_requests(monkeypatch):
     """Tests never read the publishers' real feeds: the hourly sync without a recorder reads them
     (cli._fetch_gov, publications.run_due), and the Plugins view's Recheck (recheck_now);
     test_publications.py drives publications.Reader with fake answers instead."""
-    from massive_collate import cli, publications
+    from liminal import cli, publications
 
     monkeypatch.setattr(cli, "_fetch_gov", lambda settings, log, force=False: None)
     monkeypatch.setattr(publications, "run_due", lambda settings, log, force=False, now=None: None)
@@ -65,15 +65,15 @@ def no_agency_requests(monkeypatch):
 def no_cached_movers():
     """The big movers are cached per process for a few minutes (collector.big_movers): each test
     starts without another test's."""
-    from massive_collate import collector
+    from liminal import collector
 
     collector._movers_cache.clear()
 
 
 @pytest.fixture(autouse=True)
 def read_only_restored():
-    """cli.main sets the process's read-only mode from MASSIVE_READONLY: never left on for the next test."""
-    from massive_collate.storage import read_only, set_read_only
+    """cli.main sets the process's read-only mode from LIMINAL_READONLY: never left on for the next test."""
+    from liminal.storage import read_only, set_read_only
 
     was = read_only()
     yield
@@ -84,7 +84,7 @@ def read_only_restored():
 def tick_access_restored():
     """cli.main sets the process's tick access from BARS_ONLY (off by default): a test that runs a
     command must not leave the stores of the tests after it unable to open tick files."""
-    from massive_collate.storage import set_tick_access, tick_access
+    from liminal.storage import set_tick_access, tick_access
 
     was = tick_access()
     yield
@@ -97,11 +97,11 @@ def no_recorders(monkeypatch, tmp_path):
     exchange connections) pointed at the test's temporary folder."""
     monkeypatch.setenv("LIVE_CRYPTO", "off")
     monkeypatch.setenv("LIVE_STOCKS", "off")
-    monkeypatch.setenv("MASSIVE_LIVE_LOCK", str(tmp_path / "machine-live.lock"))  # never the real machine's
+    monkeypatch.setenv("LIMINAL_LIVE_LOCK", str(tmp_path / "machine-live.lock"))  # never the real machine's
     monkeypatch.setattr(live, "start_detached", lambda db_path: False)
     # Nor see or end the machine's processes: a test recorder holding its locks reaps "other"
     # recorders (live.reap_strays), and once ended the user's real one.
-    from massive_collate import proc
+    from liminal import proc
 
     monkeypatch.setattr(proc, "processes", lambda: [])
 
@@ -115,7 +115,7 @@ def no_recorders(monkeypatch, tmp_path):
     import subprocess
     from types import SimpleNamespace
 
-    from massive_collate.gui import server
+    from liminal.gui import server
 
     def no_spawn(args, **kw):
         raise AssertionError(f"a test tried to start a process: {args}")
@@ -125,13 +125,13 @@ def no_recorders(monkeypatch, tmp_path):
     # Nor from the command line: the hourly sync starts each feed's run in a process of its own
     # (cli.start_feed), and a test's `sync` once started five, which sent Alpaca two requests on the
     # user's keys. A test that wants to see which would start replaces start_feed.
-    from massive_collate import cli
+    from liminal import cli
 
     monkeypatch.setattr(cli, "start_feed", lambda name: no_spawn(["--source", name, "sync", "--only"]))
     monkeypatch.setattr(cli, "start_history", lambda: no_spawn(["history", "run"]))
     # Nor start, see or write to a MongoDB server: one may run on this machine with the user's
     # documents. Mongo is "not installed" unless a test installs its stand-in (tests/test_stores.py).
-    from massive_collate import mongo
+    from liminal import mongo
 
     monkeypatch.setattr(mongo, "_spawn", no_spawn)
     monkeypatch.setattr(mongo, "binary", lambda: None)
@@ -185,7 +185,7 @@ class FakeSource(DataSource):
         self.trade_calls: list[dict] = []
 
     def _spend(self):
-        from massive_collate.errors import BudgetExhausted
+        from liminal.errors import BudgetExhausted
 
         if self.budget is not None and self._requests >= self.budget:
             raise BudgetExhausted("fake cap")

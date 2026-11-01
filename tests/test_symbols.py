@@ -1,6 +1,6 @@
 import pytest
 
-from massive_collate.symbols import resolve
+from liminal.symbols import resolve
 
 
 @pytest.mark.parametrize("text, ticker, asset, source, invert, rank, exch", [

@@ -20,6 +20,6 @@ jobs:
           python-version: "3.12"
       - name: Fetch data
         env:
-          # Set with: gh secret set MASSIVE_API_KEY -R pcxmac-dev/massive
+          # Set with: gh secret set MASSIVE_API_KEY -R pcxmac-dev/liminal
           MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
         run: python fetch_prev_close.py "${{ inputs.ticker || 'AAPL' }}"

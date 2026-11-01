@@ -7,10 +7,10 @@ import json
 
 import pytest
 
-from massive_collate import live
-from massive_collate.config import ConfigError, load_settings
-from massive_collate.storage import Store
-from massive_collate.sources import stream
+from liminal import live
+from liminal.config import ConfigError, load_settings
+from liminal.storage import Store
+from liminal.sources import stream
 
 T0 = 1_792_764_000_000  # 2026-10-23 14:00 UTC, ms
 
@@ -117,7 +117,7 @@ def test_always_streams_every_coin_from_the_start(tmp_path):
 def test_the_recorder_builds_only_what_it_recorded(tmp_path, monkeypatch):
     """With nothing streamed it reads nothing: it rebuilt every coin's frames each minute, so it read
     what the sync's backfill changed (0.5 to 1 GB a minute with no stream connected)."""
-    from massive_collate import derive
+    from liminal import derive
 
     calls = []
     monkeypatch.setattr(derive, "run", lambda store, sources=None, tickers=None, log=None: calls.append(tickers) or 7)
@@ -132,13 +132,13 @@ def test_the_recorder_builds_only_what_it_recorded(tmp_path, monkeypatch):
 
 
 def test_the_status_says_idle_not_down(tmp_path, capsys):
-    from massive_collate import cli
+    from liminal import cli
 
     with Store(tmp_path / "m.db") as store:
         store.kv_set(live.STATUS_KEY, json.dumps({"streams": {
             "coinbase": {"connected": False, "idle": True, "error": None, "pairs": {}},
             "iex": {"connected": False, "error": "alpaca 406: connection limit exceeded", "pairs": {}}}}))
-    settings = load_settings(env={"MASSIVE_DB": str(tmp_path / "m.db")}, env_file=None)
+    settings = load_settings(env={"LIMINAL_DB": str(tmp_path / "m.db")}, env_file=None)
     from types import SimpleNamespace
 
     assert cli.cmd_live(SimpleNamespace(action="status"), settings) == 0

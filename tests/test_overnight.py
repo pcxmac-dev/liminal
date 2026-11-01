@@ -9,16 +9,16 @@ from datetime import date, datetime, time
 import pandas as pd
 import pytest
 
-from massive_collate import collector
-from massive_collate.config import load_settings
-from massive_collate.coverage import FeedProfile
-from massive_collate.errors import NotEntitled
-from massive_collate.gui.bars import BarEngine, MERGED, calendar_key, in_session, session_hours
-from massive_collate.gui.markets import symbol_sessions
-from massive_collate.sessions import ET, MarketCalendar
-from massive_collate.sources import build_source, feed_profiles, providers, rate_window
-from massive_collate.sources.plugins.alpaca.client import BoatsSource
-from massive_collate.storage import Store
+from liminal import collector
+from liminal.config import load_settings
+from liminal.coverage import FeedProfile
+from liminal.errors import NotEntitled
+from liminal.gui.bars import BarEngine, MERGED, calendar_key, in_session, session_hours
+from liminal.gui.markets import symbol_sessions
+from liminal.sessions import ET, MarketCalendar
+from liminal.sources import build_source, feed_profiles, providers, rate_window
+from liminal.sources.plugins.alpaca.client import BoatsSource
+from liminal.storage import Store
 
 KEYS = {"MASSIVE_API_KEY": "k", "ALPACA_API_KEY_ID": "i", "ALPACA_API_SECRET_KEY": "s"}
 
@@ -120,8 +120,8 @@ def test_only_feeds_with_daily_bars_are_asked_for_them():
 
 
 def test_tiingo_scans_its_plan_and_reports_the_blue_ocean_add_on(store):
-    from massive_collate import cli, sourcing
-    from massive_collate.sources.plugins import tiingo
+    from liminal import cli, sourcing
+    from liminal.sources.plugins import tiingo
 
     class Client:
         def __init__(self):
@@ -156,8 +156,8 @@ def test_tiingo_scans_its_plan_and_reports_the_blue_ocean_add_on(store):
 
 
 def test_a_stock_opened_in_the_chart_goes_on_the_overnight_feed(tmp_path):
-    from massive_collate.gui.server import ChartApp
-    from massive_collate.symbols import resolve
+    from liminal.gui.server import ChartApp
+    from liminal.symbols import resolve
 
     with Store(tmp_path / "m.db") as store:
         store.watch_spec("massive", resolve("AAPL::XNAS"))
@@ -171,7 +171,7 @@ def test_a_stock_opened_in_the_chart_goes_on_the_overnight_feed(tmp_path):
 
 
 def test_a_sync_scans_a_feed_weekly_and_only_with_something_to_collect(store):
-    from massive_collate import cli, sourcing
+    from liminal import cli, sourcing
 
     asked = []
     source = type("Source", (), {})()

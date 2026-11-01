@@ -6,13 +6,13 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from massive_collate import freshness
-from massive_collate.collector import history_floor
-from massive_collate.config import load_settings
-from massive_collate.errors import NotEntitled
-from massive_collate.sources import feed_profiles, providers
-from massive_collate.sources.plugins import tiingo
-from massive_collate.sources.plugins.tiingo.client import TiingoFxSource
+from liminal import freshness
+from liminal.collector import history_floor
+from liminal.config import load_settings
+from liminal.errors import NotEntitled
+from liminal.sources import feed_profiles, providers
+from liminal.sources.plugins import tiingo
+from liminal.sources.plugins.tiingo.client import TiingoFxSource
 
 
 class FakeTiingo:
@@ -82,9 +82,9 @@ def test_the_feed_is_its_own_market_on_tiingos_plan_and_limits(monkeypatch):
 
 
 def test_a_sync_fills_a_pair_from_2020_inverted_as_shown_through_the_day_before(store):
-    from massive_collate.collector import sync
-    from massive_collate.coverage import FeedProfile
-    from massive_collate.symbols import resolve
+    from liminal.collector import sync
+    from liminal.coverage import FeedProfile
+    from liminal.symbols import resolve
 
     settings = load_settings(env={"TIINGO_API_KEY": "k", "TIINGO_PLAN": "power"}, env_file=None)
     tier = settings.for_source("tiingofx").tier

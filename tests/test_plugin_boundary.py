@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-SRC = Path(__file__).resolve().parents[1] / "src" / "massive_collate"
+SRC = Path(__file__).resolve().parents[1] / "src" / "liminal"
 URL = re.compile(r"\b(?:https?|wss?)://([A-Za-z0-9.-]+)")
 
 # links shown to people in the Federal view, never fetched (gov.LINKS, gov.RULES, the FOMC calendar)
@@ -43,7 +43,7 @@ def test_the_datasets_and_the_live_streams_hosts_are_their_plugins():
 
 
 def _imports(path: Path) -> set[str]:
-    """The modules a file imports, relative imports resolved (massive_collate.sources.http ...)."""
+    """The modules a file imports, relative imports resolved (liminal.sources.http ...)."""
     import ast
 
     rel = path.relative_to(SRC.parent).with_suffix("")
@@ -62,7 +62,7 @@ def _imports(path: Path) -> set[str]:
 
 def _plugin_of(module: str) -> str | None:
     bits = module.split(".")
-    return bits[3] if bits[:3] == ["massive_collate", "sources", "plugins"] and len(bits) > 3 else None
+    return bits[3] if bits[:3] == ["liminal", "sources", "plugins"] and len(bits) > 3 else None
 
 
 def test_plugins_are_self_contained():
@@ -70,7 +70,7 @@ def test_plugins_are_self_contained():
     other plugin, and the app imports none by name (it reads them from the registry)."""
     for path in SRC.rglob("*.py"):
         rel = path.relative_to(SRC).as_posix()
-        mine = _plugin_of("massive_collate." + rel[:-3].replace("/", "."))
+        mine = _plugin_of("liminal." + rel[:-3].replace("/", "."))
         if rel.startswith("sources/plugins/") and rel != "sources/plugins/__init__.py":
             others = {_plugin_of(m) for m in _imports(path)} - {None, mine}
             assert not others, f"{rel} imports another plugin: {others}"
@@ -82,7 +82,7 @@ def test_plugins_are_self_contained():
 def test_a_plugins_own_parser_reads_its_feed_without_the_app_changing():
     """A new kind of source is its plugin's (Feed.parse, API 1.7): the reader stores what the parser
     gives, items and rates, as for the Federal Register's and the New York Fed's."""
-    from massive_collate.sources.publisher import Feed, Read
+    from liminal.sources.publisher import Feed, Read
 
     from .test_publications import NOW, Resp, Site, _mark, pub, reader
 

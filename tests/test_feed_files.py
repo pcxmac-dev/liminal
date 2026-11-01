@@ -6,8 +6,8 @@ from contextlib import closing
 
 import pytest
 
-from massive_collate import splitfeeds
-from massive_collate.storage import OldLayout, Store
+from liminal import splitfeeds
+from liminal.storage import OldLayout, Store
 
 
 def _bar(t: int, c: float = 1.0) -> dict:
@@ -63,7 +63,7 @@ def test_unknown_feed_reads_as_empty(store):
 
 def _old_database(tmp_path):
     """The single-file layout: bars of every feed and the composite stats in the main file, ticks in ticks.db."""
-    path = tmp_path / "massive.db"
+    path = tmp_path / "liminal.db"
     with closing(sqlite3.connect(path)) as c, c:
         c.execute("CREATE TABLE bars (source TEXT NOT NULL, ticker TEXT NOT NULL, timespan TEXT NOT NULL, "
                   "multiplier INTEGER NOT NULL, ts INTEGER NOT NULL, open REAL, high REAL, low REAL, close REAL, "

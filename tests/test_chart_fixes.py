@@ -11,11 +11,11 @@ from http.server import ThreadingHTTPServer
 import pandas as pd
 import pytest
 
-from massive_collate import live
-from massive_collate.gui import charttypes
-from massive_collate.gui.bars import BarEngine, bar_end, calendar_key, merge_frames
-from massive_collate.gui.server import ChartApp, make_handler
-from massive_collate.storage import Store
+from liminal import live
+from liminal.gui import charttypes
+from liminal.gui.bars import BarEngine, bar_end, calendar_key, merge_frames
+from liminal.gui.server import ChartApp, make_handler
+from liminal.storage import Store
 
 ET = "America/New_York"
 
@@ -113,7 +113,7 @@ def test_a_read_does_not_write_unless_the_app_itself_asks(store):
             return c.getresponse().status
 
         assert get({}) == 200 and store.kv_get(live.OPEN_KEY) is None  # any web page can send a plain GET
-        assert get({"X-Massive-Charts": "1"}) == 200 and "AAPL" in json.loads(store.kv_get(live.OPEN_KEY))
+        assert get({"X-Liminal-Charts": "1"}) == 200 and "AAPL" in json.loads(store.kv_get(live.OPEN_KEY))
     finally:
         httpd.shutdown()
 
@@ -128,7 +128,7 @@ def test_a_feed_holding_a_symbol_it_does_not_watch_charts_it_as_the_symbols_clas
 
 
 def test_the_symbol_list_shows_the_state_of_the_feed_holding_the_data():
-    from massive_collate.gui.server import _symbol_state
+    from liminal.gui.server import _symbol_state
 
     rows = {"massive": {"state": "backfilling"}, "alpaca": {"state": "current"}, "tiingo": {"state": "blocked"}}
     assert _symbol_state(rows, ["massive"])["state"] == "backfilling"  # not whichever feed came last
@@ -166,7 +166,7 @@ def test_a_zoomed_out_one_second_chart_pages_back_through_every_day(store):
 
 
 def test_the_series_cache_keeps_to_a_memory_budget(store, monkeypatch):
-    from massive_collate.gui import bars as gui_bars
+    from liminal.gui import bars as gui_bars
 
     for i, t in enumerate(("AAA", "BBB", "CCC")):
         store.upsert_bars("massive", t, "minute", 1, [_bar(f"2026-10-20 10:{m:02d}", 10.0 + i) for m in range(50)])
@@ -184,7 +184,7 @@ def test_the_series_cache_keeps_to_a_memory_budget(store, monkeypatch):
 def test_open_symbol_goes_to_the_symbol_page_without_waiting_for_the_whole_list():
     from pathlib import Path
 
-    from massive_collate.gui import server
+    from liminal.gui import server
 
     app = (Path(server.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
     opener = app.split("function openSymbol(", 1)[1].split("\n}\n", 1)[0]

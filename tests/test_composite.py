@@ -5,10 +5,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from massive_collate import composite
-from massive_collate.coverage import FeedProfile
-from massive_collate.config import TIERS
-from massive_collate.symbols import resolve
+from liminal import composite
+from liminal.coverage import FeedProfile
+from liminal.config import TIERS
+from liminal.symbols import resolve
 
 T0 = int(datetime(2026, 10, 1, 15, tzinfo=timezone.utc).timestamp() * 1000)
 
@@ -76,7 +76,7 @@ def test_refresh_builds_the_composite_and_quality_from_exchange_feeds_only(store
 
 
 def test_chart_engine_serves_the_composite_with_its_band(store):
-    from massive_collate.gui.bars import BarEngine
+    from liminal.gui.bars import BarEngine
 
     store.watch_spec("coinbase", resolve("BTCUSD"))
     store.watch_spec("alpaca", resolve("BTCUSD"))
@@ -106,14 +106,14 @@ def test_single_exchange_minutes_have_no_composite(store):
 def test_audits_pair_only_feeds_of_the_same_market(store):
     import random
 
-    from massive_collate.audit import random_span
+    from liminal.audit import random_span
 
     feeds = _feeds()
     store.watch_spec("coinbase", resolve("BTCUSD"))
     store.watch_spec("alpaca", resolve("BTCUSD"))
     store.add_coverage("alpaca", "BTCUSD", "minute", T0 - 10 * 86_400_000, T0)
-    from massive_collate.sources.http import PublicClient
-    from massive_collate.sources.plugins.coinbase import CoinbaseSource
+    from liminal.sources.http import PublicClient
+    from liminal.sources.plugins.coinbase import CoinbaseSource
 
     src = CoinbaseSource(PublicClient("https://x.test"))
     now = datetime.fromtimestamp(T0 / 1000, timezone.utc)

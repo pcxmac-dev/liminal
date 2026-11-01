@@ -7,15 +7,15 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from massive_collate import cli, collector
-from massive_collate.collector import ET, sync
-from massive_collate.config import TIERS, load_settings
-from massive_collate.gui import server
-from massive_collate.gui.activity import limits
-from massive_collate.gui.server import ChartApp
-from massive_collate.ratelimit import KvLedger, RateLimiter, describe, window_state
-from massive_collate.sources.plugins.massive.client import MassiveClient
-from massive_collate.storage import Store
+from liminal import cli, collector
+from liminal.collector import ET, sync
+from liminal.config import TIERS, load_settings
+from liminal.gui import server
+from liminal.gui.activity import limits
+from liminal.gui.server import ChartApp
+from liminal.ratelimit import KvLedger, RateLimiter, describe, window_state
+from liminal.sources.plugins.massive.client import MassiveClient
+from liminal.storage import Store
 
 from .conftest import FakeResponse, FakeSession, FakeSource
 
@@ -153,7 +153,7 @@ def test_limits_list_every_server_with_its_window_and_wait(store):
     store.kv_set("fetch:wait:massive", json.dumps({"until": t + 10, "seconds": 10, "reason": "limit: 5 requests per minute"}))
     store.kv_set("fetch:wait:coinbase", json.dumps({"until": t - 5, "seconds": 1, "reason": "over"}))
     rows = {r["source"]: r for r in limits(store, settings, now)}
-    assert {"massive", "alpaca", "bitstamp", "coinbase", "bitfinex", "cboe", "tiingo"} <= set(rows)
+    assert {"massive", "alpaca", "bitstamp", "coinbase", "bitfinex", "tiingo"} <= set(rows)
     m = rows["massive"]
     assert m["keptTo"] == "5 requests per 62 s" and m["window"]["used"] == 5 and m["window"]["freeIn"] == 12.0
     assert m["wait"]["reason"].startswith("limit") and rows["coinbase"]["wait"] is None  # a past wait is over
@@ -165,7 +165,7 @@ def test_an_offline_copy_of_the_app_starts_no_runs(tmp_path, monkeypatch):
     store = Store(tmp_path / "m.db", check_same_thread=False)
     store.watch("massive", ["SPCX"], "minute", exchange="XNAS")
     monkeypatch.setattr(server.subprocess, "Popen", lambda *a, **k: (_ for _ in ()).throw(AssertionError("started")))
-    app = ChartApp(store, settings=load_settings(env={"MASSIVE_OFFLINE": "1"}, env_file=None))
+    app = ChartApp(store, settings=load_settings(env={"LIMINAL_OFFLINE": "1"}, env_file=None))
     assert app.priority("SPCX")["state"] == "offline"
     with pytest.raises(RuntimeError):
         app.start_scan("SPCX")
@@ -173,7 +173,7 @@ def test_an_offline_copy_of_the_app_starts_no_runs(tmp_path, monkeypatch):
 
 
 def test_pausing_stops_background_fetching_before_its_next_request_and_resumes(tmp_path):
-    from massive_collate.errors import Paused
+    from liminal.errors import Paused
 
     now = datetime(2026, 10, 24, 18, tzinfo=timezone.utc)
     with Store(tmp_path / "m.db") as store:
@@ -271,7 +271,7 @@ def test_the_chart_halts_and_resumes_and_resuming_starts_a_sync(tmp_path, monkey
     with pytest.raises(RuntimeError, match="halted"):
         app.start_scan("SPCX")
     out = app.set_fetching({"paused": False})
-    assert out["paused"] is None and out["started"] == 4343 and started[-1][-2:] == ["massive_collate", "sync"]
+    assert out["paused"] is None and out["started"] == 4343 and started[-1][-2:] == ["liminal", "sync"]
 
 
 def test_opening_an_up_to_date_symbol_asks_for_nothing(tmp_path, monkeypatch):
@@ -279,8 +279,8 @@ def test_opening_an_up_to_date_symbol_asks_for_nothing(tmp_path, monkeypatch):
     # and no "next in line" (it read so for hours while a long sync ran)
     from datetime import datetime as dt
 
-    from massive_collate import collector
-    from massive_collate.collector import ET
+    from liminal import collector
+    from liminal.collector import ET
 
     store = Store(tmp_path / "m.db", check_same_thread=False)
     store.watch("massive", ["SPCX"], "minute", exchange="XNAS")

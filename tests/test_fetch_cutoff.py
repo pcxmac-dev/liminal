@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from massive_collate import collector, freshness
-from massive_collate.collector import ET, sync
-from massive_collate.config import TIERS
+from liminal import collector, freshness
+from liminal.collector import ET, sync
+from liminal.config import TIERS
 
 from .conftest import FakeSource
 

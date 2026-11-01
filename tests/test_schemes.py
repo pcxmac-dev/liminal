@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from massive_collate.calc import schemes as sc
-from massive_collate.calc.schemes import LONG, SHORT, Bars, Costs, Decision, Decisions, backtest
+from liminal.calc import schemes as sc
+from liminal.calc.schemes import LONG, SHORT, Bars, Costs, Decision, Decisions, backtest
 
 T0 = 1_790_000_000_000
 MIN = 60_000

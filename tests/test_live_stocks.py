@@ -6,13 +6,13 @@ import json
 
 import pytest
 
-from massive_collate import live
-from massive_collate.config import load_settings
-from massive_collate.gui.bars import BarEngine
-from massive_collate.gui.server import ChartApp
-from massive_collate.storage import Store
-from massive_collate.sources.plugins.alpaca import AlpacaIexStream
-from massive_collate.sources import stream
+from liminal import live
+from liminal.config import load_settings
+from liminal.gui.bars import BarEngine
+from liminal.gui.server import ChartApp
+from liminal.storage import Store
+from liminal.sources.plugins.alpaca import AlpacaIexStream
+from liminal.sources import stream
 
 T0 = 1_792_764_000_000  # 2026-10-23 14:00 UTC (10:00 in New York), ms
 
@@ -154,5 +154,5 @@ def test_stocks_stream_only_with_keys_online_and_not_turned_off():
     keys = {"ALPACA_API_KEY_ID": "PKTESTKEY", "ALPACA_API_SECRET_KEY": "test-secret"}
     assert live.stock_keys(load_settings(env=keys, env_file=None)) == ("PKTESTKEY", "test-secret")
     assert live.stock_keys(load_settings(env={**keys, "LIVE_STOCKS": "off"}, env_file=None)) is None
-    assert live.stock_keys(load_settings(env={**keys, "MASSIVE_OFFLINE": "1"}, env_file=None)) is None
+    assert live.stock_keys(load_settings(env={**keys, "LIMINAL_OFFLINE": "1"}, env_file=None)) is None
     assert live.stock_keys(load_settings(env={}, env_file=None)) is None

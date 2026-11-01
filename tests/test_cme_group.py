@@ -8,11 +8,11 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from massive_collate import collector, initializer
-from massive_collate.collector import ET, sync
-from massive_collate.config import TIERS, load_settings
-from massive_collate.storage import Store
-from massive_collate.symbols import resolve
+from liminal import collector, initializer
+from liminal.collector import ET, sync
+from liminal.config import TIERS, load_settings
+from liminal.storage import Store
+from liminal.symbols import resolve
 
 from .conftest import FakeSource
 
@@ -73,9 +73,9 @@ def test_cme_groups_products_are_watched_as_continuous_futures(store):
 
 
 def test_the_cli_takes_cme_for_all_four_exchanges(tmp_path, monkeypatch, capsys):
-    from massive_collate import cli
+    from liminal import cli
 
-    monkeypatch.setenv("MASSIVE_DB", str(tmp_path / "m.db"))
+    monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "m.db"))
     monkeypatch.setenv("MASSIVE_API_KEY", "k")
     with Store(tmp_path / "m.db") as s:
         _directory(s)
@@ -118,7 +118,7 @@ def test_less_traded_futures_are_refreshed_weekly(store, monkeypatch):
 
 
 def test_official_schedules_are_asked_for_the_picked_and_the_first_futures(store, monkeypatch):
-    from massive_collate.live import WATCHLISTS_KEY
+    from liminal.live import WATCHLISTS_KEY
 
     monkeypatch.setattr(collector, "FUTURES_SCHEDULES", 2)
     for t in ("ES1!", "CL1!", "GC1!", "ZN1!"):

@@ -4,10 +4,10 @@ actually printed. 'missed' = real bars the projection had no slot for (must be 0
 import numpy as np
 import pandas as pd
 
-from massive_collate.config import load_settings
-from massive_collate.gui import projection as pj
-from massive_collate.gui.server import ChartApp
-from massive_collate.storage import Store
+from liminal.config import load_settings
+from liminal.gui import projection as pj
+from liminal.gui.server import ChartApp
+from liminal.storage import Store
 
 st = load_settings()
 s = Store(st.db_path, check_same_thread=False)

@@ -9,24 +9,24 @@ import importlib.util
 from datetime import datetime, timezone
 from pathlib import Path
 
-from massive_collate import publications
-from massive_collate.config import load_settings
-from massive_collate.gov import GovDB
-from massive_collate.sources import publishers, registry
-from massive_collate.sources.publisher import Feed, Policy, Publisher
+from liminal import publications
+from liminal.config import load_settings
+from liminal.gov import GovDB
+from liminal.sources import publishers, registry
+from liminal.sources.publisher import Feed, Policy, Publisher
 
 from .test_publications import Site, pub, reader
 
 AGENCIES = ["fed", "nyfed", "sec", "bls", "fedreg", "cftc"]
-STATIC = Path(__file__).resolve().parents[1] / "src" / "massive_collate" / "gui" / "static"
+STATIC = Path(__file__).resolve().parents[1] / "src" / "liminal" / "gui" / "static"
 
 
 def test_the_federal_agencies_are_parts_of_one_plugin():
-    from massive_collate.sources.plugins import federal
+    from liminal.sources.plugins import federal
 
     assert [p.name for p in federal.PUBLISHERS] == ["federal", *AGENCIES]
     for gone in ("fed", "nyfed", "sec", "bls", "fedreg"):  # no plugin of their own now
-        assert importlib.util.find_spec(f"massive_collate.sources.plugins.{gone}") is None, gone
+        assert importlib.util.find_spec(f"liminal.sources.plugins.{gone}") is None, gone
     pubs = publishers()
     assert list(pubs)[:7] == ["federal", *AGENCIES]  # the plugin's record first, its agencies after it
     assert all(pubs[n].part_of == "federal" and (pubs[n].version, pubs[n].api) == ("1.3.0", "1.7") for n in AGENCIES)
@@ -41,7 +41,7 @@ def test_the_federal_agencies_are_parts_of_one_plugin():
     assert pubs["fed"].calendar is not None and pubs["nyfed"].moments is not None
     # the CFTC: its Commitments of Traders, a dataset; nothing of its own to read (its feeds are off)
     assert pubs["cftc"].feeds == () and pubs["cftc"].dataset_names == ("cftc-cot-legacy",)
-    from massive_collate import datasets
+    from liminal import datasets
 
     assert datasets.DATASETS["cftc-cot-legacy"].publisher == "cftc"  # declared by it (API 1.4)
 
@@ -93,11 +93,11 @@ def test_a_publisher_with_no_feed_of_its_own_is_never_read_or_rechecked(store):
 
 
 def test_the_plugins_view_lists_federal_once_with_its_agencies_and_the_cftcs_dataset(tmp_path):
-    from massive_collate.gui.server import ChartApp
-    from massive_collate.storage import Store
+    from liminal.gui.server import ChartApp
+    from liminal.storage import Store
 
     with Store(tmp_path / "m.db", check_same_thread=False) as store:
-        out = ChartApp(store, settings=load_settings(env={"MASSIVE_DB": str(tmp_path / "m.db")}, env_file=None)).publishers()
+        out = ChartApp(store, settings=load_settings(env={"LIMINAL_DB": str(tmp_path / "m.db")}, env_file=None)).publishers()
     by = {p["name"]: p for p in out}
     assert by["federal"]["parts"] == AGENCIES and all(by[n]["partOf"] == "federal" for n in AGENCIES)
     assert by["federal"]["requestsToday"] == sum(by[n]["requestsToday"] for n in AGENCIES)

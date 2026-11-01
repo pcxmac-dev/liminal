@@ -4,7 +4,7 @@ Everything the app relies on that it does not own: where it comes from, how and 
 fetched, what it costs, how it goes stale, and what is still missing. Keep this current when a
 dependency is added or changes.
 
-**Health check:** `python -m massive_collate deps` checks every item below against its live state
+**Health check:** `python -m liminal deps` checks every item below against its live state
 (last success, age, coverage) and prints OK / WARN / FAIL with the action to take. The Fetcher view
 shows the same checks.
 
@@ -98,7 +98,7 @@ VWAP, trade count; box stats; margin of error 5 bps or 1 cent per price, 5 % vol
 comparison, never the bars. Audits are spot checks, not inspections of whole datasets: each
 compares one random hour of a span, and a run's audits stop once they have used 2 % of its request
 cap (`audit.AUDIT_SHARE`). They run after new data (queued for the other feed) and at random
-(`AUDITS_PER_RUN`, `AUDITS_RANDOM_PER_RUN`), or with `python -m massive_collate audit`.
+(`AUDITS_PER_RUN`, `AUDITS_RANDOM_PER_RUN`), or with `python -m liminal audit`.
 
 ### Research datasets (`datasets.py`)
 
@@ -194,7 +194,7 @@ derivation record). Keys are read from user environment variables only. Plan pri
 |---|---|---|---|
 | `klinecharts/klinecharts.min.js` | KLineChart 10.1.0 (npm) | Apache-2.0 | manual; the app patches two store methods (`timeaxis.js`), re-test the time axis on upgrade |
 | `world/countries-110m.json`, `countries-50m.json`, `countries-10m.json` (3.7 MB, 477k points; used past 6x zoom) | world-atlas 2.0.2 (Natural Earth) | ISC / public domain | rarely |
-| `world/coast-h/*.bin` + `index.json` (433 tiles of 10°, 2.0M points, 8.7 MB; used past 12x zoom, GPU only) | **built** by `tools/build_coastlines.py` from GSHHG 2.3.7 high resolution (~200 m): `gshhs_h.b` shorelines + `wdb_borders_h.b` national borders. The 119 MB archive stays outside the repo (`~/MassiveData/sources/`), from https://www.soest.hawaii.edu/pwessel/gshhg/ | LGPL-3.0 (`LICENSE.TXT`, `COPYING.LESSERv3` alongside) | rarely (GSHHG updates every few years) |
+| `world/coast-h/*.bin` + `index.json` (433 tiles of 10°, 2.0M points, 8.7 MB; used past 12x zoom, GPU only) | **built** by `tools/build_coastlines.py` from GSHHG 2.3.7 high resolution (~200 m): `gshhs_h.b` shorelines + `wdb_borders_h.b` national borders. The 119 MB archive stays outside the repo (`~/LiminalData/sources/`), from https://www.soest.hawaii.edu/pwessel/gshhg/ | LGPL-3.0 (`LICENSE.TXT`, `COPYING.LESSERv3` alongside) | rarely (GSHHG updates every few years) |
 | `world/time-zones.json` | **built** by `tools/build_timezones.py` from Natural Earth 1:10m time zones v5.1.2 + countries-50m + tz database | public domain | rebuild when zone borders change (rare); offsets are live anyway |
 | `world/blue-marble.jpg` (1.9 MB), `world/black-marble.jpg` (0.8 MB): Earth by day and its city lights by night; not used at present (the Markets rail icon is the wireframe globe, from `countries-50m.json`) | NASA Earth Observatory: Blue Marble Next Generation (Dec 2004, 5400x2700) and Black Marble 2016 (0.1 degree, 3600x1800); URLs and sha256 in `world/VERSION` | public domain (NASA; credit in `world/LICENSE-NASA.txt`) | never needed |
 | `sky/stars.6.json`, `constellations*.json` | d3-celestial 0.7.35 | BSD-3-Clause | never needed |

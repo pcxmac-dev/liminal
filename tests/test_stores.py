@@ -8,10 +8,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from massive_collate import gov, mongo, stores
-from massive_collate.sources.registry import publishers
-from massive_collate.storage import Store
-from massive_collate.storage.documents import GOV_ITEMS, NEWS, MongoDocuments, SqliteDocuments, copy
+from liminal import gov, mongo, stores
+from liminal.sources.registry import publishers
+from liminal.storage import Store
+from liminal.storage.documents import GOV_ITEMS, NEWS, MongoDocuments, SqliteDocuments, copy
 
 
 def _match(doc, flt):
@@ -167,7 +167,7 @@ NOW = datetime(2026, 10, 31, 12, tzinfo=timezone.utc)
 
 
 def test_settle_moves_documents_to_mongodb_and_back(tmp_path, server):
-    main = tmp_path / "massive.db"
+    main = tmp_path / "liminal.db"
     s = Store(main)
     gdb = gov.open_db(main)
     gdb.save_items("fed-press", [{"id": "a", "agency": "Fed", "title": "rates", "published": "2026-10-29T18:00:00"}], NOW)
@@ -207,7 +207,7 @@ def test_settle_moves_documents_to_mongodb_and_back(tmp_path, server):
 def test_a_write_falls_back_to_sqlite_while_the_server_is_down(tmp_path, server, monkeypatch):
     """The recorder's headlines and an agency's items are not lost while mongod is down: this file
     holds them, and the next settle copies them over."""
-    main = tmp_path / "massive.db"
+    main = tmp_path / "liminal.db"
     s = Store(main)
     gdb = gov.open_db(main)
     stores.settle(s, gdb.conn, tmp_path)
@@ -231,7 +231,7 @@ def test_a_write_falls_back_to_sqlite_while_the_server_is_down(tmp_path, server,
 
 
 def test_a_read_never_starts_the_server(tmp_path, server, monkeypatch):
-    main = tmp_path / "massive.db"
+    main = tmp_path / "liminal.db"
     s = Store(main)
     gdb = gov.open_db(main)
     s.save_news("massive", [news(1, 1000)])
@@ -245,8 +245,8 @@ def test_a_read_never_starts_the_server(tmp_path, server, monkeypatch):
 
 
 def test_settle_keeps_the_store_when_the_copy_fails(tmp_path, server):
-    s = Store(tmp_path / "massive.db")
-    gdb = gov.open_db(tmp_path / "massive.db")
+    s = Store(tmp_path / "liminal.db")
+    gdb = gov.open_db(tmp_path / "liminal.db")
     gdb.save_items("fed-press", [{"id": "a", "agency": "Fed", "title": "rates", "published": "2026-10-29"}], NOW)
     server["gov_items"].fail = True
     lines = []
@@ -258,8 +258,8 @@ def test_settle_keeps_the_store_when_the_copy_fails(tmp_path, server):
 
 
 def test_without_mongodb_nothing_moves(tmp_path):
-    s = Store(tmp_path / "massive.db")
-    gdb = gov.open_db(tmp_path / "massive.db")
+    s = Store(tmp_path / "liminal.db")
+    gdb = gov.open_db(tmp_path / "liminal.db")
     assert stores.settle(s, gdb.conn, tmp_path) == []
     row = next(r for r in stores.plugin_stores(s, "federal", gdb.conn) if r["type"] == "documents")
     assert row["effect"] == "sqlite" and row["counts"] == {"mongodb": None, "sqlite": 0}
@@ -295,12 +295,12 @@ def test_copy_twice_puts_nothing_twice(store, server):
 
 
 def test_the_plugin_page_shows_and_sets_its_stores(tmp_path):
-    from massive_collate.config import load_settings
-    from massive_collate.gui.server import ChartApp
+    from liminal.config import load_settings
+    from liminal.gui.server import ChartApp
 
-    main = tmp_path / "massive.db"
+    main = tmp_path / "liminal.db"
     with Store(main, check_same_thread=False) as store:
-        app = ChartApp(store, settings=load_settings(env={"MASSIVE_DB": str(main)}, env_file=None))
+        app = ChartApp(store, settings=load_settings(env={"LIMINAL_DB": str(main)}, env_file=None))
         got = app.plugin_stores("massive")
         assert [r["type"] for r in got["stores"]] == ["bars", "documents"]
         assert got["engines"]["duckdb"] and got["engines"]["mongodb"]["installed"] is False
@@ -310,23 +310,23 @@ def test_the_plugin_page_shows_and_sets_its_stores(tmp_path):
         assert out["stores"][0]["picked"] == "sqlite" and store.kv_get("store:feed:massive:bars") == "sqlite"
         with pytest.raises(RuntimeError, match="not installed"):
             app.set_store("massive", "documents", "mongodb")
-        offline = ChartApp(store, settings=load_settings(env={"MASSIVE_DB": str(main), "MASSIVE_OFFLINE": "1"}, env_file=None))
+        offline = ChartApp(store, settings=load_settings(env={"LIMINAL_DB": str(main), "LIMINAL_OFFLINE": "1"}, env_file=None))
         with pytest.raises(RuntimeError, match="offline"):
             offline.set_store("massive", "bars", None)
 
 
 def test_the_page_has_the_store_picker():
-    js = (Path(__file__).resolve().parents[1] / "src/massive_collate/gui/static/plugins.js").read_text(encoding="utf-8")
+    js = (Path(__file__).resolve().parents[1] / "src/liminal/gui/static/plugins.js").read_text(encoding="utf-8")
     assert "function storesHtml(name)" in js and "${storesHtml(p.name)}<h4>Databases</h4>" in js
     assert "if (e.target.matches('select.pl-store')) chooseStore(e.target);" in js
     assert "'/api/plugins/store'" in js and "/api/plugin-stores?name=" in js
 
 
 def test_the_hourly_sync_starts_a_history_run(tmp_path, monkeypatch):
-    from massive_collate import cli
-    from massive_collate.config import load_settings
+    from liminal import cli
+    from liminal.config import load_settings
 
-    settings = load_settings(env={"MASSIVE_DB": str(tmp_path / "massive.db")}, env_file=None)
+    settings = load_settings(env={"LIMINAL_DB": str(tmp_path / "liminal.db")}, env_file=None)
     started, lines = [], []
     monkeypatch.setattr(cli, "start_history", lambda: started.append(1) or 1)
     cli._stores_pass(settings, lines.append)
@@ -342,9 +342,9 @@ def test_the_hourly_sync_starts_a_history_run(tmp_path, monkeypatch):
 
 
 def test_the_commands(tmp_path, monkeypatch, capsys):
-    from massive_collate import cli
+    from liminal import cli
 
-    monkeypatch.setenv("MASSIVE_DB", str(tmp_path / "massive.db"))
+    monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "liminal.db"))
     assert cli.main(["stores"]) == 0
     out = capsys.readouterr().out
     assert "massive      Bars       DuckDB   optimal here: DuckDB" in out

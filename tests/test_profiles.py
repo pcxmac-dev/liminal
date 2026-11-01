@@ -11,9 +11,9 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from massive_collate import collector, live
-from massive_collate.gui import server
-from massive_collate.gui.server import ChartApp, make_handler
+from liminal import collector, live
+from liminal.gui import server
+from liminal.gui.server import ChartApp, make_handler
 
 
 def test_the_first_profile_holds_what_came_before_and_a_new_one_starts_empty(store):
@@ -73,7 +73,7 @@ def test_the_fetcher_follows_the_signed_in_profiles_watchlists(store):
 
 
 def test_the_login_page_until_a_profile_is_chosen_then_the_app(tmp_path):
-    from massive_collate.storage import Store
+    from liminal.storage import Store
 
     store = Store(tmp_path / "m.db", check_same_thread=False)  # the server's threads share it
     app = ChartApp(store)
@@ -83,7 +83,7 @@ def test_the_login_page_until_a_profile_is_chosen_then_the_app(tmp_path):
 
     def ask(method, path, body=None, cookie=None):
         c = HTTPConnection("127.0.0.1", port)
-        headers = {"Host": f"127.0.0.1:{port}", "X-Massive-Charts": "1", "Content-Type": "application/json"}
+        headers = {"Host": f"127.0.0.1:{port}", "X-Liminal-Charts": "1", "Content-Type": "application/json"}
         if cookie:
             headers["Cookie"] = cookie
         c.request(method, path, body=json.dumps(body) if body is not None else None, headers=headers)
@@ -112,7 +112,7 @@ def test_the_login_page_until_a_profile_is_chosen_then_the_app(tmp_path):
 
 
 def test_only_a_stock_you_open_goes_in_the_register_not_one_the_page_opened(tmp_path, monkeypatch):
-    from massive_collate.storage import Store
+    from liminal.storage import Store
 
     store = Store(tmp_path / "m.db", check_same_thread=False)  # the server's threads share it
     for t in ("SPCX", "AAPL"):
@@ -127,7 +127,7 @@ def test_only_a_stock_you_open_goes_in_the_register_not_one_the_page_opened(tmp_
     def open_(query):
         c = HTTPConnection("127.0.0.1", port)
         c.request("POST", f"/api/priority?{query}", headers={
-            "Host": f"127.0.0.1:{port}", "X-Massive-Charts": "1", "Cookie": f"mc_profile={two}"})
+            "Host": f"127.0.0.1:{port}", "X-Liminal-Charts": "1", "Cookie": f"mc_profile={two}"})
         return c.getresponse().status
 
     try:
@@ -144,7 +144,7 @@ def test_only_a_stock_you_open_goes_in_the_register_not_one_the_page_opened(tmp_
 def test_a_page_of_another_profile_cannot_write_and_odd_cookies_or_lengths_are_refused(tmp_path):
     import socket
 
-    from massive_collate.storage import Store
+    from liminal.storage import Store
 
     store = Store(tmp_path / "m.db", check_same_thread=False)  # the server's threads share it
     app = ChartApp(store)
@@ -156,7 +156,7 @@ def test_a_page_of_another_profile_cannot_write_and_odd_cookies_or_lengths_are_r
 
     def ask(method, path, body=None, cookie=None, page=None):
         c = HTTPConnection("127.0.0.1", port)
-        headers = {"Host": f"127.0.0.1:{port}", "X-Massive-Charts": "1", "Content-Type": "application/json"}
+        headers = {"Host": f"127.0.0.1:{port}", "X-Liminal-Charts": "1", "Content-Type": "application/json"}
         if cookie:
             headers["Cookie"] = cookie
         if page is not None:
@@ -180,7 +180,7 @@ def test_a_page_of_another_profile_cannot_write_and_odd_cookies_or_lengths_are_r
         assert b"login.js" in ask("GET", "/", cookie="mc_profile=99999999999999999999")[1]
         # a Content-Length that is not a size: an answer, not a dropped connection or a hung thread
         with socket.create_connection(("127.0.0.1", port)) as s:
-            s.sendall(f"PUT /api/watchlists HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Massive-Charts: 1\r\n"
+            s.sendall(f"PUT /api/watchlists HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nX-Liminal-Charts: 1\r\n"
                       "Content-Length: -5\r\n\r\n".encode())
             assert b" 400 " in s.recv(200).split(b"\r\n")[0]
         # the cookie is checked without the shared lock: the page answers while something holds it

@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from massive_collate import collector, provenance
-from massive_collate.storage import Store
+from liminal import collector, provenance
+from liminal.storage import Store
 
 
 def _ticks(store, source="alpaca", ticker="BTCUSD"):
@@ -20,7 +20,7 @@ def _ticks(store, source="alpaca", ticker="BTCUSD"):
 
 
 def test_code_version_names_the_commit():
-    assert re.fullmatch(r"[0-9a-f]{12}(\+dirty)?|massive-collate .+", provenance.code_version())
+    assert re.fullmatch(r"[0-9a-f]{12}(\+dirty)?|liminal .+", provenance.code_version())
 
 
 def test_bars_built_from_ticks_live_apart_with_their_derivation(store):
@@ -60,8 +60,8 @@ def test_bars_built_before_provenance_are_moved_apart(store):
 
 
 def test_composite_and_quality_record_how_they_were_made(store):
-    from massive_collate import composite
-    from massive_collate.symbols import resolve
+    from liminal import composite
+    from liminal.symbols import resolve
 
     from .test_composite import T0, _feeds
 
@@ -85,8 +85,8 @@ def test_composite_and_quality_record_how_they_were_made(store):
 def test_an_audit_records_its_tolerances_and_inputs(store):
     from datetime import date
 
-    from massive_collate import audit
-    from massive_collate.symbols import resolve
+    from liminal import audit
+    from liminal.symbols import resolve
 
     from .test_feeds import Other, _log, _minutes
 
@@ -104,8 +104,8 @@ def test_an_audit_records_its_tolerances_and_inputs(store):
 
 
 def test_indicators_say_how_they_were_derived_and_whether_they_look_ahead(tmp_path):
-    from massive_collate.calc.derivatives import Model
-    from massive_collate.gui.bars import BarEngine
+    from liminal.calc.derivatives import Model
+    from liminal.gui.bars import BarEngine
 
     from .test_gui import _store_with_bars
 

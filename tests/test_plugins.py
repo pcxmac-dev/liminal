@@ -9,18 +9,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from massive_collate import cli, composite, config
-from massive_collate.config import PUBLIC_FEEDS, Tier, load_settings
-from massive_collate.sources import (build_source, feed_profiles, is_archive, markets, provider, providers,
+from liminal import cli, composite, config
+from liminal.config import PUBLIC_FEEDS, Tier, load_settings
+from liminal.sources import (build_source, feed_profiles, is_archive, markets, provider, providers,
                                      rate_window, registry, supports)
-from massive_collate.sources.registry import KeyVar, Provider
-from massive_collate.symbols import resolve
-from massive_collate.sources.plugins.tiingo import TIINGO_BOATS
-from massive_collate.sources.plugins.alpaca import IEX_FEED
+from liminal.sources.registry import KeyVar, Provider
+from liminal.symbols import resolve
+from liminal.sources.plugins.tiingo import TIINGO_BOATS
+from liminal.sources.plugins.alpaca import IEX_FEED
 
 from .conftest import FakeSource
 
-BUILT_IN = ["massive", "alpaca", "boats", "bitstamp", "coinbase", "bitfinex", "cboe", "tiingo", "tiingofx"]
+BUILT_IN = ["massive", "alpaca", "boats", "bitstamp", "coinbase", "bitfinex", "tiingo", "tiingofx"]
 LISTED = [n for n in BUILT_IN if n not in ("boats", "tiingofx")]  # the plugins listed: Alpaca's and Tiingo's second feeds in them
 
 
@@ -53,7 +53,7 @@ def test_the_built_in_providers_load_in_their_order_without_errors():
     assert list(providers()) == BUILT_IN
     assert registry.errors() == []
     assert all(p.origin == "built in" and callable(p.build) for p in providers().values())
-    assert {n for n in BUILT_IN if is_archive(n)} == {"cboe", "tiingo"}
+    assert {n for n in BUILT_IN if is_archive(n)} == {"tiingo"}  # Cboe: its own package
 
 
 def test_each_built_in_keeps_its_plan_rate_caps_and_markets():
@@ -63,7 +63,7 @@ def test_each_built_in_keeps_its_plan_rate_caps_and_markets():
     assert rate_window("coinbase", s) == (8, 1.0)
     assert rate_window("tiingo", s) == (45, 3600.0)
     assert rate_window("bitfinex", s) == (20, 60.0)
-    for name in ("bitstamp", "coinbase", "bitfinex", "cboe", "tiingo"):
+    for name in ("bitstamp", "coinbase", "bitfinex", "tiingo"):
         tier, per_run, per_day = PUBLIC_FEEDS[name]
         view = s.for_source(name)
         assert (view.tier, view.max_requests_per_run, view.max_requests_per_day) == (tier, per_run, per_day)
@@ -73,7 +73,7 @@ def test_each_built_in_keeps_its_plan_rate_caps_and_markets():
     assert limited.for_source("coinbase").tier.history_days == 30
     assert limited.for_source("bitstamp").tier.history_days is None
     assert markets("massive", s)["stock"] == "sip" and markets("alpaca", s) == {"stock": "sip", "crypto": "kraken"}
-    assert markets("tiingo", s) == {"stock": "sip"} and markets("cboe", s) == {"index": "index"}
+    assert markets("tiingo", s) == {"stock": "sip"}
     assert markets("bitstamp", s) == {"crypto": "bitstamp"}
 
 
@@ -88,17 +88,17 @@ def test_what_each_built_in_serves_follows_its_keys():
     assert keyed["alpaca"].assets == {"stock", "crypto"} and keyed["tiingo"].assets == {"stock"}
     assert "future" in keyed["massive"].assets
     assert supports("coinbase", resolve("BTCUSD")) and not supports("coinbase", resolve("AAPL"))
-    assert supports("cboe", resolve("I:VIX")) and not supports("bitstamp", resolve("BTCUSD").__class__(
+    assert supports("bitstamp", resolve("BTCUSD")) and not supports("bitstamp", resolve("BTCUSD").__class__(
         **{**resolve("BTCUSD").__dict__, "ticker": "NOPEUSD"}))
 
 
 def test_composite_and_audits_read_the_plugins_facts():
-    from massive_collate import audit, initializer
+    from liminal import audit, initializer
 
     assert composite.reference("crypto") == "coinbase" and composite.reference("stock") is None
     assert composite.feed_kind("alpaca", "stock") == "consolidated"
     assert composite.feed_kind("alpaca", "crypto") == "exchange"
-    assert composite.feed_kind("cboe", "index") == "official" and composite.feed_kind("composite", "crypto") == "consolidated"
+    assert composite.feed_kind("composite", "crypto") == "consolidated"
     assert audit.venue_note("alpaca", "crypto") == "one exchange's book (Kraken)" and audit.venue_note("tiingo", "stock") is None
     assert initializer.bulk_resolution("massive") == "second" and initializer.bulk_resolution("tiingo") == "auto"
     assert initializer.bulk_resolution("massive", "future") == "minute"  # one per asset class
@@ -147,8 +147,8 @@ def test_a_plugin_that_fails_to_load_is_left_out_and_reported(installed):
 
 
 def test_an_installed_package_never_replaces_a_built_in(installed):
-    from massive_collate.sources import publishers
-    from massive_collate.sources.publisher import Policy, Publisher
+    from liminal.sources import publishers
+    from liminal.sources.publisher import Policy, Publisher
 
     # named as a built-in and listed before it: the built-in is kept all the same
     impostor = Provider(name="massive", title="Not Massive", build=lambda s, b: None, assets=frozenset(), order=-5)
@@ -180,7 +180,7 @@ def test_a_contract_version_takes_its_own_major_and_no_newer_minor():
 
 
 def test_every_built_in_plugin_is_versioned_for_this_apps_contract():
-    from massive_collate.sources import publishers
+    from liminal.sources import publishers
 
     plugins_ = [*providers().values(), *publishers().values()]
     # the feeds; Federal with its six agencies, Massive's headlines, Ken French's and Datahub's datasets
@@ -193,7 +193,7 @@ def test_every_built_in_plugin_is_versioned_for_this_apps_contract():
     want = {**dict.fromkeys(("alpaca", "boats", "tiingo", "tiingofx"), ("1.3.0", "1.6")),
             **dict.fromkeys(("massive", "massive-news"), ("1.3.0", "1.8")),
             **dict.fromkeys(("coinbase", "bitstamp"), ("1.2.0", "1.6")),
-            **dict.fromkeys(("bitfinex", "cboe"), ("1.1.0", "1.6")),
+            "bitfinex": ("1.1.0", "1.6"),
             **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("1.3.0", "1.7")),
             "french": ("1.0.0", "1.4"), "datahub": ("1.0.0", "1.4")}
     assert {p.name: (p.version, p.api) for p in plugins_} == want
@@ -206,7 +206,7 @@ def test_a_plugins_parts_are_released_with_it():
     be separate from massive same thing with federal agencies and federal"): each built-in part, a
     feed (Alpaca's Blue Ocean, Tiingo's forex) or a publisher (Massive's headlines, Federal's
     agencies), has its plugin's version and contract."""
-    from massive_collate.sources import publishers
+    from liminal.sources import publishers
 
     feeds, pubs = providers(), publishers()
     release = {n: (p.version, p.api) for n, p in [*feeds.items(), *pubs.items()]}
@@ -218,8 +218,8 @@ def test_a_plugins_parts_are_released_with_it():
 
 
 def test_a_plugin_for_another_major_is_left_out_and_reported_and_a_matching_one_loads(installed):
-    from massive_collate.sources import publishers
-    from massive_collate.sources.publisher import Policy, Publisher
+    from liminal.sources import publishers
+    from liminal.sources.publisher import Policy, Publisher
 
     def acme(name, api, **kw):
         return replace(ACME, name=name, title=name, keys=(), plan_vars=(), api=api, **kw)
@@ -257,7 +257,27 @@ def test_a_plugin_that_says_no_api_was_written_for_the_first_contract(installed,
     assert "acme-before" not in registry.reload()
     why = dict(registry.errors())["before (acme_before:PLUGIN)"]
     assert why == "acme-before: written for plugin API 1.0; this app offers 2.0: it needs a release for 2.x"
-    assert "massive_collate.sources.plugins.cboe" in dict(registry.errors())  # the built-ins too, until released for it
+    assert "liminal.sources.plugins.bitfinex" in dict(registry.errors())  # the built-ins too, until released for it
+
+
+def test_every_installed_plugin_package_loads(monkeypatch):
+    """The plugins released on their own (liminal-plugin-cboe ...), as installed beside the app
+    (pip install -e ".[plugins]"): each loads, none left out, each with a version; their own tests
+    are in their repositories. None installed: nothing to load."""
+    from importlib.metadata import entry_points
+
+    from liminal.sources import publishers
+
+    eps = list(entry_points(group=registry.ENTRY_POINTS))
+    monkeypatch.setattr(registry, "_entry_points", lambda: eps)
+    try:
+        registry.reload()
+        assert registry.errors() == []
+        packaged = [p for p in (*providers().values(), *publishers().values()) if p.origin != "built in"]
+        assert len(packaged) >= len(eps)  # an entry point may name a module of several
+        assert all(p.origin.startswith("package: ") and p.version for p in packaged)
+    finally:
+        registry._providers = None
 
 
 def test_a_packages_plugin_without_a_version_takes_its_distributions(monkeypatch):
@@ -305,8 +325,8 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
 
 
 def test_the_plugins_view_shows_each_plugins_version_and_origin(tmp_path):
-    from massive_collate.gui.server import ChartApp
-    from massive_collate.storage import Store
+    from liminal.gui.server import ChartApp
+    from liminal.storage import Store
 
     with Store(tmp_path / "m.db") as store:
         out = ChartApp(store, settings=load_settings(env={}, env_file=None)).plugins()
@@ -350,8 +370,8 @@ def test_the_providers_are_listed_even_with_a_wrong_setting(monkeypatch, capsys)
 
 
 def test_the_fetcher_tabs_carry_each_plugins_key_hints(tmp_path):
-    from massive_collate.gui.server import ChartApp
-    from massive_collate.storage import Store
+    from liminal.gui.server import ChartApp
+    from liminal.storage import Store
 
     with Store(tmp_path / "m.db") as store:
         app = ChartApp(store, settings=load_settings(env={"MASSIVE_API_KEY": "k"}, env_file=None))
@@ -360,11 +380,11 @@ def test_the_fetcher_tabs_carry_each_plugins_key_hints(tmp_path):
     assert "crypto needs no key" in feeds["alpaca"]["keysNote"]
     assert feeds["tiingo"]["keysNote"] == "key not set (TIINGO_API_KEY)" and feeds["tiingo"]["keysChip"] == "no key"
     assert feeds["massive"]["keys"] is True and feeds["coinbase"]["keys"] is None
-    assert feeds["cboe"]["archive"] and feeds["coinbase"]["title"] == "Coinbase"
+    assert feeds["tiingo"]["archive"] and feeds["coinbase"]["title"] == "Coinbase"
 
 
 def test_plugin_tiers_keep_their_history_start():
-    from massive_collate.collector import history_floor
+    from liminal.collector import history_floor
 
     tiingo = load_settings(env={}, env_file=None).for_source("tiingo").tier
     assert history_floor(tiingo, date(2026, 10, 27)) == date(1962, 1, 1)
@@ -395,7 +415,7 @@ def test_the_window_kept_is_inside_every_server_limit_never_rounded_above_one():
 
 
 def test_the_client_keeps_the_rate_limit_headers_its_server_sends():
-    from massive_collate.sources.plugins.massive.client import MassiveClient
+    from liminal.sources.plugins.massive.client import MassiveClient
 
     class Answer:
         status_code, headers = 200, {"X-RateLimit-Limit": "200", "X-RateLimit-Remaining": "17", "Server": "x"}
@@ -436,8 +456,8 @@ def test_the_scan_verifies_the_rate_kept_against_its_servers_and_the_lower_is_us
 
 
 def test_the_limit_found_is_read_from_the_scan_kept_in_the_database(tmp_path):
-    from massive_collate import sourcing
-    from massive_collate.storage import Store
+    from liminal import sourcing
+    from liminal.storage import Store
 
     with Store(tmp_path / "m.db") as store:
         store.kv_set(sourcing.SCAN_KEY.format("alpaca"), json.dumps({"at": "2026-10-28T12:00:00", "results": [],
@@ -459,13 +479,13 @@ def test_blue_ocean_is_a_feed_of_the_alpaca_plugin():
     Alpaca's keys and limits."""
     import importlib.util
 
-    from massive_collate.sources.plugins import alpaca
+    from liminal.sources.plugins import alpaca
 
     assert [p.name for p in alpaca.PLUGINS] == ["alpaca", "boats"] and not hasattr(alpaca, "PLUGIN")
-    assert importlib.util.find_spec("massive_collate.sources.plugins.boats") is None  # no plugin of its own
+    assert importlib.util.find_spec("liminal.sources.plugins.boats") is None  # no plugin of its own
     boats = provider("boats")
     assert (boats.title, boats.part_of, boats.account) == ("Blue Ocean", "alpaca", "alpaca")
-    assert boats.build.__module__ == "massive_collate.sources.plugins.alpaca"
+    assert boats.build.__module__ == "liminal.sources.plugins.alpaca"
     assert registry.plugin_feeds("alpaca") == ["alpaca", "boats"] and registry.plugin_of("boats") == "alpaca"
     assert registry.plugin_feeds("massive") == ["massive"] and registry.plugin_of("coinbase") == "coinbase"
     s = load_settings(env={"ALPACA_API_KEY_ID": "i", "ALPACA_API_SECRET_KEY": "s"}, env_file=None)
@@ -509,7 +529,7 @@ def test_a_rescan_of_alpaca_scans_its_blue_ocean_feed_too(tmp_path, monkeypatch)
     monkeypatch.setattr(cli, "api_run", run)
     monkeypatch.setattr(cli, "_scan", lambda name, source, store, log, settings=None: asked.append(name))
     s = load_settings(env={"ALPACA_API_KEY_ID": "i", "ALPACA_API_SECRET_KEY": "s",
-                           "MASSIVE_DB": str(tmp_path / "m.db")}, env_file=None)
+                           "LIMINAL_DB": str(tmp_path / "m.db")}, env_file=None)
     for name, want in (("alpaca", ["alpaca", "boats"]), ("boats", ["boats"])):
         asked.clear()
         assert cli.cmd_capabilities(cli.build_parser().parse_args(["capabilities", name]), s) == 0
@@ -521,10 +541,10 @@ def test_tiingos_forex_is_a_feed_of_the_tiingo_plugin():
     """The user, 2026-10-30: "i also have tiingo and tiingo forex, tiingo should be one plugin"."""
     import importlib.util
 
-    from massive_collate.sources.plugins import tiingo
+    from liminal.sources.plugins import tiingo
 
     assert [p.name for p in tiingo.PLUGINS] == ["tiingo", "tiingofx"] and not hasattr(tiingo, "PLUGIN")
-    assert importlib.util.find_spec("massive_collate.sources.plugins.tiingofx") is None  # no plugin of its own
+    assert importlib.util.find_spec("liminal.sources.plugins.tiingofx") is None  # no plugin of its own
     fx = provider("tiingofx")
     assert (fx.title, fx.part_of, fx.account, fx.archival) == ("Forex", "tiingo", "tiingo", False)
     assert provider("tiingo").archival  # its stocks' daily bars stay a closed archive; its forex is kept up to date
@@ -537,8 +557,8 @@ def test_tiingos_forex_is_a_feed_of_the_tiingo_plugin():
 def test_a_feed_on_a_plugins_keys_is_named_by_that_plugin_never_as_a_source_of_its_own():
     """The user, 2026-10-30: "the source isn't blue ocean its alpaca w/ blue ocean"; "house all alpaca in
     alpaca"."""
-    from massive_collate import live
-    from massive_collate.gui.server import feed_labels
+    from liminal import live
+    from liminal.gui.server import feed_labels
 
     assert registry.label("alpaca") == "alpaca" and registry.label("boats") == "alpaca (blue ocean)"
     assert registry.label("tiingofx") == "tiingo (forex)" and registry.label("massive") == "massive"

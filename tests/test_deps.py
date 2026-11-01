@@ -1,8 +1,8 @@
 """Dependency health checks (docs/DEPENDENCIES.md)."""
 from datetime import date
 
-from massive_collate import deps
-from massive_collate.config import load_settings
+from liminal import deps
+from liminal.config import load_settings
 
 
 def _by_item(rows):
@@ -17,7 +17,7 @@ def test_fresh_install_reports_what_has_never_run(store):
 
 
 def test_a_missing_proxy_fund_is_flagged(store):
-    from massive_collate.gui.world import PROXIES
+    from liminal.gui.world import PROXIES
 
     present = [{"T": p, "c": 10.0, "v": 1.0} for p in PROXIES if p != "EWJ"]
     store.save_market_snapshot("massive", date(2026, 10, 21), present)

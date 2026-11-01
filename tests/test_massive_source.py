@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from massive_collate.models import ETF
-from massive_collate.sources.plugins.massive.client import MassiveClient, MassiveSource
+from liminal.models import ETF
+from liminal.sources.plugins.massive.client import MassiveClient, MassiveSource
 
 from .conftest import FakeResponse, FakeSession
 

@@ -5,10 +5,10 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from massive_collate.collector import ET, sync
-from massive_collate.config import TIERS
-from massive_collate.models import Exchange, Stock, country, parse_symbol
-from massive_collate.storage import Store
+from liminal.collector import ET, sync
+from liminal.config import TIERS
+from liminal.models import Exchange, Stock, country, parse_symbol
+from liminal.storage import Store
 
 from .conftest import FakeSource
 
@@ -131,8 +131,8 @@ def test_a_feed_without_identity_is_not_shared_and_never_blanks_a_listing(store)
     # record, logo link and all)
     from datetime import date as _date
 
-    from massive_collate import collector
-    from massive_collate.models import Stock
+    from liminal import collector
+    from liminal.models import Stock
 
     from .conftest import FakeSource
 
