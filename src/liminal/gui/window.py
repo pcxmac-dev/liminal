@@ -26,12 +26,13 @@ from __future__ import annotations
 import json
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
 
 from ..calc.derivatives import Model, apply_model, segments
+from ..sources.dataset import EPOCH
 from .bars import (CALENDAR, COLUMNS, MERGED, MODEL_SOURCES, PERIOD_SECONDS, PRICE_BASED, TIME_TYPES, Series, Style,
                    _aggregate, _BoundedCache, _filtered, _regular_close, _SizedCache, bar_end, bin_keys, calendar_key,
                    decimals, epoch_ms,
@@ -1075,8 +1076,9 @@ class WindowReader:
             "aroundTheClock": s.around_the_clock, "feeds": self.feeds(source, ticker), "auto": True,
             "levels": levels, "pricePrecision": decimals(prices, cap=6, minimum=2) if prices else 2,
             "volumePrecision": decimals([r["volume"] for r in recent], cap=4) if recent else 0,
-            "first": datetime.fromtimestamp(min(lv["first"] for lv in levels) / 1000, timezone.utc).isoformat(),
-            "last": datetime.fromtimestamp(max(lv["last"] for lv in levels) / 1000, timezone.utc).isoformat(),
+            # from the epoch by arithmetic: an index's history starts in 1871 (dataset.EPOCH)
+            "first": (EPOCH + timedelta(milliseconds=min(lv["first"] for lv in levels))).isoformat(),
+            "last": (EPOCH + timedelta(milliseconds=max(lv["last"] for lv in levels))).isoformat(),
             "rows": estimated_rows(coarse),
             "periods": [{"type": lv["type"], "span": lv["span"]} for lv in levels],
             "allPeriods": [{"type": lv["type"], "span": lv["span"]} for lv in levels],

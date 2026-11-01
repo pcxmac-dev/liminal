@@ -451,20 +451,24 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
      so no feed is missing between the two: the package installed first (a built-in keeps its name,
      so the package is reported and left out until the module goes). The app keeps the contract's
      own tests (a fake package plugin, the version check) and a test that every installed plugin
-     loads (`test_every_installed_plugin_package_loads`); the rest of its suite never sees an
-     installed package (`tests/conftest.py`: `no_installed_plugins`), and a test that used the
-     plugin as an example uses a built-in or moves to the package. The app's CI installs
+     loads (`test_every_installed_plugin_package_loads`); the rest of its suite runs with the
+     packages installed, as the app does (2026-11-01: with every plugin leaving, no built-in is
+     left to stand in; a package's record is the fixture where a test names its feed), and a
+     plugin's own tests (its pages, its stream's messages) move to its package. The app's CI installs
      `.[dev,plugins]`; a package's CI installs the app from git (`MASSIVE_REF`).
   3. *A pilot first*: Cboe (one keyless feed, a closed archive, the smallest), to prove the path
      (install, entry point, version shown, its tests, its CI) before the others. Done 2026-10-31:
      [liminal-plugin-cboe](https://github.com/pcxmac-dev/liminal-plugin-cboe) 1.2.0, its plan
      and caps out of `config.PUBLIC_FEEDS` into it, `sources/plugins/cboe.py` gone; here it is
      installed editable from its clone beside the app's (`C:\Users\ciara\source\liminal-plugin-cboe`).
+  4. *Then each of the others* (the user, 2026-11-01: "all the plugins should be liminal-plugin-xxxx
+     and have a separate repo"), the same way, one at a time: `liminal-plugin-bitstamp` 1.3.0
+     (2026-11-01, its trade stream with it).
 
   The repositories it would make, under `pcxmac-dev`: `liminal-plugin-massive` (Massive and its
   headlines publisher, on its key), `liminal-plugin-alpaca` (Alpaca with its overnight feed on Blue
   Ocean, reached through Alpaca's API, keys and limits), `liminal-plugin-tiingo` (Tiingo with its
-  forex feed: one key and account), `liminal-plugin-coinbase`, `liminal-plugin-bitstamp`,
+  forex feed: one key and account), `liminal-plugin-coinbase`, `liminal-plugin-bitstamp` (made),
   `liminal-plugin-bitfinex`, `liminal-plugin-cboe` (made), and the publishers `liminal-plugin-federal`
   (the federal agencies, one plugin) and, later, a state regulators' plugin of its own.
 

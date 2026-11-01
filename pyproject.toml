@@ -25,7 +25,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 # the plugins released on their own, from their tags (docs/ARCHITECTURE.md: Providers are plugins)
-plugins = ["liminal-plugin-cboe @ git+https://github.com/pcxmac-dev/liminal-plugin-cboe@v1.2.0"]
+plugins = [
+    "liminal-plugin-cboe @ git+https://github.com/pcxmac-dev/liminal-plugin-cboe@v1.2.0",
+    "liminal-plugin-bitstamp @ git+https://github.com/pcxmac-dev/liminal-plugin-bitstamp@v1.3.0",
+]
 
 [project.scripts]
 liminal = "liminal.cli:main"

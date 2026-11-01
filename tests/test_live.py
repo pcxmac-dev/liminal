@@ -10,7 +10,6 @@ from liminal import live
 from liminal.storage import Store
 from liminal.wsclient import OP_PING, OP_PONG, OP_TEXT, WebSocket, encode_frame
 from liminal.sources.plugins.coinbase import CoinbaseStream
-from liminal.sources.plugins.bitstamp import BitstampStream
 from liminal.sources import stream
 
 
@@ -59,18 +58,6 @@ def test_exchange_messages_become_trades():
     assert cb == [("ETHUSD", {"sip_timestamp": 1_792_825_200_123_456_000, "sequence_number": 7, "price": 2500.1,
                               "size": 0.5, "exchange": None, "conditions": [], "id": "7", "tape": None})]
     assert CoinbaseStream().parse({"type": "heartbeat"}) == []
-    bs = BitstampStream().parse({"event": "trade", "channel": "live_trades_btcusd", "data": {
-        "id": 9, "microtimestamp": "1792825200123456", "price": 81000, "price_str": "81000.5", "amount": 0.1,
-        "amount_str": "0.1"}})
-    assert bs[0][0] == "BTCUSD" and bs[0][1]["sip_timestamp"] == 1_792_825_200_123_456_000 and bs[0][1]["price"] == 81000.5
-    try:
-        BitstampStream().parse({"event": "bts:request_reconnect"})
-    except stream.Reconnect:
-        pass
-    else:
-        raise AssertionError("a reconnect request must end the connection")
-    subs = [json.loads(m) for m in BitstampStream().subscribe(("BTC", "ETH"))]
-    assert [s["data"]["channel"] for s in subs] == ["live_trades_btcusd", "live_trades_ethusd"]
 
 
 def test_the_recorder_stores_ticks_builds_bars_and_beats(tmp_path):

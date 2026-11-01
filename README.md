@@ -68,9 +68,9 @@ nothing and the next run continues where it left off.
 python -m pip install -e ".[dev,plugins]"
 ```
 
-`plugins` installs the provider plugins released as packages of their own (Cboe:
-[liminal-plugin-cboe](https://github.com/pcxmac-dev/liminal-plugin-cboe)); the others are built in.
-Without it the app runs without those feeds.
+`plugins` installs the provider plugins released as packages of their own (`liminal-plugin-<name>`,
+each a repository under [pcxmac-dev](https://github.com/pcxmac-dev), listed in `pyproject.toml`; every
+plugin is to be one); the others are still built in. Without it the app runs without those feeds.
 
 Save each API key with `tools/set-key.ps1`: it asks for the key with the input hidden (not shown,
 not kept in the shell's history, not written to a file) and saves it as a user environment variable,

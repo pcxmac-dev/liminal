@@ -5,12 +5,11 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 
 from liminal.collector import ET, sync
-from liminal.config import ALPACA_TIERS, PUBLIC_FEEDS, TIERS
+from liminal.config import ALPACA_TIERS, TIERS
 from liminal.coverage import FeedProfile, ms, plan
 from liminal.errors import NotEntitled
-from liminal.sources import supports
+from liminal.sources import provider, supports
 from liminal.sources.http import PublicClient
-from liminal.sources.plugins.bitstamp import BitstampSource
 from liminal.sources.plugins.tiingo.client import TiingoSource, split_adjust
 from liminal.symbols import resolve
 
@@ -26,27 +25,6 @@ def _log(_):
 def _client(responses):
     session = FakeSession(responses)
     return PublicClient("https://x.test/api", session=session, sleep=lambda s: None), session
-
-
-def _ohlc(ts, v="1.0"):
-    return {"timestamp": str(ts), "open": "10", "high": "11", "low": "9", "close": "10.5", "volume": v}
-
-
-def test_bitstamp_pages_newest_first_and_drops_empty_minutes():
-    t0 = int(datetime(2015, 1, 1, tzinfo=timezone.utc).timestamp())
-    page1 = {"data": {"ohlc": [_ohlc(t0 + 60 * i, "0.0" if i % 2 else "2.0") for i in range(5, 10)]}}
-    page2 = {"data": {"ohlc": [_ohlc(t0 + 60 * i) for i in range(0, 5)]}}
-    client, session = _client([FakeResponse(200, page1), FakeResponse(200, page2), FakeResponse(200, page2)])
-    src = BitstampSource(client)
-    src.PAGE = 5
-    pages = list(src.bar_pages("X:BTCUSD", datetime.fromtimestamp(t0, timezone.utc),
-                               datetime.fromtimestamp(t0 + 600, timezone.utc), "minute", descending=True))
-    assert [b["t"] // 1000 - t0 for b in pages[0]] == [480, 360]  # zero-volume minutes dropped, newest first
-    assert len(pages[1]) == 5
-    url, params, headers = session.calls[0]
-    assert url.endswith("/ohlc/btcusd/") and params == {"step": 60, "limit": 5, "end": t0 + 540}
-    assert session.calls[1][1]["end"] == t0 + 240 and "liminal" in headers["User-Agent"]
-    assert len(session.calls) == 2  # stops once a page reaches the window's start
 
 
 def test_tiingo_is_split_adjusted_only_and_needs_a_key():
@@ -93,7 +71,7 @@ def _minutes(day, n=3, price=100.0):
 
 def _feeds():
     return {"alpaca": FeedProfile("alpaca", ALPACA_TIERS["basic"], frozenset({"crypto"}), 1),
-            "bitstamp": FeedProfile("bitstamp", PUBLIC_FEEDS["bitstamp"][0], frozenset({"crypto"}), 2)}
+            "bitstamp": FeedProfile("bitstamp", provider("bitstamp").tier, frozenset({"crypto"}), 2)}
 
 
 def test_a_feeds_empty_history_head_is_left_to_others_and_the_archive_closes(store):
@@ -107,13 +85,13 @@ def test_a_feeds_empty_history_head_is_left_to_others_and_the_archive_closes(sto
     gaps = plan(store, _feeds()["bitstamp"], _feeds(), "BTCUSD", "crypto", "minute", date(2011, 8, 1), NOW)
     assert gaps and gaps[-1][1] == _minutes(date(2021, 1, 1))[0]["t"]  # up to where Alpaca's data begins
     archive = Archive(entitled=("minute",), bars={"minute": _minutes(date(2014, 6, 1)), "day": []})
-    sync(archive, store, PUBLIC_FEEDS["bitstamp"][0], NOW, log=_log, feeds=_feeds())
+    sync(archive, store, provider("bitstamp").tier, NOW, log=_log, feeds=_feeds())
     assert archive.bar_calls and all(e <= datetime(2021, 1, 1, 12, tzinfo=timezone.utc) for _, s, e, ts, _ in archive.bar_calls)
     row = next(w for w in store.watchlist("bitstamp") if w["ticker"] == "BTCUSD")
     assert row["closed_at"] is not None  # archive complete
     # closed: later runs send nothing at all, whatever the date
     again = Archive(entitled=("minute",), bars={"minute": _minutes(date(2014, 6, 2))})
-    sync(again, store, PUBLIC_FEEDS["bitstamp"][0], NOW + timedelta(days=30), log=_log, feeds=_feeds())
+    sync(again, store, provider("bitstamp").tier, NOW + timedelta(days=30), log=_log, feeds=_feeds())
     assert again.requests_made == 0 and not getattr(again, "bar_calls", [])
 
 
@@ -147,15 +125,11 @@ def test_the_exchanges_send_five_minute_and_hourly_candles():
 
     t0 = int(datetime(2024, 1, 1, tzinfo=timezone.utc).timestamp())
     lo, hi = datetime.fromtimestamp(t0, timezone.utc), datetime.fromtimestamp(t0 + 3600, timezone.utc)
-    client, session = _client([FakeResponse(200, {"data": {"ohlc": [_ohlc(t0)]}}), FakeResponse(200, {"data": {"ohlc": []}})])
-    list(BitstampSource(client).bar_pages("X:BTCUSD", lo, hi, "minute", 5))
-    assert session.calls[0][1]["step"] == 300
     client, session = _client([FakeResponse(200, [])] * 2)
     list(CoinbaseSource(client).bar_pages("X:BTCUSD", lo, hi, "hour", 1))
     assert session.calls[0][1]["granularity"] == 3600
     client, session = _client([FakeResponse(200, [])])
     list(BitfinexSource(client).bar_pages("X:BTCUSD", lo, hi, "minute", 5))
     assert "/candles/trade:5m:tBTCUSD/hist" in session.calls[0][0]
-    assert BitstampSource(client).native_frames("crypto") == (("minute", 5), ("hour", 1))
     with pytest.raises(ValueError):
         list(CoinbaseSource(client).bar_pages("X:BTCUSD", lo, hi, "minute", 3))  # not a Coinbase granularity

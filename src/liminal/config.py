@@ -37,8 +37,8 @@ Settings come from environment variables, optionally loaded from a `.env` file
                       off: commands that read ticks (exports, volume profiles from trades) may
 
 Public historical sources (closed feeds: they fill history nobody else holds, then are not asked
-again): Bitstamp (crypto minute bars from 2011) and Cboe (index daily history; its own package,
-liminal-plugin-cboe: pip install -e ".[plugins]") need nothing;
+again): Bitstamp (crypto minute bars from 2011) and Cboe (index daily history), each its own package
+(liminal-plugin-bitstamp, liminal-plugin-cboe: pip install -e ".[plugins]"), need nothing;
     TIINGO_API_KEY    a free tiingo.com account key: US stock daily bars from 1962 (environment only)
     CRYPTO_VENUE_DAYS limit the crypto exchange feeds (Coinbase, Bitfinex) to this many days of history
                       (default: 0, everything they hold: Coinbase from 2015, Bitfinex from 2013)
@@ -147,11 +147,9 @@ ALPACA_TIERS: dict[str, Tier] = {
 }
 ALPACA_FEEDS = ("sip", "iex")
 
-# Public historical sources: (plan, max requests per run, per day). Bitstamp allows 8,000 requests
-# per 10 minutes, Tiingo's free plan 50 an hour and 1,000 a day; well inside both.
+# Public historical sources: (plan, max requests per run, per day). Tiingo's free plan allows 50
+# requests an hour and 1,000 a day; well inside it. (Bitstamp's and Cboe's are in their packages.)
 PUBLIC_FEEDS: dict[str, tuple[Tier, int, int]] = {
-    "bitstamp": (Tier("bitstamp-public", requests_per_minute=300, history_years=None,
-                      history_start=date(2011, 8, 1)), 8000, 20000),
     # Crypto exchange feeds (also the composite / reference models' inputs): all the history they hold,
     # unless CRYPTO_VENUE_DAYS limits it. Coinbase allows 10 public requests a second, Bitfinex about
     # 30 candle requests a minute.

@@ -80,9 +80,12 @@ def _cot(day: str) -> str:
 
 
 def _zip(name: str, text: str) -> bytes:
+    """A zip of one file, the same bytes each time it is made: the entry is dated 1980 (given a
+    name alone, writestr dates it now, at 2-second resolution, so two downloads of "the same file"
+    made across a tick differed and the second counted as a new version: CI on Windows, 3.12)."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
-        z.writestr(name, text)
+        z.writestr(zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0)), text)
     return buf.getvalue()
 
 
