@@ -5,9 +5,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from massive_collate.calc.profile import from_bars, from_trades, nice_step, weighted_quartiles
-from massive_collate.gui.bars import BarEngine, Style, calendar_key
-from massive_collate.storage import Store
+from liminal.calc.profile import from_bars, from_trades, nice_step, weighted_quartiles
+from liminal.gui.bars import BarEngine, Style, calendar_key
+from liminal.storage import Store
 
 ET = "America/New_York"
 

@@ -7,11 +7,11 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, timedelta
 
-from massive_collate import collector
-from massive_collate.collector import ET, sync
-from massive_collate.config import TIERS
-from massive_collate.initializer import ORDER_KEY
-from massive_collate.live import WATCHLISTS_KEY
+from liminal import collector
+from liminal.collector import ET, sync
+from liminal.config import TIERS
+from liminal.initializer import ORDER_KEY
+from liminal.live import WATCHLISTS_KEY
 
 from .conftest import FakeSource
 

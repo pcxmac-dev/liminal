@@ -6,10 +6,10 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from massive_collate import cli, derive, inventory
-from massive_collate.gui import server
-from massive_collate.gui.server import ChartApp
-from massive_collate.storage import Store
+from liminal import cli, derive, inventory
+from liminal.gui import server
+from liminal.gui.server import ChartApp
+from liminal.storage import Store
 
 ET = "America/New_York"
 
@@ -117,8 +117,8 @@ def test_the_chart_app_serves_the_inventory_and_builds_on_demand(store, monkeypa
 
 def test_the_inventory_command_prints_the_frames(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("MASSIVE_DB", str(tmp_path / "data" / "m.db"))
-    monkeypatch.setenv("MASSIVE_OFFLINE", "1")
+    monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "data" / "m.db"))
+    monkeypatch.setenv("LIMINAL_OFFLINE", "1")
     with Store(tmp_path / "data" / "m.db") as s:
         s.upsert_bars("massive", "SPCX", "minute", 1, _minutes("2026-10-20"))
         s.watch("massive", ["SPCX"], "minute")

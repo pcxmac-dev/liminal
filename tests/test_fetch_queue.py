@@ -10,14 +10,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from massive_collate import cli, collector, config, killswitch, publications, runner
-from massive_collate.collector import StopRun, sync
-from massive_collate.config import TIERS, load_settings
-from massive_collate.gov import GovDB
-from massive_collate.sources import registry
-from massive_collate.sources.fetching import Fetched, Fetcher, Job
-from massive_collate.sources.publisher import Policy, Publisher
-from massive_collate.storage import Store
+from liminal import cli, collector, config, killswitch, publications, runner
+from liminal.collector import StopRun, sync
+from liminal.config import TIERS, load_settings
+from liminal.gov import GovDB
+from liminal.sources import registry
+from liminal.sources.fetching import Fetched, Fetcher, Job
+from liminal.sources.publisher import Policy, Publisher
+from liminal.storage import Store
 
 from .conftest import FakeSource
 from .test_collector import NOW as SYNC_NOW
@@ -159,7 +159,7 @@ def test_one_plugins_failure_is_its_own(installed, tmp_path):
 
 def test_the_fetcher_command_runs_only_plugins_that_fetch_on_their_own(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(config, "read_env_file", lambda path: {})
-    monkeypatch.setenv("MASSIVE_DB", str(tmp_path / "m.db"))
+    monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "m.db"))
     assert cli.main(["fetcher"]) == 0
     assert "no plugin fetches on its own yet" in capsys.readouterr().out  # none built in does yet (step 1)
     assert registry.plugin_fetchers() == {}
@@ -205,7 +205,7 @@ def test_a_failed_news_read_is_failed_on_the_queue(store):
 
 # -- the views --------------------------------------------------------------------------------------
 def test_the_fetcher_and_a_plugins_page_read_the_queue(tmp_path):
-    from massive_collate.gui.server import ChartApp
+    from liminal.gui.server import ChartApp
 
     path = tmp_path / "m.db"
     with Store(path, check_same_thread=False) as store:
@@ -214,7 +214,7 @@ def test_the_fetcher_and_a_plugins_page_read_the_queue(tmp_path):
         store.queue_start("alpaca", "boats", "bars", "QQQ")
         with store.conn:  # a row left running by a process that is gone
             store.conn.execute("UPDATE fetch_queue SET pid=999999 WHERE key='QQQ'")
-        app = ChartApp(store, settings=load_settings(env={"MASSIVE_DB": str(path)}, env_file=None))
+        app = ChartApp(store, settings=load_settings(env={"LIMINAL_DB": str(path)}, env_file=None))
         q = app.queue({})
         rows = {r["key"]: r for r in q["rows"]}
         assert rows["QQQ"]["state"] == "stopped" and rows["QQQ"]["partLabel"] == "alpaca (blue ocean)"
@@ -242,7 +242,7 @@ def test_the_reader_keeps_no_queue_without_the_main_store():
 
 
 def test_a_datasets_files_are_on_the_queue_under_the_plugin_declaring_it(tmp_path):
-    from massive_collate import datasets
+    from liminal import datasets
 
     from .test_dataset_plugins import TODAY, _cot, _Resp, _Session, _zip
 
@@ -258,7 +258,7 @@ def test_a_datasets_files_are_on_the_queue_under_the_plugin_declaring_it(tmp_pat
 def test_each_plugins_page_shows_its_fetching_first():
     from pathlib import Path
 
-    js = (Path(__file__).resolve().parents[1] / "src" / "massive_collate" / "gui" / "static" / "plugins.js").read_text(encoding="utf-8")
+    js = (Path(__file__).resolve().parents[1] / "src" / "liminal" / "gui" / "static" / "plugins.js").read_text(encoding="utf-8")
     assert "function fetchingHtml(name) {" in js and "api(`/api/plugin-fetching?name=${encodeURIComponent(name)}`)" in js
     assert "${setupHtml(p.name, p.keys)}${fetchingHtml(p.name)}${feedsHtml(p)}" in js  # a feed plugin's, after its setup
     assert "${pubSetupHtml(p)}${fetchingHtml(p.name)}${readsHtml(p)}" in js  # a publisher's

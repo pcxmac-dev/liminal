@@ -11,11 +11,11 @@ from http.server import ThreadingHTTPServer
 import pandas as pd
 import pytest
 
-from massive_collate import derive
-from massive_collate.gui.server import WRITE_HEADER, ChartApp, make_handler
-from massive_collate.storage import Store
-from massive_collate.trading import paper
-from massive_collate.trading.paper import PaperBook, day_end
+from liminal import derive
+from liminal.gui.server import WRITE_HEADER, ChartApp, make_handler
+from liminal.storage import Store
+from liminal.trading import paper
+from liminal.trading.paper import PaperBook, day_end
 
 ET = "America/New_York"
 MIN = 60_000

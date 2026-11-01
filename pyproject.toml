@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "massive-collate"
+name = "liminal"
 version = "0.1.0"
 description = "Download, collate, analyse and chart stock market data from the Massive API (free and paid plans)."
 readme = "README.md"
@@ -22,16 +22,16 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 # the plugins released on their own, from their tags (docs/ARCHITECTURE.md: Providers are plugins)
-plugins = ["massive-plugin-cboe @ git+https://github.com/pcxmac-dev/massive-plugin-cboe@v1.2.0"]
+plugins = ["liminal-plugin-cboe @ git+https://github.com/pcxmac-dev/liminal-plugin-cboe@v1.2.0"]
 
 [project.scripts]
-massive-collate = "massive_collate.cli:main"
+liminal = "liminal.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-massive_collate = ["gui/static/*", "gui/static/vendor/klinecharts/*", "gui/static/vendor/world/*", "gui/static/vendor/sky/*"]
+liminal = ["gui/static/*", "gui/static/vendor/klinecharts/*", "gui/static/vendor/world/*", "gui/static/vendor/sky/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

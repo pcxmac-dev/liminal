@@ -9,14 +9,14 @@ from pathlib import Path
 import pytest
 import requests
 
-from massive_collate import datasets
-from massive_collate.datasets import DATASETS, due_files, fetch, status
-from massive_collate.sources import dataset as sdk
-from massive_collate.sources.plugins import datahub, french
-from massive_collate.sources.plugins.federal import cftc
-from massive_collate.sources.plugins.federal.cftc import parse_cot
-from massive_collate.sources.plugins.french import parse_french
-from massive_collate.storage import Store
+from liminal import datasets
+from liminal.datasets import DATASETS, due_files, fetch, status
+from liminal.sources import dataset as sdk
+from liminal.sources.plugins import datahub, french
+from liminal.sources.plugins.federal import cftc
+from liminal.sources.plugins.federal.cftc import parse_cot
+from liminal.sources.plugins.french import parse_french
+from liminal.storage import Store
 
 TODAY = date(2026, 10, 23)
 
@@ -25,7 +25,7 @@ TODAY = date(2026, 10, 23)
 def fetched_on_today(monkeypatch):
     """Files are recorded as fetched on TODAY, the day the tests schedule from, not on the real
     date: refresh cadences compare the two (on a later real date files looked fetched since)."""
-    from massive_collate.storage import datasets as stored
+    from liminal.storage import datasets as stored
 
     monkeypatch.setattr(stored, "_now", lambda: f"{TODAY.isoformat()}T16:00:00+00:00")
 
@@ -229,7 +229,7 @@ def test_shiller_zeros_are_missing_and_what_a_new_version_drops_is_withdrawn(sto
 def test_chart_app_lists_datasets_and_maps_members_by_gics(tmp_path):
     import json
 
-    from massive_collate.gui.server import ChartApp
+    from liminal.gui.server import ChartApp
 
     s = Store(tmp_path / "m.db", check_same_thread=False)
     fetch(s, ["sp500-constituents"], today=TODAY, session=_Session(_web), log=lambda *_: None)
@@ -243,7 +243,7 @@ def test_chart_app_lists_datasets_and_maps_members_by_gics(tmp_path):
 
 
 def test_viewer_endpoints(tmp_path):
-    from massive_collate.gui.server import ChartApp
+    from liminal.gui.server import ChartApp
 
     s = Store(tmp_path / "m.db", check_same_thread=False)
     fetch(s, ["cftc-cot-legacy", "french-3-factors-daily"], today=TODAY, session=_Session(_web), log=lambda *_: None)

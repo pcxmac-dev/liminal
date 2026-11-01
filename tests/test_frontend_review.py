@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from massive_collate.gui import server
+from liminal.gui import server
 
 STATIC = Path(server.__file__).parent / "static"
 
@@ -157,7 +157,7 @@ def test_a_scheme_answer_is_drawn_for_the_symbol_it_was_asked_for_only():
     assert "res.ticker = state.ticker" not in run and "res.ticker = ask.ticker;" in run and "res.source = ask.source;" in run
     assert run.index("const ask = {") < run.index("api('/api/scheme'")
     assert "ask.ticker !== state.ticker || ask.source !== state.source" in run
-    on_symbol = schemes.split("window.addEventListener('massive:symbol'", 1)[1].split("});", 1)[0]
+    on_symbol = schemes.split("window.addEventListener('liminal:symbol'", 1)[1].split("});", 1)[0]
     assert "S.token = (S.token || 0) + 1;" in on_symbol  # a run still on its way is dropped
     assert "S.result.source === state.source" in schemes.split("const current = ", 1)[1].split(";", 1)[0]
 
@@ -206,7 +206,7 @@ def test_the_highlight_panel_is_rebuilt_when_the_highlight_changes_only():
     assert "addEventListener" not in _function(app, "renderHighlightPanel")
     assert "$('pHighlight').addEventListener('click'" in app and "e.target.closest('#hlRemove')" in app
     # level 2 still hears of each change (level2.js coverMoved)
-    assert "window.dispatchEvent(new Event('massive:highlight'))" in _function(app, "scheduleHighlightPanel")
+    assert "window.dispatchEvent(new Event('liminal:highlight'))" in _function(app, "scheduleHighlightPanel")
 
 
 # -- the low ones ----------------------------------------------------------------------------------------------------
@@ -294,12 +294,12 @@ def test_the_current_times_clock_and_level_2s_times_follow_the_picked_zone():
     assert "nowClock(pickedZone()).format(new Date())" in app and "NOW_CLOCK" not in app
     pick = _function(app, "setChartTimezone")  # the switch under the price axis and Preferences both
     assert "tickNowClock();" in pick  # at once on a new pick
-    assert "new CustomEvent('massive:timezone'" in pick
+    assert "new CustomEvent('liminal:timezone'" in pick
     l2 = _js("level2.js")
     for name in ("when", "spanText"):
         body = _inner(l2, name)
         assert "const zone = pickedZone();" in body and "zoneShort(zone)" in body and " ET`" not in body
-    assert "addEventListener('massive:timezone', () => { if (lastProfile) render(lastProfile); })" in l2
+    assert "addEventListener('liminal:timezone', () => { if (lastProfile) render(lastProfile); })" in l2
 
 
 def test_the_auto_zoom_holds_at_the_datas_finest_sampling_unless_overridden():
@@ -320,7 +320,7 @@ def test_the_auto_zoom_holds_at_the_datas_finest_sampling_unless_overridden():
     toggle = _function(app, "toggleAutoOverride")
     assert "state.autoOverride = !state.autoOverride;" in toggle and "checkLod();" in toggle
     assert "$('periods').addEventListener('click', (e) => { if (e.target.closest('#autoLevel')) toggleAutoOverride(); });" in app
-    assert "window.addEventListener('massive:symbol', () => { state.autoOverride = false;" in app
+    assert "window.addEventListener('liminal:symbol', () => { state.autoOverride = false;" in app
     periods = _function(app, "renderPeriods")
     assert "const under = state.autoOverride && state.wideInView > 0;" in periods
     assert "tag.classList.toggle('under', under);" in periods and "tag.setAttribute('aria-pressed'" in periods
@@ -409,7 +409,7 @@ def test_the_time_zone_defaults_to_this_computers_and_is_picked_in_preferences_t
     pick = _function(app, "setChartTimezone")
     assert "prefs.set('timezone', state.timezone);" in pick and "tickNowClock();" in pick
     assert "updateStatus(chart.getDataList().length);" in pick  # the status line's zone
-    assert "new CustomEvent('massive:timezone'" in pick
+    assert "new CustomEvent('liminal:timezone'" in pick
     assert "setChartTimezone(b.dataset.tz);" in app.split("tzMenu.addEventListener('click'", 1)[1].split("\n});\n", 1)[0]
     status = _function(app, "updateStatus")
     assert "zoneShort(labelZone(chart.getPeriod() || state.period))" in status and "'ET'," not in status
@@ -417,7 +417,7 @@ def test_the_time_zone_defaults_to_this_computers_and_is_picked_in_preferences_t
     prefs = _js("prefs.js")
     assert '<select id="prefZone">${TIMEZONES.map((z) =>' in prefs and "z === LOCAL_ZONE ? ' · this computer' : ''" in prefs
     assert "if (e.target.id === 'prefZone') window.setChartTimezone(e.target.value);" in prefs
-    assert "window.addEventListener('massive:timezone', again);" in prefs and "const again = () => { if (shown())" in prefs
+    assert "window.addEventListener('liminal:timezone', again);" in prefs and "const again = () => { if (shown())" in prefs
 
 
 def test_turning_the_override_off_holds_again_even_mid_switch_and_a_stuck_switch_expires():
@@ -450,7 +450,7 @@ def test_the_stock_panels_data_times_are_in_the_picked_zone():
     assert "['Times', 'US/Eastern']" not in app
     assert "['From', esc(zoneTime(data.first))]" in app and "['To', esc(zoneTime(data.last))]" in app
     assert "timeZone: pickedZone()" in _function(app, "zoneTime")
-    assert "window.addEventListener('massive:timezone', () => { if (state.info) renderPanel(); });" in app
+    assert "window.addEventListener('liminal:timezone', () => { if (state.info) renderPanel(); });" in app
 
 
 def test_the_theme_is_picked_in_preferences_too():
@@ -458,7 +458,7 @@ def test_the_theme_is_picked_in_preferences_too():
     assert '<select id="prefTheme">${Object.entries(THEMES).map(([t, th]) =>' in prefs
     assert "$('themeSelect').value = e.target.value;" in prefs  # the toolbar's picker: the same setting
     assert "$('themeSelect').dispatchEvent(new Event('change'));" in prefs
-    assert "window.addEventListener('massive:theme', () => { again(); window.TimeAxis?.redraw(); });" in prefs
+    assert "window.addEventListener('liminal:theme', () => { again(); window.TimeAxis?.redraw(); });" in prefs
 
 
 def test_the_preferences_pane_draws_when_the_page_opens_on_it_and_a_redraw_drops_its_popup():
@@ -498,7 +498,7 @@ def test_a_current_feed_giving_minutes_holds_the_zoom_at_them_across_the_chart_u
     choose = _function(app, "chooseLevel")
     assert "const minutesLive = !state.autoOverride && liveResolution() === 'minute';" in choose
     assert "if (minutesLive && lv.type === 'second') continue;" in choose  # nowhere under them, any window
-    activity = app.split("window.addEventListener('massive:activity', () => requestAnimationFrame(() => {  // live or not, again", 1)[1]
+    activity = app.split("window.addEventListener('liminal:activity', () => requestAnimationFrame(() => {  // live or not, again", 1)[1]
     assert "if (res !== state.liveRes) { state.liveRes = res; renderPeriods(); autoSoon(); }" in activity.split("}));", 1)[0]
 
 
@@ -625,10 +625,10 @@ def test_the_feed_is_picked_in_preferences_not_the_toolbar():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     assert '<select id="feedSelect" title="Data feed" hidden></select>' in html
     app = _js("app.js")
-    assert "sel.hidden = !feeds.length;" not in app and "window.dispatchEvent(new CustomEvent('massive:feeds'));" in app
+    assert "sel.hidden = !feeds.length;" not in app and "window.dispatchEvent(new CustomEvent('liminal:feeds'));" in app
     prefs = _js("prefs.js")
     assert '<div class="p-sub">Data</div>' in prefs and "<select id=\"prefFeed\"" in prefs
-    assert "$('feedSelect').value = e.target.value;" in prefs and "window.addEventListener('massive:feeds', again);" in prefs
+    assert "$('feedSelect').value = e.target.value;" in prefs and "window.addEventListener('liminal:feeds', again);" in prefs
 
 
 def test_the_symbol_button_names_the_company_not_its_exchange():
@@ -653,7 +653,7 @@ def test_the_toolbar_keeps_no_zoom_png_gpu_or_theme_buttons():
     assert "else if (e.key === 'End') goLatest();" in app and "e.key === '+'" in app  # the keys stay
     prefs = _js("prefs.js")
     assert '<input type="checkbox" id="prefGpu"' in prefs and "if (e.target.id === 'prefGpu') { $('gpuBtn').click(); return; }" in prefs
-    assert "window.addEventListener('massive:gpu', again);" in prefs and '<select id="prefTheme">' in prefs
+    assert "window.addEventListener('liminal:gpu', again);" in prefs and '<select id="prefTheme">' in prefs
 
 
 def test_the_price_model_shows_no_settings():
@@ -674,8 +674,8 @@ def test_the_chart_type_is_picked_in_preferences():
     assert html.index('id="typeSelect"') < html.index('<span id="typeParams" class="params"></span>')  # its settings stay
     prefs = _js("prefs.js")
     assert '<select id="prefType">' in prefs and "g.tagName === 'OPTGROUP'" in prefs  # its groups, as the picker has them
-    assert "$('typeSelect').value = e.target.value;" in prefs and "window.addEventListener('massive:charttype', again);" in prefs
-    assert "window.dispatchEvent(new CustomEvent('massive:charttype'" in _js("app.js").split("function applyChartType()", 1)[1][:400]
+    assert "$('typeSelect').value = e.target.value;" in prefs and "window.addEventListener('liminal:charttype', again);" in prefs
+    assert "window.dispatchEvent(new CustomEvent('liminal:charttype'" in _js("app.js").split("function applyChartType()", 1)[1][:400]
 
 
 def test_the_watchlist_adds_with_a_plus_and_removes_with_a_minus():
@@ -720,8 +720,8 @@ def test_the_watchlist_shows_only_your_watchlists():
 def test_the_watchlist_draws_its_rows_once_the_symbols_arrive():
     js = _js("watchlist.js")
     assert "state.symbolsLoaded ? 'Nothing matches.' : 'Loading the symbols…'" in js
-    assert "window.addEventListener('massive:symbols', refresh);" in js
-    assert "window.dispatchEvent(new CustomEvent('massive:symbols'));" in _js("app.js").split("async function loadSymbols()", 1)[1][:300]
+    assert "window.addEventListener('liminal:symbols', refresh);" in js
+    assert "window.dispatchEvent(new CustomEvent('liminal:symbols'));" in _js("app.js").split("async function loadSymbols()", 1)[1][:300]
 
 
 def test_all_data_and_the_indicators_are_preferences():
@@ -730,10 +730,10 @@ def test_all_data_and_the_indicators_are_preferences():
     assert '<button id="unfilteredBtn" class="toggle" hidden' in html
     assert '<div class="menu" hidden>' in html and '<button id="indBtn" hidden' in html
     app = _js("app.js")
-    assert "cb.dataset.ind = name;" in app and "window.dispatchEvent(new CustomEvent('massive:indicators'" in app
-    assert "window.dispatchEvent(new CustomEvent('massive:unfiltered'" in app
+    assert "cb.dataset.ind = name;" in app and "window.dispatchEvent(new CustomEvent('liminal:indicators'" in app
+    assert "window.dispatchEvent(new CustomEvent('liminal:unfiltered'" in app
     prefs = _js("prefs.js")
     assert '<input type="checkbox" id="prefUnfiltered"' in prefs and "if (e.target.id === 'prefUnfiltered') { $('unfilteredBtn').click(); return; }" in prefs
     assert "[['On price', MAIN_INDICATORS], ['Below price', SUB_INDICATORS]]" in prefs
     assert "const cb = $('indMenu').querySelector(`input[data-ind=\"${CSS.escape(e.target.dataset.ind)}\"]`);" in prefs
-    assert "window.addEventListener('massive:indicators', again);" in prefs and "window.addEventListener('massive:unfiltered', again);" in prefs
+    assert "window.addEventListener('liminal:indicators', again);" in prefs and "window.addEventListener('liminal:unfiltered', again);" in prefs

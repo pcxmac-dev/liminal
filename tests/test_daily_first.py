@@ -6,12 +6,12 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, timedelta, timezone
 
-from massive_collate import collector
-from massive_collate.audit import daily_history
-from massive_collate.collector import ET, sync
-from massive_collate.config import TIERS
-from massive_collate.coverage import FeedProfile
-from massive_collate.initializer import ORDER_KEY
+from liminal import collector
+from liminal.audit import daily_history
+from liminal.collector import ET, sync
+from liminal.config import TIERS
+from liminal.coverage import FeedProfile
+from liminal.initializer import ORDER_KEY
 
 from .conftest import FakeSource
 
@@ -121,7 +121,7 @@ def test_a_stock_whose_details_were_never_read_is_not_marked_logo_less(store):
 
 
 def test_the_daily_sweep_brings_each_stocks_logo_with_its_details(store):
-    from massive_collate.models import Instrument
+    from liminal.models import Instrument
 
     class WithLogos(FakeSource):
         def icon(self, url):
@@ -137,8 +137,8 @@ def test_the_daily_sweep_brings_each_stocks_logo_with_its_details(store):
 
 
 def test_the_daily_sweep_stops_on_an_outage_instead_of_retrying_every_stock(store, monkeypatch):
-    from massive_collate import killswitch
-    from massive_collate.errors import SourceError
+    from liminal import killswitch
+    from liminal.errors import SourceError
 
     class Down(FakeSource):
         def bar_pages(self, ticker, *a, **k):

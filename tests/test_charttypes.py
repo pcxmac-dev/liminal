@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from massive_collate.gui import charttypes as ct
+from liminal.gui import charttypes as ct
 
 ET = "America/New_York"
 

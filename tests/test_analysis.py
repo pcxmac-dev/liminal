@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from massive_collate import analysis
-from massive_collate.models import ETF, Exchange, Stock, country, instrument_class
+from liminal import analysis
+from liminal.models import ETF, Exchange, Stock, country, instrument_class
 
 
 def _ticks() -> pd.DataFrame:

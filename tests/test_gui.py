@@ -11,9 +11,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from massive_collate.gui.bars import MERGED, BarEngine, decimals, merge_frames, resample
-from massive_collate.gui.server import ChartApp, make_handler
-from massive_collate.storage import Store
+from liminal.gui.bars import MERGED, BarEngine, decimals, merge_frames, resample
+from liminal.gui.server import ChartApp, make_handler
+from liminal.storage import Store
 
 ET = "America/New_York"
 
@@ -165,7 +165,7 @@ def test_range_stats_empty_window(tmp_path):
 
 @pytest.mark.parametrize("kind", ["heikin_ashi", "renko", "line_break", "kagi", "point_figure", "range"])
 def test_engine_chart_types(tmp_path, kind):
-    from massive_collate.gui.bars import Style
+    from liminal.gui.bars import Style
 
     eng = BarEngine(_store_with_bars(tmp_path))
     reversal = 3 if kind == "point_figure" else 0.01
@@ -189,7 +189,7 @@ def test_server_rejects_bad_chart_parameters(tmp_path):
 def _future_store(tmp_path):
     from datetime import date
 
-    from massive_collate.symbols import resolve
+    from liminal.symbols import resolve
 
     s = Store(tmp_path / "f.db", check_same_thread=False)
     s.watch_spec("massive", resolve("NQ1!"), "minute")
@@ -227,7 +227,7 @@ def test_meta_reports_asset_and_rolls(tmp_path):
 
 
 def test_lod_aggregate_is_exact_and_anchored():
-    from massive_collate.gui.bars import lod_aggregate
+    from liminal.gui.bars import lod_aggregate
 
     f = _minutes("2026-10-20 09:30", 10)
     agg = lod_aggregate(f, 4)
@@ -258,7 +258,7 @@ def test_engine_lod_paging_and_limits(tmp_path):
 
 
 def test_lod_cache_is_per_chart_type(tmp_path):
-    from massive_collate.gui.bars import Style
+    from liminal.gui.bars import Style
 
     eng = BarEngine(_store_with_bars(tmp_path))
     q = dict(limit=100000, lod=2)
@@ -271,7 +271,7 @@ def test_lod_cache_is_per_chart_type(tmp_path):
 
 
 def test_lod_applies_to_bricks_but_not_kagi(tmp_path):
-    from massive_collate.gui.bars import Style
+    from liminal.gui.bars import Style
 
     eng = BarEngine(_store_with_bars(tmp_path))
     rng = eng.bars("massive", "SPCX", "minute", 1, limit=100000, style=Style(type="range", box=0.25))
@@ -314,8 +314,8 @@ def test_info_for_futures_reports_contract(tmp_path):
 
 
 def test_models_through_the_engine_and_api(tmp_path):
-    from massive_collate.gui.bars import Style
-    from massive_collate.calc.derivatives import Model
+    from liminal.gui.bars import Style
+    from liminal.calc.derivatives import Model
 
     s = _store_with_bars(tmp_path)  # opens rise 0.001 per minute, close constant 10.25
     eng = BarEngine(s)
@@ -404,9 +404,9 @@ def test_exchanges_without_a_mic_never_break_the_markets_endpoint(tmp_path):
     fail with 'Out of range float values are not JSON compliant' and the page retry it endlessly."""
     import pandas as pd
 
-    from massive_collate.gui.markets import markets
-    from massive_collate.gui.server import finite
-    from massive_collate.sessions import MarketCalendar
+    from liminal.gui.markets import markets
+    from liminal.gui.server import finite
+    from liminal.sessions import MarketCalendar
 
     ex = pd.DataFrame([{"source": "alpaca", "id": 83, "name": "Securities Information Processor", "mic": float("nan"), "country": "US",
                         "acronym": "S", "type": "exchange"},
@@ -420,8 +420,8 @@ def test_exchanges_without_a_mic_never_break_the_markets_endpoint(tmp_path):
 
 
 def test_a_merged_crypto_chart_takes_the_reference_exchange_first_and_others_where_it_has_nothing(tmp_path):
-    from massive_collate.gui.bars import BarEngine
-    from massive_collate.storage import Store
+    from liminal.gui.bars import BarEngine
+    from liminal.storage import Store
 
     with Store(tmp_path / "m.db") as store:
         t0 = 1_760_000_000_000
@@ -463,7 +463,7 @@ def test_the_data_panel_answers_while_the_shared_lock_is_held_and_counts_later(t
 
 
 def test_a_continuous_futures_data_by_feed_is_its_contracts(tmp_path):
-    from massive_collate import inventory
+    from liminal import inventory
 
     s = _future_store(tmp_path)
     inv = inventory.symbol_inventory(s, "NQ1!", ["massive"], counts=True)  # stored under NQU6 and NQZ6, never NQ1!

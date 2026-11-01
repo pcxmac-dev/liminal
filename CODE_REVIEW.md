@@ -1,6 +1,6 @@
 # Code review — 26 October 2026
 
-Scope: the whole application, ~21,000 lines of Python (`src/massive_collate`) and ~10,000 lines of
+Scope: the whole application, ~21,000 lines of Python (`src/liminal`) and ~10,000 lines of
 front end (`gui/static`), on branch `feature/collector` as of commit `4cb826b`.
 
 Method: five independent read-only reviews, one per area, each told to confirm every finding against
@@ -186,7 +186,7 @@ real cost; **medium** a real defect with bounded cost; **low** an edge case or h
     or Alpaca (META's 2012–2016, GOOGL's 2004–2014 are this case).
 21. **sources — `ratelimit.py:44-62,113-117`:** the request window and daily cap live in the database
     and are updated without a transaction: two databases on one key (a test copy without
-    `MASSIVE_OFFLINE`) double the rate; two writers can under-count.
+    `LIMINAL_OFFLINE`) double the rate; two writers can under-count.
 22. **sources — `datasets.py:266-269`:** a past year's COT file is closed on its first January fetch,
     possibly before the year's last report is out, and never fetched again.
 23. **sources — `sources/public.py:303-313`:** the Cboe parser drops rows without OHLC columns and then
@@ -209,7 +209,7 @@ real cost; **medium** a real defect with bounded cost; **low** an edge case or h
     caller prints it).
 32. **chart server — `gui/server.py:1192-1198`:** no GET route checks where a request comes from;
     `/api/inventory?ticker=<random>` starts a thread and a reader per new ticker, `/api/trading`
-    writes fills. *Fix:* require the `X-Massive-Charts` header (or same-origin) on all `/api/*`.
+    writes fills. *Fix:* require the `X-Liminal-Charts` header (or same-origin) on all `/api/*`.
 33. **chart server — `gui/server.py:807-814`:** the `_activity` cache never shrinks (free-text keys).
 34. **chart server — `trading/paper.py:183-206`:** day orders expire by the wall clock even when the
     session's bars are not stored yet; a fill the bars allowed is missed.
@@ -244,7 +244,7 @@ futures day window includes one session too many (`massive.py:220-221`); derivat
 the flush day (`live.py:406-419`).
 Storage: derivation records lose concurrent updates (`provenance.py`); duplicate prune entries from
 concurrent scans; a migration race on upgrade day; a revision key that can collide within one batch;
-exports start at UTC midnight while ending on ET days; config parsing (`MASSIVE_REFRESH_HOURS` parsed
+exports start at UTC midnight while ending on ET days; config parsing (`LIMINAL_REFRESH_HOURS` parsed
 as int, an empty `MASSIVE_TIER` crashes, `.env` relative to the working directory); stale composite
 bars older than 2 days; `COMP` resolves to the Nasdaq Composite, not Compass Inc.
 Chart server: crypto/FX 2h/4h bars binned on New York time while their days are UTC; key statistics

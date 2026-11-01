@@ -7,9 +7,9 @@ from datetime import datetime, timezone
 import pandas as pd
 import pytest
 
-from massive_collate import derive
-from massive_collate.gui.bars import BarEngine
-from massive_collate.storage import Store, feeds
+from liminal import derive
+from liminal.gui.bars import BarEngine
+from liminal.storage import Store, feeds
 
 ET = "America/New_York"
 
@@ -125,8 +125,8 @@ def test_the_chart_marks_what_was_built(store):
 def test_exchange_candles_are_published_as_each_minute_closes():
     from datetime import datetime as dt
 
-    from massive_collate import freshness
-    from massive_collate.config import PUBLIC_FEEDS
+    from liminal import freshness
+    from liminal.config import PUBLIC_FEEDS
 
     now = dt(2026, 10, 24, 7, 30, 20, tzinfo=pd.Timestamp("2026-10-24", tz="UTC").tzinfo)
     exp = freshness.expected("crypto", PUBLIC_FEEDS["coinbase"][0], now)
@@ -136,8 +136,8 @@ def test_exchange_candles_are_published_as_each_minute_closes():
 def test_a_feed_fetches_its_own_minutes_where_it_only_has_built_ones(store):
     from datetime import date, datetime as dt, timezone
 
-    from massive_collate.config import PUBLIC_FEEDS
-    from massive_collate.coverage import FeedProfile, plan
+    from liminal.config import PUBLIC_FEEDS
+    from liminal.coverage import FeedProfile, plan
 
     cb = FeedProfile("coinbase", PUBLIC_FEEDS["coinbase"][0], frozenset({"crypto"}), 0, venues={"crypto": "coinbase"})
     feeds = {"coinbase": cb}
@@ -154,8 +154,8 @@ def test_a_feed_fetches_its_own_minutes_where_it_only_has_built_ones(store):
 def test_a_coarser_frame_is_fetched_only_as_far_as_its_bars_are_complete():
     from datetime import datetime as dt, timezone
 
-    from massive_collate.config import PUBLIC_FEEDS
-    from massive_collate.coverage import frontier_ms
+    from liminal.config import PUBLIC_FEEDS
+    from liminal.coverage import frontier_ms
 
     # 7:32:20 once the exchange's newest minutes have settled (freshness.SETTLE: 3 minutes)
     now = dt(2026, 10, 24, 7, 35, 20, tzinfo=timezone.utc)
@@ -169,8 +169,8 @@ def test_a_coarser_frame_is_fetched_only_as_far_as_its_bars_are_complete():
 def test_only_seconds_minutes_and_days_are_fetched_every_other_frame_is_built(store):
     from datetime import datetime as dt, timedelta
 
-    from massive_collate.collector import ET, sync
-    from massive_collate.config import TIERS
+    from liminal.collector import ET, sync
+    from liminal.config import TIERS
 
     from .conftest import FakeSource
 
@@ -195,9 +195,9 @@ def test_only_seconds_minutes_and_days_are_fetched_every_other_frame_is_built(st
 
 
 def test_seconds_can_go_on_past_the_second_layer_interpolated_from_minutes(store, monkeypatch):
-    from massive_collate.gui import bars as gui_bars
-    from massive_collate.gui.bars import BarEngine
-    from massive_collate.gui.profile_gaps import uncovered
+    from liminal.gui import bars as gui_bars
+    from liminal.gui.bars import BarEngine
+    from liminal.gui.profile_gaps import uncovered
 
     monkeypatch.setattr(gui_bars, "INTERPOLATED", frozenset({"BTCUSD"}))  # off for every symbol now
 
@@ -270,7 +270,7 @@ def test_the_status_bar_hears_what_is_being_built_while_it_runs(store):
     import json
     from datetime import datetime, timezone
 
-    from massive_collate.gui.activity import derive_progress
+    from liminal.gui.activity import derive_progress
 
     now = datetime(2026, 10, 24, 12, tzinfo=timezone.utc)
     at = int(now.timestamp() * 1000)

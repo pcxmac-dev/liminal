@@ -11,10 +11,10 @@ from http.server import ThreadingHTTPServer
 import pandas as pd
 import pytest
 
-from massive_collate import derive
-from massive_collate.calc import schemes as sc
-from massive_collate.gui.server import ChartApp, make_handler
-from massive_collate.storage import Store
+from liminal import derive
+from liminal.calc import schemes as sc
+from liminal.gui.server import ChartApp, make_handler
+from liminal.storage import Store
 
 ET = "America/New_York"
 DAYS = ("2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-19", "2026-10-20")
@@ -77,7 +77,7 @@ def test_a_scheme_refuses_bad_settings_and_too_many_bars(store):
         app.scheme({**q, "fee": "-1"})
     with pytest.raises(ValueError):
         app.scheme({**q, "scheme": "martingale"})
-    from massive_collate.gui import window
+    from liminal.gui import window
 
     old = window.SCHEME_MAX_BARS
     window.SCHEME_MAX_BARS = 100

@@ -8,11 +8,11 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from massive_collate import gov, killswitch, publications
-from massive_collate.gov import GovDB
-from massive_collate.sessions import ET
-from massive_collate.sources import providers, publishers
-from massive_collate.sources.publisher import Feed, Policy, Publisher
+from liminal import gov, killswitch, publications
+from liminal.gov import GovDB
+from liminal.sessions import ET
+from liminal.sources import providers, publishers
+from liminal.sources.publisher import Feed, Policy, Publisher
 
 RSS = """<?xml version="1.0"?><rss version="2.0"><channel><item><title>FOMC statement</title>
 <link>https://www.federalreserve.gov/a.htm</link><guid>a</guid><pubDate>Wed, 28 Oct 2026 18:00:00 GMT</pubDate></item></channel></rss>"""
@@ -71,7 +71,7 @@ def test_each_agency_is_a_publisher_of_its_own_and_massives_headlines_sit_in_its
 
 
 def test_a_module_with_only_a_publisher_loads_and_a_feed_key_taken_is_left_out(monkeypatch):
-    from massive_collate.sources import registry
+    from liminal.sources import registry
 
     twin = Publisher("twin", "Twin", "", (Feed("fed-press", "X", "Dup", "https://x.gov/f"),), Policy(hosts=("x.gov",)),
                      order=900)  # after the Fed's: the first in order keeps the key
@@ -108,7 +108,7 @@ def test_only_feeds_are_read_a_web_page_is_refused():
 
 
 def test_robots_txt_is_honoured_and_its_crawl_delay_becomes_the_floor():
-    site = Site(robots=Resp(text="User-agent: massive-collate\nDisallow: /feed.xml\n"))
+    site = Site(robots=Resp(text="User-agent: liminal\nDisallow: /feed.xml\n"))
     r = reader(site)
     p = pub()
     r.read(p, p.feeds[0], NOW)
@@ -168,7 +168,7 @@ def test_rate_limit_headers_are_kept_and_a_429_holds_it_off():
 
 # -- when ---------------------------------------------------------------------------------------------------
 def test_the_fed_is_read_at_2pm_on_fomc_days_and_otherwise_every_30_minutes():
-    from massive_collate.sources.plugins.federal import fed
+    from liminal.sources.plugins.federal import fed
 
     p = publishers()["fed"]
     press, speeches = p.feed("fed-press"), p.feed("fed-speeches")
@@ -244,8 +244,8 @@ class FakeNews:
 
 @pytest.fixture
 def massive_news(monkeypatch):
-    from massive_collate.config import load_settings
-    from massive_collate.sources.plugins import massive
+    from liminal.config import load_settings
+    from liminal.sources.plugins import massive
 
     fake = FakeNews()
     monkeypatch.setattr(massive, "build", lambda settings, budget, max_retries=4: fake)
@@ -264,7 +264,7 @@ def test_massives_headlines_are_read_on_its_key_and_counted_on_its_day(store, ma
 
 
 def test_a_429_on_massives_headlines_kills_massives_fetching(store, massive_news):
-    from massive_collate.errors import RateLimited
+    from liminal.errors import RateLimited
 
     fake, settings, p = massive_news
     fake.fail = RateLimited(429, "too many", 300)
@@ -367,7 +367,7 @@ def test_a_parsers_surprise_is_noted_and_never_stops_the_publishers_after_it():
         def json(self):
             return {"refRates": ["x"]}  # JSON of another shape: AttributeError deep in the parser
 
-    from massive_collate.sources.plugins.federal.nyfed import parse
+    from liminal.sources.plugins.federal.nyfed import parse
 
     nyfed = Publisher("ny", "NY", "", (Feed("ny-r", "NY", "R", "https://markets.example.gov/r.json", "nyfed", parse=parse),),
                       Policy(hosts=("markets.example.gov",), min_minutes=5, per_day=40), order=1)
@@ -430,7 +430,7 @@ def test_robots_txt_is_followed_through_its_own_redirects_and_a_move_elsewhere_r
 
 
 def test_a_recheck_sends_nothing_while_paused_killed_or_fetching_is_paused(store):
-    from massive_collate import collector
+    from liminal import collector
 
     site = Site()
     r = reader(site, store=store)
@@ -446,7 +446,7 @@ def test_a_recheck_sends_nothing_while_paused_killed_or_fetching_is_paused(store
 
 
 def test_an_account_kill_shows_as_stopped_with_it_not_as_paused_by_you(store):
-    from massive_collate.gui.server import ChartApp
+    from liminal.gui.server import ChartApp
 
     killswitch.strike(store, "massive", "fetch", "by hand", minutes=240, shared=False)
     app = ChartApp(store)
@@ -457,7 +457,7 @@ def test_an_account_kill_shows_as_stopped_with_it_not_as_paused_by_you(store):
 def test_one_publishers_failing_calendar_never_takes_the_plugins_view_down(store, monkeypatch):
     from dataclasses import replace
 
-    from massive_collate.gui.server import ChartApp
+    from liminal.gui.server import ChartApp
 
     bad = replace(publishers()["fed"], calendar=lambda today: [{"when": "2026-11-05T08:30:00", "what": "naive"}])
     monkeypatch.setattr(publications, "_today_moments", lambda pub, now: [])
@@ -473,7 +473,7 @@ def test_one_publishers_failing_calendar_never_takes_the_plugins_view_down(store
 
 # -- the views, the recorder ------------------------------------------------------------------------------------
 def test_the_plugins_view_lists_the_publishers_with_their_checks(store):
-    from massive_collate.gui.server import ChartApp
+    from liminal.gui.server import ChartApp
 
     app = ChartApp(store)
     out = {p["name"]: p for p in app.plugins()["publishers"]}
@@ -488,7 +488,7 @@ def test_the_plugins_view_lists_the_publishers_with_their_checks(store):
 
 
 def test_the_recorder_reads_the_publications_in_a_thread_of_its_own(tmp_path, monkeypatch):
-    from massive_collate import live
+    from liminal import live
 
     passes = []
     rec = live.Recorder(tmp_path / "m.db", coins=(), publications=object())

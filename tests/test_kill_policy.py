@@ -9,12 +9,12 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import requests
 
-from massive_collate import cli, killswitch, live, proc
-from massive_collate.collector import sync
-from massive_collate.config import TIERS
-from massive_collate.errors import NotEntitled, RateLimited, SourceError
-from massive_collate.gui import activity
-from massive_collate.storage import Store
+from liminal import cli, killswitch, live, proc
+from liminal.collector import sync
+from liminal.config import TIERS
+from liminal.errors import NotEntitled, RateLimited, SourceError
+from liminal.gui import activity
+from liminal.storage import Store
 
 from .conftest import FakeSource
 
@@ -176,7 +176,7 @@ def test_a_rate_limited_run_kills_the_feed(store):
 
 def test_nothing_is_sent_to_a_killed_feed(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("MASSIVE_DB", str(tmp_path / "data" / "m.db"))
+    monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "data" / "m.db"))
     monkeypatch.setenv("MASSIVE_API_KEY", "FAKE")
     monkeypatch.setattr(requests.Session, "get", lambda *a, **k: pytest.fail("a request was sent"))
     assert cli.main(["watch", "add", "SPCX"]) == 0
@@ -193,7 +193,7 @@ def test_nothing_is_sent_to_a_killed_feed(tmp_path, monkeypatch, capsys):
 
 
 def test_the_fetcher_view_shows_a_killed_feed(store):
-    from massive_collate.config import load_settings
+    from liminal.config import load_settings
 
     killswitch.strike(store, "coinbase", "fetch", "rate limited", now=NOW)
     rows = activity.health(store, load_settings(), NOW + timedelta(minutes=1), [], None)
@@ -213,12 +213,12 @@ def test_outcomes_add_up_per_feed(store):
 def test_the_recorder_ends_other_recorders_but_not_itself_or_its_launcher(monkeypatch):
     me = proc.os.getpid()
     rows = [(1, 0, "explorer.exe"),
-            (500, 1, r'"C:\venv\Scripts\pythonw.exe" -m massive_collate live'),  # this recorder's launcher
-            (me, 500, r"C:\Python\pythonw.exe -m massive_collate live"),
-            (700, 1, r"C:\venv\Scripts\pythonw.exe -m massive_collate live"),  # a stray, and its child
-            (701, 700, r"C:\Python\pythonw.exe -m massive_collate live"),
-            (800, 1, r"C:\venv\Scripts\python.exe -m massive_collate live status"),
-            (900, 1, r"C:\venv\Scripts\python.exe -m massive_collate sync")]
+            (500, 1, r'"C:\venv\Scripts\pythonw.exe" -m liminal live'),  # this recorder's launcher
+            (me, 500, r"C:\Python\pythonw.exe -m liminal live"),
+            (700, 1, r"C:\venv\Scripts\pythonw.exe -m liminal live"),  # a stray, and its child
+            (701, 700, r"C:\Python\pythonw.exe -m liminal live"),
+            (800, 1, r"C:\venv\Scripts\python.exe -m liminal live status"),
+            (900, 1, r"C:\venv\Scripts\python.exe -m liminal sync")]
     monkeypatch.setattr(proc, "processes", lambda: rows)
     assert sorted(live.recorders()) == [700, 701]
     ended, logged = [], []
@@ -233,9 +233,9 @@ def test_tests_cannot_see_or_end_this_machines_processes():
 
 
 def test_an_offline_copy_says_so_rather_than_unable_to_fetch(store, monkeypatch, tmp_path):
-    from massive_collate.config import load_settings
+    from liminal.config import load_settings
 
-    monkeypatch.setenv("MASSIVE_OFFLINE", "1")
+    monkeypatch.setenv("LIMINAL_OFFLINE", "1")
     out = activity.activity(store, load_settings(), tmp_path / "m.db", "massive")
     assert out["offline"] is True and out["canFetch"] is False  # every feed off: the page says "offline copy"
     js = (activity.Path(activity.__file__).parent / "static" / "activity.js").read_text(encoding="utf-8")
@@ -243,10 +243,10 @@ def test_an_offline_copy_says_so_rather_than_unable_to_fetch(store, monkeypatch,
 
 
 def test_tests_cannot_start_processes_from_the_chart_app():
-    from massive_collate.gui import server
+    from liminal.gui import server
 
     with pytest.raises(AssertionError, match="tried to start a process"):
-        server.subprocess.Popen(["python", "-m", "massive_collate", "sync"])  # conftest: a test once started a real sync
+        server.subprocess.Popen(["python", "-m", "liminal", "sync"])  # conftest: a test once started a real sync
 
 
 def test_a_feed_on_another_feeds_account_is_killed_with_it_for_as_long_as_the_server_asked(store):
@@ -264,8 +264,8 @@ def test_a_feed_on_another_feeds_account_is_killed_with_it_for_as_long_as_the_se
 
 
 def test_a_429_carries_its_wait_and_a_key_with_a_line_break_is_never_sent_or_repeated():
-    from massive_collate.errors import Unauthorized
-    from massive_collate.sources.plugins.massive.client import MassiveClient
+    from liminal.errors import Unauthorized
+    from liminal.sources.plugins.massive.client import MassiveClient
 
     from .conftest import FakeResponse, FakeSession
 
@@ -295,7 +295,7 @@ def test_a_429_carries_its_wait_and_a_key_with_a_line_break_is_never_sent_or_rep
 
 
 def test_keys_are_read_without_the_spaces_and_line_breaks_around_them():
-    from massive_collate.config import load_settings
+    from liminal.config import load_settings
 
     s = load_settings(env={"MASSIVE_API_KEY": " mk\r\n", "TIINGO_API_KEY": "tk\n", "ALPACA_API_KEY_ID": " id ",
                            "ALPACA_API_SECRET_KEY": "sk\n"}, env_file=None)

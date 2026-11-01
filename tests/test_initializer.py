@@ -7,12 +7,12 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from massive_collate import cli, initializer
-from massive_collate.collector import ET, sync
-from massive_collate.config import TIERS, load_settings, tier_for
-from massive_collate.errors import NotEntitled
-from massive_collate.sources.plugins.massive.client import MassiveSource
-from massive_collate.storage import Store
+from liminal import cli, initializer
+from liminal.collector import ET, sync
+from liminal.config import TIERS, load_settings, tier_for
+from liminal.errors import NotEntitled
+from liminal.sources.plugins.massive.client import MassiveSource
+from liminal.storage import Store
 
 from .conftest import FakeSource
 
@@ -127,8 +127,8 @@ def test_a_new_plan_has_its_refusals_asked_again(store):
 
 
 def test_an_unlimited_plan_reaches_back_to_where_its_history_begins():
-    from massive_collate.collector import history_floor
-    from massive_collate.config import PUBLIC_FEEDS
+    from liminal.collector import history_floor
+    from liminal.config import PUBLIC_FEEDS
 
     assert history_floor(TIERS["advanced"], TODAY) == date(2003, 9, 10)  # all of Massive's stock history
     assert history_floor(TIERS["developer"], TODAY) == date(2016, 10, 25)  # ten years, a day inside

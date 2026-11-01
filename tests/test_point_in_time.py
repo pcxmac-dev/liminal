@@ -7,10 +7,10 @@ from datetime import datetime
 
 import numpy as np
 
-from massive_collate import freshness
-from massive_collate.config import ALPACA_TIERS, TIERS
-from massive_collate.storage import Store
-from massive_collate.storage import feeds as feeds_mod
+from liminal import freshness
+from liminal.config import ALPACA_TIERS, TIERS
+from liminal.storage import Store
+from liminal.storage import feeds as feeds_mod
 
 ET = freshness.ET
 

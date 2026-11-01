@@ -3,8 +3,8 @@ from datetime import date
 import pandas as pd
 import pytest
 
-from massive_collate.futures import continuous, roll_schedule, session_dates
-from massive_collate.sources.plugins.massive.client import normalize_future_bar
+from liminal.futures import continuous, roll_schedule, session_dates
+from liminal.sources.plugins.massive.client import normalize_future_bar
 
 ET = "America/New_York"
 
@@ -36,7 +36,7 @@ def test_roll_moves_on_at_expiry_and_rank_two():
 
 
 def test_candidates_and_contract_months():
-    from massive_collate.futures import candidate_contracts, contract_month
+    from liminal.futures import candidate_contracts, contract_month
 
     c = candidate_contracts("cl", date(2026, 11, 3), date(2027, 1, 1))
     assert c == [(date(2026, 11, 1), ["CLX6", "CLX26"]), (date(2026, 12, 1), ["CLZ6", "CLZ26"]),

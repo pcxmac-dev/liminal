@@ -3,9 +3,9 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from massive_collate.gui import world
-from massive_collate.gui.markets import markets, symbol_sessions, us_equities
-from massive_collate.sessions import ET, MarketCalendar
+from liminal.gui import world
+from liminal.gui.markets import markets, symbol_sessions, us_equities
+from liminal.sessions import ET, MarketCalendar
 
 pytest.importorskip("exchange_calendars")
 CAL = MarketCalendar()
@@ -87,11 +87,11 @@ def test_symbol_sessions_for_annotations():
 
 
 def test_scan_only_and_fetch_endpoint(tmp_path):
-    from massive_collate.collector import scan
-    from massive_collate.config import TIERS
-    from massive_collate.gui.server import ChartApp
-    from massive_collate.storage import Store
-    from massive_collate.symbols import resolve
+    from liminal.collector import scan
+    from liminal.config import TIERS
+    from liminal.gui.server import ChartApp
+    from liminal.storage import Store
+    from liminal.symbols import resolve
 
     with Store(tmp_path / "m.db", check_same_thread=False) as store:
         store.watch_spec("massive", resolve("AAPL"))
@@ -105,7 +105,7 @@ def test_scan_only_and_fetch_endpoint(tmp_path):
 def test_proxy_moves_colour_the_exchanges(tmp_path):
     from datetime import date
 
-    from massive_collate.storage import Store
+    from liminal.storage import Store
 
     with Store(tmp_path / "m.db") as store:
         store.save_proxy_closes("massive", date(2026, 10, 21), {"EWJ": 100.0, "EWY": 50.0, "SPY": 600.0})
@@ -124,8 +124,8 @@ def test_proxy_moves_colour_the_exchanges(tmp_path):
 def test_market_moves_skip_an_unpublished_day(tmp_path):
     from datetime import date
 
-    from massive_collate.collector import ET, fetch_market_moves
-    from massive_collate.storage import Store
+    from liminal.collector import ET, fetch_market_moves
+    from liminal.storage import Store
 
     class Src:
         name = "massive"
@@ -150,9 +150,9 @@ def test_market_moves_skip_an_unpublished_day(tmp_path):
 def test_market_moves_treat_before_end_of_day_as_not_published(tmp_path):
     from datetime import date
 
-    from massive_collate.collector import ET, fetch_market_moves
-    from massive_collate.errors import NotEntitled
-    from massive_collate.storage import Store
+    from liminal.collector import ET, fetch_market_moves
+    from liminal.errors import NotEntitled
+    from liminal.storage import Store
 
     class Src:
         name = "massive"
@@ -209,7 +209,7 @@ def test_crypto_exchanges_never_close():
 
 
 def test_stored_series_colour_fx_centres_and_crypto_exchanges(tmp_path):
-    from massive_collate.storage import Store
+    from liminal.storage import Store
 
     day = lambda d: int(datetime(2026, 10, d, tzinfo=timezone.utc).timestamp() * 1000)  # noqa: E731
     with Store(tmp_path / "m.db") as store:
@@ -229,7 +229,7 @@ def test_stored_series_colour_fx_centres_and_crypto_exchanges(tmp_path):
 
 
 def test_big_moves_use_thresholds_by_market_type():
-    from massive_collate.gui.announcements import exchange_events
+    from liminal.gui.announcements import exchange_events
 
     now = datetime(2026, 10, 23, 2, 0, tzinfo=timezone.utc)
     rows = world.world_markets(now, moves={"BTCUSD": {"day": "2026-10-22", "close": 1.0, "prevClose": 1.0, "changePct": 5.0},

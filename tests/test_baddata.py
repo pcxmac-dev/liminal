@@ -7,9 +7,9 @@ import json
 import pandas as pd
 import pytest
 
-from massive_collate import baddata, derive
-from massive_collate.collector import build_from_ticks
-from massive_collate.storage import Store
+from liminal import baddata, derive
+from liminal.collector import build_from_ticks
+from liminal.storage import Store
 
 ET = "America/New_York"
 
@@ -134,7 +134,7 @@ def test_a_rebuild_keeps_every_bar_it_changes_on_the_pruned_list(tmp_path):
 
 
 def test_the_chart_shows_filtered_data_unless_asked_for_all_of_it(store):
-    from massive_collate.gui.server import ChartApp
+    from liminal.gui.server import ChartApp
 
     _set(store, "2026-10-19 17:08", h=75.0, l=30.0, v=120)
     baddata.scan_series(store, "massive", "SPCX", "minute", "stock")
@@ -151,9 +151,9 @@ def test_the_chart_shows_filtered_data_unless_asked_for_all_of_it(store):
 
 
 # -- rule 3: a feed's own bar against its own finer bars; the fetch's second answer; audits ----
-from massive_collate.collector import verify_fetched  # noqa: E402
-from massive_collate.config import TIERS  # noqa: E402
-from massive_collate.coverage import FeedProfile  # noqa: E402
+from liminal.collector import verify_fetched  # noqa: E402
+from liminal.config import TIERS  # noqa: E402
+from liminal.coverage import FeedProfile  # noqa: E402
 
 
 def _day(store, day: str, **bar):

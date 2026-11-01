@@ -8,9 +8,9 @@ import time
 import pandas as pd
 import pytest
 
-from massive_collate.gui.bars import BarEngine
-from massive_collate.gui.server import ChartApp
-from massive_collate.storage import Store
+from liminal.gui.bars import BarEngine
+from liminal.gui.server import ChartApp
+from liminal.storage import Store
 
 ET = "America/New_York"
 

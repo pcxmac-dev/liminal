@@ -13,13 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from massive_collate import config, publications
-from massive_collate.gov import GovDB
-from massive_collate.sources import keys, publishers, registry
+from liminal import config, publications
+from liminal.gov import GovDB
+from liminal.sources import keys, publishers, registry
 
 from .test_plugin_plans import _choosing_app
 
-STATIC = Path(__file__).resolve().parents[1] / "src" / "massive_collate" / "gui" / "static"
+STATIC = Path(__file__).resolve().parents[1] / "src" / "liminal" / "gui" / "static"
 
 
 def test_every_variable_a_plugin_reads_is_declared_by_it():
@@ -99,7 +99,7 @@ def test_an_offline_copy_saves_no_key(tmp_path, monkeypatch):
 
 
 def test_the_key_route_takes_only_this_apps_pages_and_answers_no_value(tmp_path, monkeypatch):
-    from massive_collate.gui.server import make_handler
+    from liminal.gui.server import make_handler
 
     store, app, wrote = _choosing_app(tmp_path, monkeypatch)
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(app, [0]))
@@ -108,7 +108,7 @@ def test_the_key_route_takes_only_this_apps_pages_and_answers_no_value(tmp_path,
 
     def post(body, header=True):
         c = HTTPConnection("127.0.0.1", port)
-        headers = {"Host": f"127.0.0.1:{port}", "Content-Type": "application/json", **({"X-Massive-Charts": "1"} if header else {})}
+        headers = {"Host": f"127.0.0.1:{port}", "Content-Type": "application/json", **({"X-Liminal-Charts": "1"} if header else {})}
         c.request("POST", "/api/plugins/key", body=json.dumps(body), headers=headers)
         r = c.getresponse()
         raw = r.read()
@@ -144,9 +144,9 @@ def test_the_page_sets_each_plugin_up_and_shows_headlines_in_massives_page():
 
 
 def test_no_plugin_sets_a_system_variable_or_another_plugins(tmp_path, monkeypatch):
-    from massive_collate.sources.publisher import Policy, Publisher
+    from liminal.sources.publisher import Policy, Publisher
 
-    for name in ("PATH", "PYTHONPATH", "TEMP", "MASSIVE_DB", "MASSIVE_OFFLINE", "lower", "A-B", ""):
+    for name in ("PATH", "PYTHONPATH", "TEMP", "LIMINAL_DB", "LIMINAL_OFFLINE", "lower", "A-B", ""):
         assert keys.refusal(name), name
     assert keys.refusal("GOV_CONTACT") is None and keys.refusal("TIINGO_API_KEY") is None
     rogue = Publisher("rogue", "Rogue", "", (), Policy(), api="1.3",

@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from massive_collate.gui import server
+from liminal.gui import server
 
 STATIC = Path(server.__file__).parent / "static"
 
@@ -304,12 +304,12 @@ def test_a_highlight_shows_its_major_prices_in_the_level_2():
     load = l2.split("async function load() {", 1)[1].split("\n  }\n", 1)[0]
     assert "const c = cover();" in load and "{ from: c.from, to: c.to }" in load  # a stretch, not one bar
     assert "if (busy) { again = true; return; }" in load  # one request at a time while scrolling
-    assert "addEventListener('massive:highlight', coverMoved)" in l2  # read again when it moves
+    assert "addEventListener('liminal:highlight', coverMoved)" in l2  # read again when it moves
     marks = l2.split("function marksOf(r, m) {", 1)[1].split("\n  }\n", 1)[0]
     for mark in ("'poc'", "'va'", "'vah'", "'val'", "'hvn'"):
         assert mark in marks
     assert "box.querySelector(range ? 'tr.poc' : 'tr.at')" in l2  # opened at the point of control
-    assert "window.dispatchEvent(new Event('massive:highlight'))" in _function(_js("app.js"), "scheduleHighlightPanel")
+    assert "window.dispatchEvent(new Event('liminal:highlight'))" in _function(_js("app.js"), "scheduleHighlightPanel")
     css = _js("style.css")
     assert "table.l2 tr.va td" in css and "table.l2 tr.poc" in css and ".l2-tag" in css
 
@@ -352,11 +352,11 @@ def test_views_restored_on_opening_the_page_load_their_content():
     for name, view in (("news.js", "news"), ("gov.js", "gov"), ("datasets.js", "datasets"),
                        ("resources.js", "resources")):
         assert order.index('src="panels.js"') < order.index(f'src="{name}"')
-        assert f"if (document.body.dataset.view === '{view}')" in _js(name).split("massive:view", 1)[1]
+        assert f"if (document.body.dataset.view === '{view}')" in _js(name).split("liminal:view", 1)[1]
 
 
 def test_every_symbol_state_has_its_name_and_icon():
-    from massive_collate.gui.activity import STATE_RANK
+    from liminal.gui.activity import STATE_RANK
 
     icons = _js("icons.js")
     labels = icons.split("const DATA_LABEL = {", 1)[1].split("};", 1)[0]
@@ -416,7 +416,7 @@ def test_the_status_line_spans_the_open_views_own_area_in_every_view():
     panels = _js("panels.js")
     assert "const statusPlace = new ResizeObserver(placeStatus);" in panels  # no frame wait: a hidden tab has none
     assert "[$('rail'), $('tools'), $('sidePanel'), ...document.querySelectorAll('main > .view')]" in panels
-    assert "window.addEventListener('massive:view', placeStatus);" in panels
+    assert "window.addEventListener('liminal:view', placeStatus);" in panels
     status = _js("style.css").split("#status {", 1)[1].split("}", 1)[0]
     assert "calc(var(--gap) * 2 + 54px)" in status  # the rail's until placed
 

@@ -4,6 +4,9 @@ One application. The aim of the refactor is that every result can say what it wa
 with what settings, and what was known at the time, so charts, analysis and backtests agree and a
 backtest can never see the future.
 
+The project was named massive until 2026-11-01 (PROGRESS.md: "Renamed liminal"); the Massive data
+provider, its plugin `massive`, keeps its name.
+
 ## Principles
 
 - **What was known when.** Every stored observation carries when it became available (published by
@@ -44,7 +47,7 @@ write: the frames built above the bar are rebuilt and the chart's caches see it.
 An entry can be released (put back) without losing the record that it was pruned, and a released
 entry is not pruned again. Pruning never mixes feeds: a feed's series is judged on its own. Reads of
 a series as it stood at a past moment (`as_of`) include bad data: it was there. (`baddata.py`;
-`python -m massive_collate pruned`; the chart app's Data panel.)
+`python -m liminal pruned`; the chart app's Data panel.)
 
 What constitutes bad data (rules 1 to 3 are checked whenever a series is derived: after each
 symbol's fetch and in the live recorder, from where it changed; `pruned scan` checks stored history):
@@ -120,7 +123,7 @@ live recorder, whose "what changed since" read every bar's `stored_at`, had read
   up to 30 s, then are answered busy (503). The live recorder holds at most 64 MB of trades while the
   database refuses writes. numpy loads with one thread: OpenBLAS committed 757 MB per process, per
   CPU thread's buffer, almost none of it used.
-- **Measured apart.** `python -m massive_collate admin memory` shows each app process's own memory
+- **Measured apart.** `python -m liminal admin memory` shows each app process's own memory
   (private bytes, working set) and disk reads, apart from Windows' file cache: active (held) and
   standby (handed back whenever anything needs it, counted as available).
 
@@ -175,14 +178,14 @@ Every data provider the fetcher uses is a plugin: one `Provider` record (`source
 holding everything the app knows about it, so nothing else names a provider to decide how to treat
 it. The built-in ones are `sources/plugins/` (Massive, Alpaca with its overnight feed on Blue Ocean,
 Bitstamp, Coinbase, Bitfinex, Tiingo with its forex feed (Cboe: a package of its own,
-`massive-plugin-cboe`); the publishers: Federal, the federal
+`liminal-plugin-cboe`); the publishers: Federal, the federal
 agencies in one plugin (the Fed, New York Fed, SEC, BLS, Federal Register, CFTC: `plugins/federal/`),
 and Massive's headlines), one module each defining `PLUGIN` (Alpaca's and Tiingo's `PLUGINS`: two
 feeds each; Federal's `PUBLISHERS`), each holding its own client, source classes, live streams
 and datasets (Massive, Alpaca and Tiingo as packages with a `client.py`; the user, 2026-10-31: "every
 external data provider must be in a plugin structure"), on the contract's shared pieces
 (`sources/http.py`, `archive.py`, `stream.py`, `dataset.py`). A module added to `sources/plugins/` is found on the next start; a
-provider shipped as its own package registers under the entry point group `massive_collate.providers`.
+provider shipped as its own package registers under the entry point group `liminal.providers`.
 A plugin that fails to load is left out and reported (`plugins`), never fatal.
 
 - **What a plugin gives.** `build(settings, request_budget)` returns its `DataSource` with its
@@ -199,7 +202,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
 - **Keys and settings.** Keys stay in the user's environment variables only. `Settings.env` holds
   the variables the plugins declare (never in a repr), read like the built-ins' from the saved user
   variables too (`config.saved_names`). `tools/set-key.ps1` asks the app for the plugins
-  (`python -m massive_collate plugins --json`: names and whether set, never a value) and offers a
+  (`python -m liminal plugins --json`: names and whether set, never a value) and offers a
   menu per provider: set, replace or remove its keys, typed hidden.
 - **Read everywhere from the registry**: the sync's feed list and `--source` choices, feed profiles
   and the one-download-per-span rule, the Fetcher's tabs, rows, limits and health, `status`, `feeds`,
@@ -363,7 +366,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     `fetch(ctx, job)` one of them (`Fetched`: requests, rows, bytes, when asked again). The fetch
     queue (`fetch_queue` in the main file, `storage/queue.py`) holds one row per resource by plugin,
     part, kind and key: waiting, running (with its process), done, failed or held. `runner.py`
-    gives each such plugin a worker of its own (`python -m massive_collate fetcher`), taking only
+    gives each such plugin a worker of its own (`python -m liminal fetcher`), taking only
     its own jobs and stopping between two for the fetching pause, its kill or pause, a StopRun; one
     plugin's failure stops its worker alone. Until a plugin fetches on its own, the app's paths keep
     the same queue: the bars sync (each symbol it plans waiting, then running, done or failed), the
@@ -373,7 +376,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     `gui/queue.py`); the dependencies moved to the Resources view (`tests/test_fetch_queue.py`).
     Step 1 of the plan: no plugin fetches on its own yet; the datasets, the news sources, the
     release documents and the feeds move into their plugins next, one at a time.
-  - **What a plugin may rely on (API 1.0)**, and nothing else of `massive_collate`:
+  - **What a plugin may rely on (API 1.0)**, and nothing else of `liminal`:
     `sources.registry`: `PLUGIN_API`, `Provider`, `KeyVar`, `Scanned`, and `Report`, `Limits`,
     `Capability` for a `reporter`; the helpers `limiter`, `machine_caps`, `public_client`,
     `minute_window`. `sources.publisher`: `Publisher`, `Feed`, `Policy`. `sources.dataset` (1.4):
@@ -395,11 +398,11 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     plugins of one name a built-in is always kept (an installed package never replaces one, whatever
     its order), between packages the first by order; the other is reported. What each other field gives: the bullets above and the
     docstrings of `sources/registry.py` and `sources/publisher.py`.
-  - **A package registers** under the entry point group `massive_collate.providers`, naming a
+  - **A package registers** under the entry point group `liminal.providers`, naming a
     module that defines `PLUGIN`/`PLUGINS` and/or `PUBLISHER`/`PUBLISHERS`, or one record:
 
     ```toml
-    [project.entry-points."massive_collate.providers"]
+    [project.entry-points."liminal.providers"]
     acme = "massive_acme"   # or "massive_acme:PLUGIN"
     ```
 
@@ -408,7 +411,8 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     `version` empty shows its distribution's version. Its keys are declared like the built-ins'
     (`KeyVar`), so the key script and the Plugins view offer them unasked.
 - **Splitting the built-ins into packages: the plan** (the user, 2026-10-31: "Yes, Cboe pilot
-  first"; Cboe split, the others still built in).
+  first"; Cboe split; 2026-11-01: "all the plugins should be liminal-plugin-xxxx and have a separate
+  repo": the others next, one repository each).
   1. *In this repository first*, so each plugin can leave without taking app code with it (each a
      minor of the API where it adds to the contract):
      - done (2026-10-31, API 1.6): the HTTP client every feed builds on out of `sources/massive.py`
@@ -429,7 +433,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
   2. *Then one repository and package per vendor*, its version going on from the built-in's (tags
      `v1.2.0`), kept in its `pyproject.toml` only (`PLUGIN.version` left empty: the distribution's
      is shown), its own tests run against the app installed (the fakes it needs from
-     `tests/conftest.py` copied in), its own changelog, depending on `massive-collate` (which of the
+     `tests/conftest.py` copied in), its own changelog, depending on `liminal` (which of the
      app's releases can load it is its `api`, checked on loading, not a version bound). The
      built-in module leaves `sources/plugins/` in the same app release that brings the package (an
      optional extra of the app's `pyproject.toml`, from the packages' tags),
@@ -442,15 +446,15 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
      `.[dev,plugins]`; a package's CI installs the app from git (`MASSIVE_REF`).
   3. *A pilot first*: Cboe (one keyless feed, a closed archive, the smallest), to prove the path
      (install, entry point, version shown, its tests, its CI) before the others. Done 2026-10-31:
-     [massive-plugin-cboe](https://github.com/pcxmac-dev/massive-plugin-cboe) 1.2.0, its plan
+     [liminal-plugin-cboe](https://github.com/pcxmac-dev/liminal-plugin-cboe) 1.2.0, its plan
      and caps out of `config.PUBLIC_FEEDS` into it, `sources/plugins/cboe.py` gone; here it is
-     installed editable from its clone beside the app's (`C:\Users\ciara\source\massive-plugin-cboe`).
+     installed editable from its clone beside the app's (`C:\Users\ciara\source\liminal-plugin-cboe`).
 
-  The repositories it would make, under `pcxmac-dev`: `massive-plugin-massive` (Massive and its
-  headlines publisher, on its key), `massive-plugin-alpaca` (Alpaca with its overnight feed on Blue
-  Ocean, reached through Alpaca's API, keys and limits), `massive-plugin-tiingo` (Tiingo with its
-  forex feed: one key and account), `massive-plugin-coinbase`, `massive-plugin-bitstamp`,
-  `massive-plugin-bitfinex`, `massive-plugin-cboe` (made), and the publishers `massive-plugin-federal`
+  The repositories it would make, under `pcxmac-dev`: `liminal-plugin-massive` (Massive and its
+  headlines publisher, on its key), `liminal-plugin-alpaca` (Alpaca with its overnight feed on Blue
+  Ocean, reached through Alpaca's API, keys and limits), `liminal-plugin-tiingo` (Tiingo with its
+  forex feed: one key and account), `liminal-plugin-coinbase`, `liminal-plugin-bitstamp`,
+  `liminal-plugin-bitfinex`, `liminal-plugin-cboe` (made), and the publishers `liminal-plugin-federal`
   (the federal agencies, one plugin) and, later, a state regulators' plugin of its own.
 
 ## The Federal plugin (2026-10-30)
@@ -528,7 +532,7 @@ sync from its next run. An offline copy refuses: it shares the user's real varia
 ## Which source delivers what (2026-10-27)
 
 The user's order of collection: **#1 daily bars, #2 1-minute bars, #3 1-second bars**. `sourcing.py`
-reads every provider's standard report and makes the delivery plan; `python -m massive_collate
+reads every provider's standard report and makes the delivery plan; `python -m liminal
 sourcing` shows the reports and the plan (no requests).
 
 - **Cost** is what a job spends of a subscription's limits (its price is fixed): requests per
@@ -553,7 +557,7 @@ sourcing` shows the reports and the plan (no requests).
   the bars since 2016.
 - The current session is the live streams' (only for the symbols open on a chart: `LIVE_STREAMS`).
 - **Capability scans.** A plugin may scan what its plan really gives (`scan`: a few requests);
-  each feed's sync runs it once a week (`cli.SCAN_DAYS`), `python -m massive_collate capabilities`
+  each feed's sync runs it once a week (`cli.SCAN_DAYS`), `python -m liminal capabilities`
   on demand, and its report shows the answers. Tiingo's (2026-10-27): daily bars, IEX's 1-minute
   bars, forex and crypto bars on the free plan; Blue Ocean's overnight bars refused (a $9 a month
   add-on). Only its daily bars are collected.
@@ -729,7 +733,7 @@ refresh, so the French library's revisions are lost.
    composite builds, quality scores, audits and dataset quality priors; derived rows point to it.
    Bars built from ticks live apart from the feed's own in `built_bars` (reads combine them, built
    first); the composite has its own file; indicators (computed on request) return their settings,
-   code version and whether they look ahead. `python -m massive_collate provenance [product] -v`.
+   code version and whether they look ahead. `python -m liminal provenance [product] -v`.
    Bars built before provenance moved apart under "before-provenance" records.
 5. **Calculations out of the GUI.** Resampling, calendar grouping, chart-type construction and
    statistics move to `calc/`; `gui/bars.py` becomes a thin adapter; the projection uses public

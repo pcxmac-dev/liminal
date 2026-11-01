@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from massive_collate import resources as res
-from massive_collate.resources import Conn, Machine, Monitor, Net, Proc
+from liminal import resources as res
+from liminal.resources import Conn, Machine, Monitor, Net, Proc
 
-SYNC = '"C:\\venv\\Scripts\\pythonw.exe" -m massive_collate sync'
-LIVE = "pythonw.exe -m massive_collate live"
-GUI = "python.exe -m massive_collate gui --no-browser --port 8765"
+SYNC = '"C:\\venv\\Scripts\\pythonw.exe" -m liminal sync'
+LIVE = "pythonw.exe -m liminal live"
+GUI = "python.exe -m liminal gui --no-browser --port 8765"
 
 
 class Clock:
@@ -64,10 +64,10 @@ def test_each_program_is_named_from_its_command_line():
     assert res.role_of(GUI)[:2] == ("gui", "Chart app · port 8765")
     assert res.role_of(SYNC)[:2] == ("sync", "Fetcher (sync)")
     assert res.role_of(SYNC + " --tickers SPCX")[1] == "Fetcher: run for opened symbols"
-    assert res.role_of("pythonw.exe -m massive_collate --source alpaca sync --only --fetch-only")[:2] == (
+    assert res.role_of("pythonw.exe -m liminal --source alpaca sync --only --fetch-only")[:2] == (
         "sync", "Fetcher: alpaca")  # one feed's run: the feeds run side by side
     assert res.role_of(LIVE)[:2] == ("live", "Live recorder")
-    assert res.role_of("python -m massive_collate audit --daily")[:2] == ("audit", "audit command")
+    assert res.role_of("python -m liminal audit --daily")[:2] == ("audit", "audit command")
     assert res.is_app(SYNC) and not res.is_app("python -m pytest")
     assert res.is_local("127.0.0.1:8765") and res.is_local("[::1]:8765") and not res.is_local("34.1.2.3:443")
 
@@ -181,7 +181,7 @@ def test_history_is_spaced_and_capped(tmp_path, monkeypatch):
 def test_files_are_listed_by_folder_with_their_growth(tmp_path):
     (tmp_path / "feeds").mkdir()
     (tmp_path / "feeds" / "massive.db").write_bytes(b"x" * 1000)
-    (tmp_path / "massive.db").write_bytes(b"y" * 100)
+    (tmp_path / "liminal.db").write_bytes(b"y" * 100)
     p = FakeProbe()
     m, clock, wall, _ = monitor(tmp_path, p)
     m.sample()
@@ -215,7 +215,7 @@ def test_the_view_has_each_programs_series_for_the_range_asked(tmp_path):
 
 
 def test_the_chart_app_answers_without_starting_the_sampler(store):
-    from massive_collate.gui.server import ChartApp
+    from liminal.gui.server import ChartApp
 
     app = ChartApp(store)
     assert app.monitor.data_dir == Path(store.path).parent  # the data folder the store is in

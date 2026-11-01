@@ -9,13 +9,13 @@ import threading
 
 import pytest
 
-from massive_collate import live, memory
-from massive_collate.config import load_settings
-from massive_collate.gui import server
-from massive_collate.gui.bars import CACHE_SHARES, CHART_CACHE_BYTES, BarEngine
-from massive_collate.gui.window import WindowReader
-from massive_collate.storage import Store
-from massive_collate.sources import stream
+from liminal import live, memory
+from liminal.config import load_settings
+from liminal.gui import server
+from liminal.gui.bars import CACHE_SHARES, CHART_CACHE_BYTES, BarEngine
+from liminal.gui.window import WindowReader
+from liminal.storage import Store
+from liminal.sources import stream
 
 MB = 2**20
 
@@ -99,23 +99,23 @@ def test_the_recorders_backlog_is_a_byte_budget():
 def test_numpy_loads_with_one_thread_unless_told_otherwise(monkeypatch):
     import importlib
 
-    import massive_collate
+    import liminal
 
     for name in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS"):
         monkeypatch.delenv(name, raising=False)
-    importlib.reload(massive_collate)  # what the package sets as it loads, before anything imports numpy
+    importlib.reload(liminal)  # what the package sets as it loads, before anything imports numpy
     assert os.environ["OPENBLAS_NUM_THREADS"] == os.environ["OMP_NUM_THREADS"] == "1"
     monkeypatch.setenv("OPENBLAS_NUM_THREADS", "4")
-    importlib.reload(massive_collate)
+    importlib.reload(liminal)
     assert os.environ["OPENBLAS_NUM_THREADS"] == "4"  # the environment's own value is kept
 
 
 # -- admin memory ---------------------------------------------------------------------------------
 def _fake_machine(monkeypatch, reads: dict[int, list[int]]):
     """The app's processes, their counters and the machine's, as the system's calls would give them."""
-    from massive_collate import proc
+    from liminal import proc
 
-    cmd = '"C:\\venv\\Scripts\\python.exe" -m massive_collate '
+    cmd = '"C:\\venv\\Scripts\\python.exe" -m liminal '
     monkeypatch.setattr(proc, "processes", lambda: [
         (100, 1, cmd + "gui --no-browser --port 8765"), (101, 100, cmd + "gui --no-browser --port 8765"),  # launcher, child
         (200, 1, cmd + "--source massive sync"), (300, 1, cmd + "live"), (400, 1, "python other.py")])

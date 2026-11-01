@@ -2,12 +2,12 @@
 import calendar
 from datetime import date, datetime, timedelta, timezone
 
-from massive_collate.collector import ET, sync
-from massive_collate.config import TIERS, load_settings
-from massive_collate.gui import activity as act
-from massive_collate.gui.server import ChartApp
-from massive_collate.storage import Store
-from massive_collate.symbols import resolve
+from liminal.collector import ET, sync
+from liminal.config import TIERS, load_settings
+from liminal.gui import activity as act
+from liminal.gui.server import ChartApp
+from liminal.storage import Store
+from liminal.symbols import resolve
 
 from .conftest import FakeSource
 
@@ -76,8 +76,8 @@ def test_sync_reports_the_symbol_it_is_working_on_and_its_request_cost(store):
 
 
 def test_activity_endpoint_summarises_store_runs_and_log(tmp_path):
-    db = tmp_path / "massive.db"
-    settings = load_settings(env={"MASSIVE_DB": str(db)}, env_file=None)
+    db = tmp_path / "liminal.db"
+    settings = load_settings(env={"LIMINAL_DB": str(db)}, env_file=None)
     with Store(db, check_same_thread=False) as s:
         s.watch_spec("massive", resolve("AAPL"))
         s.watch_spec("massive", resolve("MSFT"))
@@ -100,8 +100,8 @@ def test_activity_endpoint_summarises_store_runs_and_log(tmp_path):
 def test_activity_sees_a_live_run(tmp_path, monkeypatch):
     import os
 
-    db = tmp_path / "massive.db"
-    settings = load_settings(env={"MASSIVE_DB": str(db)}, env_file=None)
+    db = tmp_path / "liminal.db"
+    settings = load_settings(env={"LIMINAL_DB": str(db)}, env_file=None)
     with Store(db, check_same_thread=False) as s:
         s.watch_spec("massive", resolve("AAPL"))
         run = s.start_run("massive", "sync")
@@ -115,9 +115,9 @@ def test_activity_sees_a_live_run(tmp_path, monkeypatch):
 def test_every_source_has_a_state_and_the_status_bar_knows_when_none_can_fetch(tmp_path):
     from datetime import datetime, timezone
 
-    from massive_collate.config import load_settings
-    from massive_collate.gui.activity import can_fetch, health, limits
-    from massive_collate.storage import Store
+    from liminal.config import load_settings
+    from liminal.gui.activity import can_fetch, health, limits
+    from liminal.storage import Store
 
     now = datetime(2026, 10, 24, 18, tzinfo=timezone.utc)
     settings = load_settings(env={"MASSIVE_API_KEY": "k", "MASSIVE_MAX_REQUESTS_PER_DAY": "100"}, env_file=None)
@@ -146,9 +146,9 @@ def test_the_fetcher_shows_the_rows_most_worth_seeing_and_counts_the_rest(tmp_pa
     import json
     from datetime import datetime, timezone
 
-    from massive_collate.config import load_settings
-    from massive_collate.gui.activity import activity
-    from massive_collate.storage import Store
+    from liminal.config import load_settings
+    from liminal.gui.activity import activity
+    from liminal.storage import Store
 
     settings = load_settings(env={"MASSIVE_API_KEY": "k"}, env_file=None)
     with Store(tmp_path / "m.db") as store:
@@ -165,8 +165,8 @@ def test_the_fetcher_shows_the_rows_most_worth_seeing_and_counts_the_rest(tmp_pa
 
 
 def test_the_status_keeps_its_symbol_rows_a_while_and_rebuilds_them_when_another_symbol_is_fetched(tmp_path, monkeypatch):
-    db = tmp_path / "massive.db"
-    settings = load_settings(env={"MASSIVE_DB": str(db)}, env_file=None)
+    db = tmp_path / "liminal.db"
+    settings = load_settings(env={"LIMINAL_DB": str(db)}, env_file=None)
     built = []
     real = act.symbol_rows
     monkeypatch.setattr(act, "symbol_rows", lambda *a, **k: built.append(a[4]) or real(*a, **k))
@@ -188,10 +188,10 @@ def test_the_status_keeps_its_symbol_rows_a_while_and_rebuilds_them_when_another
 def test_the_fetcher_shows_every_feed_fetching_side_by_side(tmp_path):
     import os
 
-    from massive_collate import proc
+    from liminal import proc
 
-    db = tmp_path / "massive.db"
-    settings = load_settings(env={"MASSIVE_DB": str(db), "MASSIVE_API_KEY": "k"}, env_file=None)
+    db = tmp_path / "liminal.db"
+    settings = load_settings(env={"LIMINAL_DB": str(db), "MASSIVE_API_KEY": "k"}, env_file=None)
     with Store(db, check_same_thread=False) as s:
         s.watch_spec("massive", resolve("AAPL"))
         dead = s.start_run("bitstamp", "sync")  # its process died: no lock held

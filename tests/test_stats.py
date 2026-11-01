@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from massive_collate.gui.stats import details_subset, key_stats
+from liminal.gui.stats import details_subset, key_stats
 
 ET = "America/New_York"
 

@@ -5,11 +5,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-from massive_collate import gov, publications
-from massive_collate.gov import GovDB, Source
-from massive_collate.sources import publishers
-from massive_collate.sources.publisher import parse_rss
-from massive_collate.sources.plugins.federal.fedreg import parse_fedreg
+from liminal import gov, publications
+from liminal.gov import GovDB, Source
+from liminal.sources import publishers
+from liminal.sources.publisher import parse_rss
+from liminal.sources.plugins.federal.fedreg import parse_fedreg
 
 NOW = datetime(2026, 10, 26, 6, 0, tzinfo=timezone.utc)  # Monday, 2:00 a.m. ET: no release moment near
 OFFICIAL = {n: p for n, p in publishers().items() if p.kind == "official"}
@@ -162,7 +162,7 @@ def test_the_parameters_have_their_source_and_date_and_the_newest_rule_document(
 
 
 def test_the_gov_view_says_which_sources_wait_and_why(store):
-    from massive_collate.gui.server import ChartApp
+    from liminal.gui.server import ChartApp
 
     app = ChartApp(store)
     out = app.gov()
@@ -181,9 +181,9 @@ def test_the_gov_view_shows_the_next_fomc_decision_and_the_releases_scheduled():
 
 
 def test_the_gov_command_lists_each_sources_state(tmp_path, monkeypatch, capsys):
-    from massive_collate import cli
+    from liminal import cli
 
-    monkeypatch.setenv("MASSIVE_DB", str(tmp_path / "m.db"))
+    monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "m.db"))
     monkeypatch.setenv("MASSIVE_API_KEY", "k")
     asked = []
     monkeypatch.setattr(cli, "_fetch_gov", lambda settings, log, force=False: asked.append(force))  # no real requests
@@ -191,7 +191,7 @@ def test_the_gov_command_lists_each_sources_state(tmp_path, monkeypatch, capsys)
     out = capsys.readouterr().out
     assert asked == [False] and "Press releases" in out and "waiting  (SEC asks automated readers" in out
     assert cli.main(["gov", "--all"]) == 0 and asked[-1] is True  # every feed its floor allows
-    monkeypatch.setenv("MASSIVE_OFFLINE", "1")
+    monkeypatch.setenv("LIMINAL_OFFLINE", "1")
     asked.clear()
     assert cli.main(["gov"]) == 0 and not asked and "nothing is fetched" in capsys.readouterr().out
 

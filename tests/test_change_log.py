@@ -10,8 +10,8 @@ from contextlib import closing
 
 import pytest
 
-from massive_collate.storage import Store
-from massive_collate.storage import feeds as feeds_mod
+from liminal.storage import Store
+from liminal.storage import feeds as feeds_mod
 
 MIN = 60_000
 

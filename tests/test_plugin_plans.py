@@ -10,13 +10,13 @@ from pathlib import Path
 
 import pytest
 
-from massive_collate import cli, collector, sourcing
-from massive_collate.config import Settings, TIERS, load_settings, with_detected
-from massive_collate.errors import NotEntitled
-from massive_collate.sources import build_source, feed_profiles, providers
-from massive_collate.sources.plugins.alpaca.client import AlpacaSource
-from massive_collate.sources.registry import Scanned
-from massive_collate.storage import Store
+from liminal import cli, collector, sourcing
+from liminal.config import Settings, TIERS, load_settings, with_detected
+from liminal.errors import NotEntitled
+from liminal.sources import build_source, feed_profiles, providers
+from liminal.sources.plugins.alpaca.client import AlpacaSource
+from liminal.sources.registry import Scanned
+from liminal.storage import Store
 
 KEYS = {"MASSIVE_API_KEY": "k", "ALPACA_API_KEY_ID": "i", "ALPACA_API_SECRET_KEY": "s"}
 
@@ -59,7 +59,7 @@ def test_a_detected_plan_applies_only_where_the_user_set_none():
 
 def test_the_plans_found_are_read_from_the_database_by_every_command(tmp_path):
     db = tmp_path / "m.db"
-    s = load_settings(env={**KEYS, "MASSIVE_DB": str(db)}, env_file=None)
+    s = load_settings(env={**KEYS, "LIMINAL_DB": str(db)}, env_file=None)
     assert sourcing.scans_at(db) == {} and sourcing.apply_detected(s) is s  # no database yet
     with Store(db) as store:
         _keep(store, "alpaca", {"ALPACA_PLAN": "algo_trader_plus"})
@@ -90,7 +90,7 @@ class _AlpacaClient:
 
 
 def test_alpaca_tells_its_plans_apart_by_the_latest_fifteen_minutes():
-    from massive_collate.sources.plugins import alpaca
+    from liminal.sources.plugins import alpaca
 
     now = datetime(2026, 10, 27, 15, 0, tzinfo=timezone.utc)
     for refuse, plan in ((True, "basic"), (False, "algo_trader_plus")):
@@ -108,7 +108,7 @@ def test_alpaca_tells_its_plans_apart_by_the_latest_fifteen_minutes():
 
 
 def test_massive_finds_its_stocks_plan_and_leaves_the_other_classes_to_you():
-    from massive_collate.sources.plugins import massive
+    from liminal.sources.plugins import massive
 
     reach = {"day_3y": True, "day_6y": True, "day_11y": False, "day_21y": False, "second": True, "trades": True,
              "quotes": False}
@@ -120,7 +120,7 @@ def test_massive_finds_its_stocks_plan_and_leaves_the_other_classes_to_you():
 
 
 def test_tiingos_plan_is_your_choice_and_sets_its_limits():
-    from massive_collate.sources.plugins import tiingo
+    from liminal.sources.plugins import tiingo
 
     keys = {**KEYS, "TIINGO_API_KEY": "t"}
     starter, power = (load_settings(env={**keys, **extra}, env_file=None) for extra in ({}, {"TIINGO_PLAN": "power"}))
@@ -165,8 +165,8 @@ class _TiingoClient:
 
 
 def test_tiingos_scan_tells_starter_from_a_paid_plan_by_the_news_api(store):
-    from massive_collate.errors import SourceError
-    from massive_collate.sources.plugins import tiingo
+    from liminal.errors import SourceError
+    from liminal.sources.plugins import tiingo
 
     tiingo_p = providers()["tiingo"]
     paid = tiingo_p.run_scan(type("S", (), {"client": _TiingoClient(news=None)})())
@@ -194,8 +194,8 @@ def test_tiingos_scan_tells_starter_from_a_paid_plan_by_the_news_api(store):
 
 
 def test_a_paid_tiingo_key_is_power_unless_you_say_commercial(tmp_path):
-    from massive_collate.gui import plugins
-    from massive_collate.sources.plugins import tiingo
+    from liminal.gui import plugins
+    from liminal.sources.plugins import tiingo
 
     scans = {"tiingo": {"at": "x", "results": [], "plan": {"TIINGO_PLAN": "power"},
                         "alike": {"TIINGO_PLAN": ["commercial"]}}}
@@ -229,14 +229,14 @@ def test_a_scan_keeps_the_plan_it_found(store):
 
 
 def test_capabilities_skips_a_provider_whose_keys_are_not_set(tmp_path, capsys):
-    s = load_settings(env={"MASSIVE_DB": str(tmp_path / "m.db"), "MASSIVE_OFFLINE": "1"}, env_file=None)
+    s = load_settings(env={"LIMINAL_DB": str(tmp_path / "m.db"), "LIMINAL_OFFLINE": "1"}, env_file=None)
     args = cli.build_parser().parse_args(["capabilities", "tiingo"])
     assert cli.cmd_capabilities(args, s) == 0
     assert "tiingo: not set up here (TIINGO_API_KEY); not scanned" in capsys.readouterr().out
 
 
 def test_a_scan_runs_beside_a_sync_holding_the_run_lock(tmp_path, monkeypatch):
-    s = load_settings(env={**KEYS, "MASSIVE_DB": str(tmp_path / "m.db")}, env_file=None)
+    s = load_settings(env={**KEYS, "LIMINAL_DB": str(tmp_path / "m.db")}, env_file=None)
     taken = []
     monkeypatch.setattr(cli, "run_lock", lambda path: taken.append(path) or (_ for _ in ()).throw(SystemExit("busy")))
     monkeypatch.setattr(cli, "build_source", lambda name, settings, request_budget=None: type(
@@ -248,10 +248,10 @@ def test_a_scan_runs_beside_a_sync_holding_the_run_lock(tmp_path, monkeypatch):
 
 
 def _app(tmp_path, offline=False):
-    from massive_collate.gui.server import ChartApp
+    from liminal.gui.server import ChartApp
 
     tmp_path.mkdir(parents=True, exist_ok=True)
-    env = {**KEYS, "MASSIVE_DB": str(tmp_path / "m.db"), **({"MASSIVE_OFFLINE": "1"} if offline else {})}
+    env = {**KEYS, "LIMINAL_DB": str(tmp_path / "m.db"), **({"LIMINAL_OFFLINE": "1"} if offline else {})}
     store = Store(tmp_path / "m.db", check_same_thread=False)
     return store, ChartApp(store, settings=load_settings(env=env, env_file=None),
                            reload_settings=lambda: load_settings(env=env, env_file=None))
@@ -273,7 +273,7 @@ def test_the_chart_app_rescans_in_a_process_of_its_own_one_at_a_time(tmp_path):
     app._spawn = lambda args: spawned.append(args) or _Proc()
     try:
         out = app.start_rescan("alpaca")
-        assert out["started"] and spawned[0][-3:] == ["massive_collate", "capabilities", "alpaca"]
+        assert out["started"] and spawned[0][-3:] == ["liminal", "capabilities", "alpaca"]
         with pytest.raises(RuntimeError, match="already running"):
             app.start_rescan()
         assert app.plugins()["running"]["name"] == "alpaca"
@@ -311,7 +311,7 @@ def test_the_chart_app_takes_up_a_plan_a_scan_found(tmp_path):
 
 
 def test_the_plugins_view_shows_each_plugin_its_plan_keys_and_part(tmp_path):
-    from massive_collate.symbols import resolve
+    from liminal.symbols import resolve
 
     store, app = _app(tmp_path)
     try:
@@ -337,8 +337,8 @@ def test_the_plugins_view_shows_each_plugin_its_plan_keys_and_part(tmp_path):
 
 
 def test_a_plan_you_set_that_the_scan_disagrees_with_is_shown(tmp_path):
-    from massive_collate.gui import plugins
-    from massive_collate.sources import feed_profiles
+    from liminal.gui import plugins
+    from liminal.sources import feed_profiles
 
     s = load_settings(env={**KEYS, "ALPACA_PLAN": "algo_trader_plus"}, env_file=None)
     with Store(tmp_path / "m.db") as store:
@@ -351,14 +351,14 @@ def test_a_plan_you_set_that_the_scan_disagrees_with_is_shown(tmp_path):
 
 
 def test_the_page_has_its_plug_and_view():
-    static = Path(__file__).resolve().parents[1] / "src" / "massive_collate" / "gui" / "static"
+    static = Path(__file__).resolve().parents[1] / "src" / "liminal" / "gui" / "static"
     html = (static / "index.html").read_text(encoding="utf-8")
     assert 'id="railPlugins"' in html and 'id="viewPlugins"' in html and 'src="plugins.js"' in html
     assert "plug:" in (static / "icons.js").read_text(encoding="utf-8")
     panels = (static / "panels.js").read_text(encoding="utf-8")
     assert "plugins: 'plugins'" in panels and "icon('plug', RAIL_ICON)" in panels
     js = (static / "plugins.js").read_text(encoding="utf-8")
-    assert "/api/plugins/rescan" in js and "'X-Massive-Charts': '1'" in js
+    assert "/api/plugins/rescan" in js and "'X-Liminal-Charts': '1'" in js
     css = (static / "style.css").read_text(encoding="utf-8")
     # its grid (and the Exchanges view's) only while shown: a display with !important outranked
     # `main > .view[hidden]` and showed the Exchanges view beside every other one
@@ -367,7 +367,7 @@ def test_the_page_has_its_plug_and_view():
 
 def test_the_key_script_offers_each_plan_and_a_rescan():
     src = (Path(__file__).resolve().parents[1] / "tools" / "set-key.ps1").read_text(encoding="utf-8")
-    assert "function Set-Plan" in src and "-m massive_collate capabilities $p.name" in src
+    assert "function Set-Plan" in src and "-m liminal capabilities $p.name" in src
     assert "[switch]$Rescan" in src and "$choices -notcontains $pick" in src
 
 
@@ -401,7 +401,7 @@ class _Registry:
 def test_a_chosen_plan_is_saved_where_the_key_script_saves_it():
     import os
 
-    from massive_collate.config import save_user_variable
+    from liminal.config import save_user_variable
 
     reg = _Registry()
     save_user_variable("TIINGO_PLAN", "commercial", registry=reg)
@@ -412,10 +412,10 @@ def test_a_chosen_plan_is_saved_where_the_key_script_saves_it():
 
 
 def _choosing_app(tmp_path, monkeypatch, offline=False):
-    from massive_collate import config
-    from massive_collate.gui.server import ChartApp
+    from liminal import config
+    from liminal.gui.server import ChartApp
 
-    env = {**KEYS, "TIINGO_API_KEY": "t", "MASSIVE_DB": str(tmp_path / "m.db"), **({"MASSIVE_OFFLINE": "1"} if offline else {})}
+    env = {**KEYS, "TIINGO_API_KEY": "t", "LIMINAL_DB": str(tmp_path / "m.db"), **({"LIMINAL_OFFLINE": "1"} if offline else {})}
     saved: dict[str, str] = {}
     monkeypatch.setattr(config, "saved_user_keys", lambda: dict(saved))
     store = Store(tmp_path / "m.db", check_same_thread=False)
@@ -432,7 +432,7 @@ def _choosing_app(tmp_path, monkeypatch, offline=False):
 
 
 def test_the_plugins_view_chooses_a_plan_the_scan_cannot_tell(tmp_path, monkeypatch):
-    from massive_collate.sources.plugins import tiingo
+    from liminal.sources.plugins import tiingo
 
     store, app, wrote = _choosing_app(tmp_path, monkeypatch)
     try:
@@ -473,7 +473,7 @@ def test_the_plan_route_takes_only_this_apps_pages(tmp_path, monkeypatch):
     from http.client import HTTPConnection
     from http.server import ThreadingHTTPServer
 
-    from massive_collate.gui.server import make_handler
+    from liminal.gui.server import make_handler
 
     store, app, wrote = _choosing_app(tmp_path, monkeypatch)
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(app, [0]))
@@ -482,7 +482,7 @@ def test_the_plan_route_takes_only_this_apps_pages(tmp_path, monkeypatch):
 
     def post(body, header=True):
         c = HTTPConnection("127.0.0.1", port)
-        headers = {"Host": f"127.0.0.1:{port}", "Content-Type": "application/json", **({"X-Massive-Charts": "1"} if header else {})}
+        headers = {"Host": f"127.0.0.1:{port}", "Content-Type": "application/json", **({"X-Liminal-Charts": "1"} if header else {})}
         c.request("POST", "/api/plugins/plan", body=json.dumps(body), headers=headers)
         r = c.getresponse()
         raw = r.read()
@@ -502,7 +502,7 @@ def test_the_plan_route_takes_only_this_apps_pages(tmp_path, monkeypatch):
 
 
 def test_the_page_offers_each_plan_as_a_choice():
-    static = Path(__file__).resolve().parents[1] / "src" / "massive_collate" / "gui" / "static"
+    static = Path(__file__).resolve().parents[1] / "src" / "liminal" / "gui" / "static"
     js = (static / "plugins.js").read_text(encoding="utf-8")
     assert "/api/plugins/plan" in js and "select.pl-choose" in js and "window.confirm(ask)" in js
     assert "This offline copy of the app saves no settings" in js and "headers: WRITE_HEADERS" in js
@@ -510,7 +510,7 @@ def test_the_page_offers_each_plan_as_a_choice():
 
 # -- Alpaca's Blue Ocean folded into its plugin; "scanning" while a rescan runs ----------------------
 def test_the_plugins_view_folds_blue_ocean_into_alpacas_entry(tmp_path):
-    from massive_collate.symbols import resolve
+    from liminal.symbols import resolve
 
     store, app = _app(tmp_path)
     try:
@@ -536,7 +536,7 @@ def test_the_plugins_view_folds_blue_ocean_into_alpacas_entry(tmp_path):
 def test_a_rescan_says_scanning_on_each_plugin_it_has_still_to_ask(tmp_path):
     """The user, 2026-10-29: "when i hit rescan all, i want the status of each plug in to say
     scanning, not 'ready'"."""
-    from massive_collate.gui import plugins
+    from liminal.gui import plugins
 
     s = load_settings(env=KEYS, env_file=None)
     since = "2026-10-29T13:00:00+00:00"
@@ -572,7 +572,7 @@ def test_a_rescan_says_scanning_on_each_plugin_it_has_still_to_ask(tmp_path):
 def test_a_scan_kept_in_local_time_is_compared_with_the_rescans_start():
     from datetime import timedelta
 
-    from massive_collate.gui.plugins import _asked_since
+    from liminal.gui.plugins import _asked_since
 
     now = datetime.now()  # a scan's time without an offset is local, as the scans keep it
     utc = datetime.now(timezone.utc)
@@ -582,7 +582,7 @@ def test_a_scan_kept_in_local_time_is_compared_with_the_rescans_start():
 
 
 def test_the_page_says_scanning_and_lists_a_plugins_feeds():
-    static = Path(__file__).resolve().parents[1] / "src" / "massive_collate" / "gui" / "static"
+    static = Path(__file__).resolve().parents[1] / "src" / "liminal" / "gui" / "static"
     js = (static / "plugins.js").read_text(encoding="utf-8")
     assert "scanning: 'scanning…'" in js and "' · scanning…'" not in js  # the chip says it, not the plan line
     assert "function feedsHtml(p)" in js and "<th>Feed</th>" in js and 'class="pl-feedrow"' in js

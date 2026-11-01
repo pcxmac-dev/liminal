@@ -8,9 +8,9 @@ import sqlite3
 
 import pytest
 
-from massive_collate import cli, derive, live, wsclient
-from massive_collate.storage import Store
-from massive_collate.wsclient import OP_TEXT, WebSocketClosed
+from liminal import cli, derive, live, wsclient
+from liminal.storage import Store
+from liminal.wsclient import OP_TEXT, WebSocketClosed
 
 from .test_live import _client, _server_frame
 
@@ -83,11 +83,11 @@ def test_backups_keep_the_newest_and_never_touch_other_files(tmp_path):
 
 def test_the_log_is_rotated_and_old_ones_are_capped(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "LOG_MAX_BYTES", 100)
-    log = cli.Logger(tmp_path / "massive-collate.log")
+    log = cli.Logger(tmp_path / "liminal.log")
     for i in range(60):
         log("x" * 40 + str(i))
     files = sorted(p.name for p in tmp_path.iterdir())
-    assert "massive-collate.log" in files and "massive-collate.log.1" in files
+    assert "liminal.log" in files and "liminal.log.1" in files
     assert len(files) <= 1 + cli.LOG_KEEP
 
 

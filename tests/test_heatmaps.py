@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from massive_collate.gui import server
-from massive_collate.gui.server import ChartApp
-from massive_collate.storage import Store
+from liminal.gui import server
+from liminal.gui.server import ChartApp
+from liminal.storage import Store
 
 STATIC = Path(server.__file__).parent / "static"
 ET_MIDNIGHT = lambda d: int(datetime(d.year, d.month, d.day, 4).timestamp() * 1000)  # noqa: E731 (EDT)

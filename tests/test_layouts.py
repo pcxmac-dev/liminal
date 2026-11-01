@@ -7,8 +7,8 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from massive_collate.gui.server import ChartApp, make_handler
-from massive_collate.storage import LayoutLimit, Store
+from liminal.gui.server import ChartApp, make_handler
+from liminal.storage import LayoutLimit, Store
 
 
 def test_store_layout_lifecycle(store):
@@ -57,7 +57,7 @@ def _req(port, method, path, body=None, header=True, host="127.0.0.1"):
     c = HTTPConnection("127.0.0.1", port)
     headers = {"Host": f"{host}:{port}", "Content-Type": "application/json"}
     if header:
-        headers["X-Massive-Charts"] = "1"
+        headers["X-Liminal-Charts"] = "1"
     c.request(method, path, body=json.dumps(body) if body is not None else None, headers=headers)
     r = c.getresponse()
     raw = r.read()

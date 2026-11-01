@@ -7,10 +7,10 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from massive_collate import cli, config
-from massive_collate.config import load_settings
-from massive_collate.gui import activity
-from massive_collate.gui.server import ChartApp
+from liminal import cli, config
+from liminal.config import load_settings
+from liminal.gui import activity
+from liminal.gui.server import ChartApp
 
 NOW = datetime(2026, 10, 26, 5, 0, tzinfo=timezone.utc)
 
@@ -41,7 +41,7 @@ def test_without_a_reload_the_settings_stay_as_given(store, monkeypatch):
 
 
 def test_a_sync_reads_saved_keys_again_before_each_feed(tmp_path, monkeypatch):
-    settings = load_settings(env={"MASSIVE_API_KEY": "k", "MASSIVE_DB": str(tmp_path / "m.db")}, env_file=None)
+    settings = load_settings(env={"MASSIVE_API_KEY": "k", "LIMINAL_DB": str(tmp_path / "m.db")}, env_file=None)
     saved = [{}]
     monkeypatch.setattr(config, "saved_user_keys", lambda: dict(saved[0]))
     reloaded = []
@@ -66,4 +66,4 @@ def test_a_sync_reads_saved_keys_again_before_each_feed(tmp_path, monkeypatch):
     saved[0] = {}
     cli._sync(args, settings)
     assert seen[1:] == ["massive", "tiingo"] and reloaded == [1]  # read again once, before tiingo
-    assert "saved keys or plans changed; read again" in (tmp_path / "logs" / "massive-collate.log").read_text()
+    assert "saved keys or plans changed; read again" in (tmp_path / "logs" / "liminal.log").read_text()

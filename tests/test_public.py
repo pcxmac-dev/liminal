@@ -4,15 +4,15 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from massive_collate.collector import ET, sync
-from massive_collate.config import ALPACA_TIERS, PUBLIC_FEEDS, TIERS
-from massive_collate.coverage import FeedProfile, ms, plan
-from massive_collate.errors import NotEntitled
-from massive_collate.sources import supports
-from massive_collate.sources.http import PublicClient
-from massive_collate.sources.plugins.bitstamp import BitstampSource
-from massive_collate.sources.plugins.tiingo.client import TiingoSource, split_adjust
-from massive_collate.symbols import resolve
+from liminal.collector import ET, sync
+from liminal.config import ALPACA_TIERS, PUBLIC_FEEDS, TIERS
+from liminal.coverage import FeedProfile, ms, plan
+from liminal.errors import NotEntitled
+from liminal.sources import supports
+from liminal.sources.http import PublicClient
+from liminal.sources.plugins.bitstamp import BitstampSource
+from liminal.sources.plugins.tiingo.client import TiingoSource, split_adjust
+from liminal.symbols import resolve
 
 from .conftest import FakeResponse, FakeSession, FakeSource
 
@@ -45,7 +45,7 @@ def test_bitstamp_pages_newest_first_and_drops_empty_minutes():
     assert len(pages[1]) == 5
     url, params, headers = session.calls[0]
     assert url.endswith("/ohlc/btcusd/") and params == {"step": 60, "limit": 5, "end": t0 + 540}
-    assert session.calls[1][1]["end"] == t0 + 240 and "massive-collate" in headers["User-Agent"]
+    assert session.calls[1][1]["end"] == t0 + 240 and "liminal" in headers["User-Agent"]
     assert len(session.calls) == 2  # stops once a page reaches the window's start
 
 
@@ -118,11 +118,11 @@ def test_a_feeds_empty_history_head_is_left_to_others_and_the_archive_closes(sto
 
 
 def test_closed_feeds_are_not_started_and_can_be_reopened(tmp_path, monkeypatch, capsys):
-    from massive_collate import cli
-    from massive_collate.storage import Store
+    from liminal import cli
+    from liminal.storage import Store
 
     db = tmp_path / "m.db"
-    monkeypatch.setenv("MASSIVE_DB", str(db))
+    monkeypatch.setenv("LIMINAL_DB", str(db))
     monkeypatch.setenv("MASSIVE_API_KEY", "k")
     settings = cli.load_settings(env_file=None)
     with Store(db):
@@ -142,8 +142,8 @@ def test_closed_feeds_are_not_started_and_can_be_reopened(tmp_path, monkeypatch,
 
 
 def test_the_exchanges_send_five_minute_and_hourly_candles():
-    from massive_collate.sources.plugins.bitfinex import BitfinexSource
-    from massive_collate.sources.plugins.coinbase import CoinbaseSource
+    from liminal.sources.plugins.bitfinex import BitfinexSource
+    from liminal.sources.plugins.coinbase import CoinbaseSource
 
     t0 = int(datetime(2024, 1, 1, tzinfo=timezone.utc).timestamp())
     lo, hi = datetime.fromtimestamp(t0, timezone.utc), datetime.fromtimestamp(t0 + 3600, timezone.utc)

@@ -10,11 +10,11 @@ import pathlib
 import pandas as pd
 import pytest
 
-from massive_collate import datasets
-from massive_collate.gui import server
-from massive_collate.gui.bars import BarEngine, _regular_close, to_records
-from massive_collate.gui.window import HISTORY_TOLERANCE_PCT, WindowReader
-from massive_collate.storage import Store
+from liminal import datasets
+from liminal.gui import server
+from liminal.gui.bars import BarEngine, _regular_close, to_records
+from liminal.gui.window import HISTORY_TOLERANCE_PCT, WindowReader
+from liminal.storage import Store
 
 ET = "America/New_York"
 SHILLER = "shiller-us-market-monthly"

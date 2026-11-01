@@ -15,11 +15,11 @@ from datetime import date
 import pandas as pd
 import pytest
 
-from massive_collate import baddata, cli, composite, config, derive
-from massive_collate.storage import Store
-from massive_collate.storage import admin as admin_mod
-from massive_collate.storage import feeds as feeds_mod
-from massive_collate.storage.common import add_column
+from liminal import baddata, cli, composite, config, derive
+from liminal.storage import Store
+from liminal.storage import admin as admin_mod
+from liminal.storage import feeds as feeds_mod
+from liminal.storage.common import add_column
 
 ET = "America/New_York"
 
@@ -147,7 +147,7 @@ def test_a_release_rebuilds_the_frames_above_and_changes_the_fingerprint(spcx):
 def test_the_release_command_also_marks_the_frames_above_dirty(spcx, tmp_path, monkeypatch, capsys):
     _spike(spcx)
     baddata.scan_series(spcx, "massive", "SPCX", "minute", "stock")
-    monkeypatch.setenv("MASSIVE_DB", str(tmp_path / "m.db"))
+    monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "m.db"))
     monkeypatch.chdir(tmp_path)
     t = _ms("2026-10-19 17:08")
     derive.take_dirty(spcx, "massive", "SPCX", "minute")  # what the scan marked: taken
@@ -207,7 +207,7 @@ def test_the_pruned_lists_symbols_come_from_a_loose_index_scan(store, monkeypatc
     plan = store._bars("massive").execute("EXPLAIN QUERY PLAN SELECT ticker FROM pruned INDEXED BY pruned_by_time "
                                           "WHERE ticker > ? ORDER BY ticker LIMIT 1", ("A",)).fetchall()
     assert plan[0][-1] == "SEARCH pruned USING COVERING INDEX pruned_by_time (ticker>?)"  # a seek, then one entry
-    monkeypatch.setenv("MASSIVE_DB", str(tmp_path / "m.db"))
+    monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "m.db"))
     monkeypatch.chdir(tmp_path)
     asked = []
     real = Store.pruned
@@ -235,7 +235,7 @@ def test_the_summary_seeks_and_counts_only_when_asked(store):
 
 def test_status_prints_without_counts_and_with_them(store, tmp_path, monkeypatch, capsys):
     store.upsert_bars("massive", "SPCX", "minute", 1, _minutes("2026-10-19", "09:30", "10:00", 50.0, 1))
-    monkeypatch.setenv("MASSIVE_DB", str(tmp_path / "m.db"))
+    monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "m.db"))
     monkeypatch.chdir(tmp_path)
     assert cli.main(["status"]) == 0
     line = next(x for x in capsys.readouterr().out.splitlines() if "tickers" in x)
@@ -401,7 +401,7 @@ def test_an_export_takes_whole_days_in_the_series_day_zone(store, tmp_path, monk
     store.upsert_bars("coinbase", "BTCUSD", "minute", 1, [{"t": t, "o": 1, "h": 1, "l": 1, "c": 1, "v": 1} for t in utc])
     zone = derive.day_zone("crypto")
     assert kept(store.load_bars(["BTCUSD"], "minute", 1, *days, source="coinbase", zone=zone)) == utc[:2]
-    monkeypatch.setenv("MASSIVE_DB", str(tmp_path / "m.db"))
+    monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "m.db"))
     monkeypatch.chdir(tmp_path)
     assert cli.main(["--source", "massive", "export", "SPCX", "--kind", "minute", "--from", "2026-01-06",
                      "--to", "2026-01-07", "--out", str(tmp_path / "x.csv")]) == 0
@@ -411,9 +411,9 @@ def test_an_export_takes_whole_days_in_the_series_day_zone(store, tmp_path, monk
 def test_a_composite_bar_no_longer_made_is_removed_from_the_rebuilt_span(store):
     from datetime import datetime, timezone
 
-    from massive_collate.coverage import FeedProfile
-    from massive_collate.config import TIERS
-    from massive_collate.symbols import resolve
+    from liminal.coverage import FeedProfile
+    from liminal.config import TIERS
+    from liminal.symbols import resolve
 
     t0 = int(datetime(2026, 10, 1, 15, tzinfo=timezone.utc).timestamp() * 1000)
     feeds = {n: FeedProfile(n, TIERS["free"], frozenset({"crypto"}), venues={"crypto": v})
@@ -433,7 +433,7 @@ def test_a_composite_bar_no_longer_made_is_removed_from_the_rebuilt_span(store):
 
 
 @pytest.mark.parametrize("env, hours, tier", [
-    ({"MASSIVE_REFRESH_HOURS": "0.5"}, 0.5, "free"),
+    ({"LIMINAL_REFRESH_HOURS": "0.5"}, 0.5, "free"),
     ({"MASSIVE_TIER": ""}, 0.0, "free"),
     ({"MASSIVE_TIER": "   "}, 0.0, "free"),
 ])
@@ -449,7 +449,7 @@ def test_a_settings_file_drops_comments_after_values(tmp_path):
     values = config.read_env_file(env)
     assert values == {"MASSIVE_TIER": "starter", "MASSIVE_RPM": "30", "GOV_CONTACT": "Me #1 <me@x>", "KEY": "abc#def"}
     with pytest.raises(config.ConfigError):
-        config.load_settings({"MASSIVE_REFRESH_HOURS": "-1"}, env_file=None)
+        config.load_settings({"LIMINAL_REFRESH_HOURS": "-1"}, env_file=None)
 
 
 # -- 9: compaction: in place only where it is safe, otherwise by copying -------------------------
@@ -537,7 +537,7 @@ def test_compact_does_not_swap_a_file_in_use_or_written_during_the_copy(tmp_path
 
 def test_admin_compact_from_the_command_line(tmp_path, monkeypatch, capsys):
     _filled(tmp_path / "m.db")
-    monkeypatch.setenv("MASSIVE_DB", str(tmp_path / "m.db"))
+    monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "m.db"))
     monkeypatch.chdir(tmp_path)
     feed = tmp_path / "feeds" / "massive.db"
     assert cli.main(["admin", "compact", "--file", str(feed), "--swap"]) == 0

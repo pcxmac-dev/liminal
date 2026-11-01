@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from massive_collate import killswitch, live
-from massive_collate.config import load_settings
-from massive_collate.sessions import ET
-from massive_collate.sources.plugins.tiingo import boats_live
-from massive_collate.sources.plugins.tiingo import _iso_ms as iso_ms
-from massive_collate.sources.plugins.tiingo import TIINGO_BOATS
-from massive_collate.sources.plugins.tiingo import BoatsPoller
+from liminal import killswitch, live
+from liminal.config import load_settings
+from liminal.sessions import ET
+from liminal.sources.plugins.tiingo import boats_live
+from liminal.sources.plugins.tiingo import _iso_ms as iso_ms
+from liminal.sources.plugins.tiingo import TIINGO_BOATS
+from liminal.sources.plugins.tiingo import BoatsPoller
 
 TUE_2305 = datetime(2026, 10, 27, 23, 5, 40, tzinfo=ET)
 
@@ -123,8 +123,8 @@ def test_tiingo_names_and_times_are_read():
 
 
 def test_a_429_kills_tiingos_fetching_and_its_forex_with_it(tmp_path):
-    from massive_collate.errors import RateLimited
-    from massive_collate.storage import Store
+    from liminal.errors import RateLimited
+    from liminal.storage import Store
 
     rec, poller = _recorder(tmp_path)
 
@@ -144,7 +144,7 @@ def test_a_429_kills_tiingos_fetching_and_its_forex_with_it(tmp_path):
 
 
 def test_the_day_cap_shows_idle_on_tiingos_limits_and_any_other_error_down(tmp_path):
-    from massive_collate.errors import BudgetExhausted
+    from liminal.errors import BudgetExhausted
 
     for fail, idle, words in ((BudgetExhausted("the daily request cap is reached"), True, "Tiingo's limits"),
                               (ConnectionError("network down"), False, "network down")):
@@ -164,8 +164,8 @@ def test_the_day_cap_shows_idle_on_tiingos_limits_and_any_other_error_down(tmp_p
 
 
 def test_a_lower_limit_found_while_a_client_runs_is_kept_from_then_on():
-    from massive_collate.ratelimit import RateLimiter
-    from massive_collate.sources.plugins.massive.client import MassiveClient
+    from liminal.ratelimit import RateLimiter
+    from liminal.sources.plugins.massive.client import MassiveClient
 
     client = MassiveClient("k", rate_limiter=RateLimiter(190, 60.0))
     assert client.tighten(95, 60.0) and client._limiter.max_calls == 95
@@ -175,7 +175,7 @@ def test_a_lower_limit_found_while_a_client_runs_is_kept_from_then_on():
 
 
 def test_the_publications_thread_lives_through_a_file_that_will_not_open(tmp_path, monkeypatch):
-    from massive_collate import gov
+    from liminal import gov
 
     rec = live.Recorder(tmp_path / "m.db", coins=(), publications=object(), log=lambda *_: None)
     opened = []

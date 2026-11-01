@@ -7,8 +7,8 @@ from datetime import date, datetime, timezone
 import pandas as pd
 import pytest
 
-from massive_collate.storage import Store
-from massive_collate.storage import history
+from liminal.storage import Store
+from liminal.storage import history
 
 pytest.importorskip("duckdb")
 
@@ -25,7 +25,7 @@ def bar(t, c, v=100.0, n=5):
 
 @pytest.fixture
 def disk(tmp_path):
-    s = Store(tmp_path / "massive.db")
+    s = Store(tmp_path / "liminal.db")
     jan = [bar(ms(2026, 1, 5, 15, i), 100 + i) for i in range(30)]
     feb = [bar(ms(2026, 2, 3, 15, i), 200 + i) for i in range(30)]
     s.upsert_bars("alpaca", "AAPL", "minute", 1, jan + feb)
