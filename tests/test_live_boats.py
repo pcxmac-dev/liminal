@@ -7,10 +7,7 @@ from datetime import date, datetime, timedelta
 from liminal import killswitch, live
 from liminal.config import load_settings
 from liminal.sessions import ET
-from liminal.sources.plugins.tiingo import boats_live
-from liminal.sources.plugins.tiingo import _iso_ms as iso_ms
-from liminal.sources.plugins.tiingo import TIINGO_BOATS
-from liminal.sources.plugins.tiingo import BoatsPoller
+TIINGO_BOATS = "tiingoboats"  # Tiingo's Blue Ocean feed (its package, liminal-plugin-tiingo)
 
 TUE_2305 = datetime(2026, 10, 27, 23, 5, 40, tzinfo=ET)
 
@@ -46,18 +43,11 @@ class FakeTiingo:
 
 
 def _recorder(tmp_path, now=TUE_2305):
-    poller = BoatsPoller(FakeTiingo(), now=lambda: now)
+    poller = live.night_poller(load_settings(env={"TIINGO_API_KEY": "k", "TIINGO_PLAN": "power"}, env_file=None))
+    poller.client, poller.now = FakeTiingo(), lambda: now  # the plugin's poller, on a fake Tiingo
     rec = live.Recorder(tmp_path / "m.db", coins=(), boats=poller)
     rec.set_wanted(("SPCX",))
     return rec, poller
-
-
-def test_only_on_a_paid_tiingo_plan_with_live_stocks_online():
-    keys = {"TIINGO_API_KEY": "k"}
-    assert boats_live(load_settings(env={**keys, "TIINGO_PLAN": "power"}, env_file=None))
-    assert not boats_live(load_settings(env=keys, env_file=None))  # Starter: 50 an hour would all go on this
-    assert not boats_live(load_settings(env={**keys, "TIINGO_PLAN": "power", "LIVE_STOCKS": "off"}, env_file=None))
-    assert not boats_live(load_settings(env={"TIINGO_PLAN": "power"}, env_file=None))  # no key
 
 
 def test_a_night_open_stores_the_minutes_over_and_builds_the_forming_one(tmp_path, store):
@@ -115,10 +105,7 @@ def test_nothing_is_asked_by_day_while_killed_or_with_nothing_open(tmp_path, sto
     assert rec._status[TIINGO_BOATS]["idle"] and rec._status[TIINGO_BOATS]["note"] is None
 
 
-def test_tiingo_names_and_times_are_read():
-    assert BoatsPoller.symbol("BRK.B") == "brk-b"
-    assert iso_ms("2026-10-28T03:43:14.003025142-04:00") == _ms(datetime(2026, 10, 28, 3, 43, 14, 3025, tzinfo=ET))
-    assert iso_ms("2026-10-28T07:43:00.000Z") == _ms(datetime(2026, 10, 28, 3, 43, tzinfo=ET))
+def test_the_night_feed_is_partial():
     assert TIINGO_BOATS in live.PARTIAL_FEEDS  # ranked last in a chart of all feeds, never for days
 
 

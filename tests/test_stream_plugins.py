@@ -12,7 +12,6 @@ import pytest
 from liminal import live
 from liminal.config import load_settings
 from liminal.sources import providers, registry
-from liminal.sources.plugins.tiingo import BoatsPoller
 from liminal.sources.stream import Live
 
 ALPACA_KEYS = {"ALPACA_API_KEY_ID": "PKTESTKEY", "ALPACA_API_SECRET_KEY": "test-secret"}
@@ -44,7 +43,7 @@ def test_the_recorder_runs_the_streams_the_plugins_declare(tmp_path):
 def test_the_night_is_polled_by_its_plugin_only_where_set_up():
     assert live.night_poller(load_settings(env={"TIINGO_API_KEY": "k"}, env_file=None)) is None  # Starter
     poller = live.night_poller(load_settings(env={"TIINGO_API_KEY": "k", "TIINGO_PLAN": "power"}, env_file=None))
-    assert isinstance(poller, BoatsPoller) and poller.source == "tiingoboats" and poller.account == "tiingo"
+    assert type(poller).__name__ == "BoatsPoller" and poller.source == "tiingoboats" and poller.account == "tiingo"
     assert poller.url("BRK.B") == "https://api.tiingo.com/boats/brk-b/prices"  # its provenance: the plugin's
     assert live.night_poller(load_settings(env={"TIINGO_API_KEY": "k", "TIINGO_PLAN": "power",
                                                 "LIMINAL_OFFLINE": "1"}, env_file=None)) is None
@@ -107,5 +106,5 @@ def test_a_live_feed_is_never_another_plugins(installed):
 def test_the_night_poller_keeps_real_time_without_a_clock_given():
     from datetime import timezone
 
-    poller = BoatsPoller(client=None)  # as the recorder makes it (night_poller): the clock is its own
+    poller = live.night_poller(load_settings(env={"TIINGO_API_KEY": "k", "TIINGO_PLAN": "power"}, env_file=None))
     assert poller.now().tzinfo is timezone.utc  # it lost its `timezone` import once in the move (2026-10-31)

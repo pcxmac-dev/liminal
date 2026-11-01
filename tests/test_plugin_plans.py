@@ -120,7 +120,7 @@ def test_massive_finds_its_stocks_plan_and_leaves_the_other_classes_to_you():
 
 
 def test_tiingos_plan_is_your_choice_and_sets_its_limits():
-    from liminal.sources.plugins import tiingo
+    import liminal_plugin_tiingo as tiingo
 
     keys = {**KEYS, "TIINGO_API_KEY": "t"}
     starter, power = (load_settings(env={**keys, **extra}, env_file=None) for extra in ({}, {"TIINGO_PLAN": "power"}))
@@ -166,7 +166,7 @@ class _TiingoClient:
 
 def test_tiingos_scan_tells_starter_from_a_paid_plan_by_the_news_api(store):
     from liminal.errors import SourceError
-    from liminal.sources.plugins import tiingo
+    import liminal_plugin_tiingo as tiingo
 
     tiingo_p = providers()["tiingo"]
     paid = tiingo_p.run_scan(type("S", (), {"client": _TiingoClient(news=None)})())
@@ -195,7 +195,7 @@ def test_tiingos_scan_tells_starter_from_a_paid_plan_by_the_news_api(store):
 
 def test_a_paid_tiingo_key_is_power_unless_you_say_commercial(tmp_path):
     from liminal.gui import plugins
-    from liminal.sources.plugins import tiingo
+    import liminal_plugin_tiingo as tiingo
 
     scans = {"tiingo": {"at": "x", "results": [], "plan": {"TIINGO_PLAN": "power"},
                         "alike": {"TIINGO_PLAN": ["commercial"]}}}
@@ -432,7 +432,7 @@ def _choosing_app(tmp_path, monkeypatch, offline=False):
 
 
 def test_the_plugins_view_chooses_a_plan_the_scan_cannot_tell(tmp_path, monkeypatch):
-    from liminal.sources.plugins import tiingo
+    import liminal_plugin_tiingo as tiingo
 
     store, app, wrote = _choosing_app(tmp_path, monkeypatch)
     try:

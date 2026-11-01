@@ -2,50 +2,20 @@
 and closing (filled once, then never asked again)."""
 from datetime import date, datetime, timedelta, timezone
 
-import pytest
 
 from liminal.collector import ET, sync
-from liminal.config import ALPACA_TIERS, TIERS
+from liminal.config import ALPACA_TIERS
 from liminal.coverage import FeedProfile, ms, plan
-from liminal.errors import NotEntitled
 from liminal.sources import provider, supports
-from liminal.sources.http import PublicClient
-from liminal.sources.plugins.tiingo.client import TiingoSource, split_adjust
 from liminal.symbols import resolve
 
-from .conftest import FakeResponse, FakeSession, FakeSource
+from .conftest import FakeSource
 
 NOW = datetime(2026, 10, 21, 12, 0, tzinfo=ET)
 
 
 def _log(_):
     pass
-
-
-def _client(responses):
-    session = FakeSession(responses)
-    return PublicClient("https://x.test/api", session=session, sleep=lambda s: None), session
-
-
-def test_tiingo_is_split_adjusted_only_and_needs_a_key():
-    rows = [{"date": "2020-08-27T00:00:00.000Z", "open": 500.0, "high": 510.0, "low": 490.0, "close": 500.0,
-             "volume": 100, "splitFactor": 1.0, "divCash": 0.8},
-            {"date": "2020-08-31T00:00:00.000Z", "open": 127.0, "high": 131.0, "low": 126.0, "close": 129.0,
-             "volume": 400, "splitFactor": 4.0, "divCash": 0.0}]
-    out = split_adjust(rows)
-    assert out[0]["c"] == 125.0 and out[0]["v"] == 400.0  # before the 4:1 split: /4 prices, x4 volume
-    assert out[1]["c"] == 129.0 and out[1]["v"] == 400.0  # the split day is already in new shares
-    assert out[0]["t"] == ms(datetime(2020, 8, 27, tzinfo=ET))
-    client, session = _client([FakeResponse(200, rows)])
-    keyed = TiingoSource(PublicClient("https://api.tiingo.com", headers={"Authorization": "Token K"},
-                                      session=session, sleep=lambda s: None), has_key=True)
-    bars = next(keyed.bar_pages("BRK.B", date(2020, 1, 1), date(2020, 12, 31), "day"))
-    assert len(bars) == 2 and session.calls[0][0].endswith("/tiingo/daily/BRK-B/prices")
-    assert session.calls[0][2]["Authorization"] == "Token K"
-    keyless = TiingoSource(_client([])[0], has_key=False)
-    assert not keyless.serves("stock") and keyless.resolutions("stock") == ()
-    with pytest.raises(NotEntitled):
-        next(keyless.bar_pages("AAPL", date(2020, 1, 1), date(2020, 1, 2), "day"))
 
 
 def test_supports():

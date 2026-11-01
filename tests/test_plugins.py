@@ -10,20 +10,23 @@ from types import SimpleNamespace
 import pytest
 
 from liminal import cli, composite, config
-from liminal.config import PUBLIC_FEEDS, Tier, load_settings
+from liminal.config import Tier, load_settings
 from liminal.sources import (build_source, feed_profiles, is_archive, markets, provider, providers,
                                      rate_window, registry, supports)
 from liminal.sources.registry import KeyVar, Provider
 from liminal.symbols import resolve
-from liminal.sources.plugins.tiingo import TIINGO_BOATS
 from liminal.sources.plugins.alpaca import IEX_FEED
 
 from .conftest import FakeSource
 
-BUILT_IN = ["massive", "alpaca", "boats", "tiingo", "tiingofx"]  # still in sources/plugins/
+BUILT_IN = ["massive", "alpaca", "boats"]  # still in sources/plugins/
 # Released on their own (pyproject.toml: the `plugins` extra) and installed beside the app: the suite
 # sees them as the user's app does (tests/conftest.py), each with its distribution's version.
-PACKAGED = {"bitstamp": "1.3.0", "coinbase": "1.3.0", "bitfinex": "1.2.0", "cboe": "1.2.0"}
+PACKAGED = {  # name: (its distribution's version, the contract it needs, its entry point's value)
+    "bitstamp": ("1.3.0", "1.6", "liminal_plugin_bitstamp:PLUGIN"), "coinbase": ("1.3.0", "1.6", "liminal_plugin_coinbase:PLUGIN"),
+    "bitfinex": ("1.2.0", "1.6", "liminal_plugin_bitfinex:PLUGIN"), "cboe": ("1.2.0", "1.6", "liminal_plugin_cboe:PLUGIN"),
+    "tiingo": ("1.4.0", "1.10", "liminal_plugin_tiingo"), "tiingofx": ("1.4.0", "1.10", "liminal_plugin_tiingo")}
+TIINGO_BOATS = "tiingoboats"  # Tiingo's Blue Ocean feed, live: its package's
 FEEDS = ["massive", "alpaca", "boats", "bitstamp", "coinbase", "bitfinex", "cboe", "tiingo", "tiingofx"]  # all, in order
 LISTED = [n for n in FEEDS if n not in ("boats", "tiingofx")]  # the plugins listed: Alpaca's and Tiingo's second feeds in them
 
@@ -58,7 +61,7 @@ def test_the_feeds_load_in_their_order_without_errors():
     assert registry.errors() == []
     assert all(callable(p.build) for p in providers().values())
     assert {n: p.origin for n, p in providers().items() if p.origin != "built in"} == {
-        n: f"package: liminal-plugin-{n} (liminal_plugin_{n}:PLUGIN)" for n in PACKAGED}
+        n: f"package: liminal-plugin-{registry.plugin_of(n)} ({e})" for n, (_, _, e) in PACKAGED.items()}
     assert all(providers()[n].origin == "built in" for n in BUILT_IN)
     assert {n for n in FEEDS if is_archive(n)} == {"tiingo", "cboe"}
 
@@ -70,10 +73,6 @@ def test_each_built_in_keeps_its_plan_rate_caps_and_markets():
     assert rate_window("coinbase", s) == (8, 1.0)
     assert rate_window("tiingo", s) == (45, 3600.0)
     assert rate_window("bitfinex", s) == (20, 60.0)
-    for name in ("tiingo",):  # the public feed still built in (the exchanges', Cboe's: in their packages)
-        tier, per_run, per_day = PUBLIC_FEEDS[name]
-        view = s.for_source(name)
-        assert (view.tier, view.max_requests_per_run, view.max_requests_per_day) == (tier, per_run, per_day)
     assert s.for_source("alpaca").tier.name == "alpaca-basic" and s.for_source("alpaca").max_requests_per_day == 30000
     assert s.for_source("massive") is s
     limited = load_settings(env={"CRYPTO_VENUE_DAYS": "30"}, env_file=None)
@@ -139,14 +138,14 @@ def test_a_plugin_that_fails_to_load_is_left_out_and_reported(installed):
         raise ImportError("no module named acme_feed")
 
     found = installed(("broken", "acme_feed:PLUGIN", broken), ("empty", "empty_mod", lambda: SimpleNamespace()),
-                      ("twice", "other:PLUGIN", lambda: Provider(name="tiingo", title="Not Tiingo",
-                                                                 build=lambda s, b: None, assets=frozenset())))
-    assert list(found) == BUILT_IN  # the app goes on with the others
-    assert provider("tiingo").title == "Tiingo"
+                      ("acme", "acme_feed:PLUGIN", lambda: ACME),
+                      ("twice", "other:PLUGIN", lambda: replace(ACME, title="Not Acme")))
+    assert list(found) == BUILT_IN + ["acme"]  # the app goes on with the others; the first of a name is kept
+    assert provider("acme").title == "Acme Data"
     why = dict(registry.errors())
     assert "ImportError" in why["broken (acme_feed:PLUGIN)"]
     assert "defines no PLUGIN" in why["empty (empty_mod)"]
-    assert any("a second provider named 'tiingo'" in w for w in why.values())
+    assert any("a second provider named 'acme'" in w for w in why.values())
 
 
 def test_an_installed_package_never_replaces_a_built_in(installed):
@@ -195,12 +194,12 @@ def test_every_plugin_is_versioned_for_this_apps_contract():
     # with Massive, which declares where they are (1.8: the main file's news)
     want = {**dict.fromkeys(("alpaca", "boats", "tiingo", "tiingofx"), ("1.3.0", "1.6")),
             **dict.fromkeys(("massive", "massive-news"), ("1.3.0", "1.8")),
-            **{n: (v, "1.6") for n, v in PACKAGED.items()},  # the packages: their distributions' versions
+            **{n: (v, a) for n, (v, a, _) in PACKAGED.items()},  # the packages: their distributions' versions
             **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("1.3.0", "1.7")),
             "french": ("1.0.0", "1.4"), "datahub": ("1.0.0", "1.4")}
     assert {p.name: (p.version, p.api) for p in plugins_} == want
     assert all(registry.api_refusal(p.api) is None for p in plugins_)
-    assert registry.PLUGIN_API == "1.9"
+    assert registry.PLUGIN_API == "1.10"
 
 
 def test_a_plugins_parts_are_released_with_it():
@@ -306,7 +305,7 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
     assert out["api"] == registry.PLUGIN_API and out["errors"] == []
     assert {(r["version"], r["api"], r["origin"]) for r in out["providers"]} == {
         ("1.3.0", "1.6", "built in"), ("1.3.0", "1.8", "built in"),
-        *((v, "1.6", f"package: liminal-plugin-{n} (liminal_plugin_{n}:PLUGIN)") for n, v in PACKAGED.items())}
+        *((v, a, f"package: liminal-plugin-{registry.plugin_of(n)} ({e})") for n, (v, a, e) in PACKAGED.items())}
     pubs = {r["name"]: r for r in out["publishers"]}
     # the agencies are Federal's parts; Massive's headlines are in Massive's row; the dataset libraries
     assert list(pubs) == ["federal", "french", "datahub"]
@@ -338,7 +337,7 @@ def test_the_plugins_view_shows_each_plugins_version_and_origin(tmp_path):
     assert out["api"] == registry.PLUGIN_API
     assert {(p["version"], p["api"], p["origin"]) for p in out["plugins"]} == {
         ("1.3.0", "1.6", "built in"), ("1.3.0", "1.8", "built in"),
-        *((v, "1.6", f"package: liminal-plugin-{n} (liminal_plugin_{n}:PLUGIN)") for n, v in PACKAGED.items())}
+        *((v, a, f"package: liminal-plugin-{registry.plugin_of(n)} ({e})") for n, (v, a, e) in PACKAGED.items())}
     assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.3.0", "1.7"), ("1.3.0", "1.8"), ("1.0.0", "1.4")}
 
 
@@ -547,10 +546,10 @@ def test_tiingos_forex_is_a_feed_of_the_tiingo_plugin():
     """The user, 2026-10-30: "i also have tiingo and tiingo forex, tiingo should be one plugin"."""
     import importlib.util
 
-    from liminal.sources.plugins import tiingo
+    import liminal_plugin_tiingo as tiingo
 
     assert [p.name for p in tiingo.PLUGINS] == ["tiingo", "tiingofx"] and not hasattr(tiingo, "PLUGIN")
-    assert importlib.util.find_spec("liminal.sources.plugins.tiingofx") is None  # no plugin of its own
+    assert importlib.util.find_spec("liminal_plugin_tiingofx") is None  # no package of its own
     fx = provider("tiingofx")
     assert (fx.title, fx.part_of, fx.account, fx.archival) == ("Forex", "tiingo", "tiingo", False)
     assert provider("tiingo").archival  # its stocks' daily bars stay a closed archive; its forex is kept up to date

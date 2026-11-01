@@ -454,12 +454,16 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
      and have a separate repo"), the same way, one at a time: `liminal-plugin-bitstamp` 1.3.0
      (2026-11-01, its trade stream with it); `liminal-plugin-coinbase` 1.3.0 and
      `liminal-plugin-bitfinex` 1.2.0 (2026-11-01: `sources.archive.venue_view` reads the plan and
-     caps from the plugin's record, no longer from `config.PUBLIC_FEEDS`).
+     caps from the plugin's record, no longer from `config.PUBLIC_FEEDS`); `liminal-plugin-tiingo`
+     1.4.0 (2026-11-01, its forex feed and its Blue Ocean poller with it: API 1.10 gives a poller
+     the session calendar (`sources.stream.session_at`) and a plugin the machine-wide ledger
+     (`sources.registry.MachineLedger`); its key read from `Settings.env`, the app's
+     `tiingo_api_key` field and `config.PUBLIC_FEEDS` gone).
 
   The repositories it would make, under `pcxmac-dev`: `liminal-plugin-massive` (Massive and its
   headlines publisher, on its key), `liminal-plugin-alpaca` (Alpaca with its overnight feed on Blue
   Ocean, reached through Alpaca's API, keys and limits), `liminal-plugin-tiingo` (Tiingo with its
-  forex feed: one key and account), `liminal-plugin-coinbase` (made), `liminal-plugin-bitstamp` (made),
+  forex feed: one key and account; made), `liminal-plugin-coinbase` (made), `liminal-plugin-bitstamp` (made),
   `liminal-plugin-bitfinex` (made), `liminal-plugin-cboe` (made), and the publishers `liminal-plugin-federal`
   (the federal agencies, one plugin) and, later, a state regulators' plugin of its own.
 

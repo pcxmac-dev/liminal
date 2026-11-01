@@ -1260,8 +1260,11 @@ def daily_audit_text(a: dict, show: int = 10) -> str:
     lines = [f"Daily history of {a['stocks']:,} stocks (from the coverage ledger: no requests)",
              f"  complete from their listing date: {a['complete']:,}"]
     if a["head"]:
-        lines.append(f"  missing their oldest years: {len(a['head']):,} (the closed archives fill them: Tiingo, "
-                     f"{collector.SYMBOLS_PER_MONTH['tiingo']} a month, most traded first)")
+        archives = ', '.join(  # the closed archives installed (Tiingo's package), named as they are
+            f"{n} ({collector.SYMBOLS_PER_MONTH[n]} a month)" if n in collector.SYMBOLS_PER_MONTH else n
+            for n in providers() if is_archive(n)) or "none installed"
+        lines.append(f"  missing their oldest years: {len(a['head']):,} (the closed archives fill them: {archives}, "
+                     "most traded first)")
         lines += [f"    {t}: listed {l}, daily bars from {f}" for t, l, f in a["head"][:show]]
     if a["none"]:
         lines.append(f"  no daily bars yet: {len(a['none']):,} (daily bars first: {collector.DAILY_FIRST_PER_RUN:,} "

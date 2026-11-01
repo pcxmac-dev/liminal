@@ -47,7 +47,7 @@ from typing import TYPE_CHECKING, Callable, Iterable, Mapping
 
 from .. import layout
 from ..layout import MAIN, Database  # noqa: F401 - plugins import them from here
-from ..ratelimit import MachineLedger, RateLimiter
+from ..ratelimit import MachineLedger, RateLimiter  # plugins import MachineLedger from here (1.10)
 from .fetching import Fetched, FetchContext, Fetcher, Job  # noqa: F401 - plugins import them from here
 from .keys import KeyVar  # noqa: F401 - plugins import it from here
 from .publisher import Publisher
@@ -85,7 +85,10 @@ DEFAULT_PER_REQUEST = 1000  # bars a request returns, for a provider that does n
 # 1.9 (2026-10-31): a plugin's own fetching (sources/fetching.py: Fetcher, Job, Fetched,
 #   FetchContext; Provider.fetcher, Publisher.fetcher): its jobs on the shared fetch queue
 #   (storage/queue.py), taken by a worker of its own (runner.py).
-PLUGIN_API = "1.9"
+# 1.10 (2026-11-01): a poller's session calendar through the contract (sources/stream.py: session_at),
+#   and the machine-wide ledger a plugin counts its key's uses on (MachineLedger, imported here):
+#   what the Tiingo plugin reached into the app for, so it could leave as a package.
+PLUGIN_API = "1.10"
 
 
 def api_version(api) -> tuple[int, int]:

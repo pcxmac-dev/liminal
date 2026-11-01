@@ -128,11 +128,11 @@ def test_a_new_plan_has_its_refusals_asked_again(store):
 
 def test_an_unlimited_plan_reaches_back_to_where_its_history_begins():
     from liminal.collector import history_floor
-    from liminal.config import PUBLIC_FEEDS
+    from liminal.sources import provider
 
     assert history_floor(TIERS["advanced"], TODAY) == date(2003, 9, 10)  # all of Massive's stock history
     assert history_floor(TIERS["developer"], TODAY) == date(2016, 10, 25)  # ten years, a day inside
-    assert history_floor(PUBLIC_FEEDS["tiingo"][0], TODAY) == date(1962, 1, 1)
+    assert history_floor(provider("tiingo").tier, TODAY) == date(1962, 1, 1)
 
 
 def test_the_oldest_daily_bar_dates_the_start_of_a_sources_history():

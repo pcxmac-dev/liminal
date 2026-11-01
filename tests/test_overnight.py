@@ -121,7 +121,7 @@ def test_only_feeds_with_daily_bars_are_asked_for_them():
 
 def test_tiingo_scans_its_plan_and_reports_the_blue_ocean_add_on(store):
     from liminal import cli, sourcing
-    from liminal.sources.plugins import tiingo
+    import liminal_plugin_tiingo as tiingo  # its scan, with a date given
 
     class Client:
         def __init__(self):

@@ -38,8 +38,9 @@ Settings come from environment variables, optionally loaded from a `.env` file
 
 Public historical sources (closed feeds: they fill history nobody else holds, then are not asked
 again): Bitstamp, Coinbase and Bitfinex (crypto bars) and Cboe (index daily history), each its own
-package (liminal-plugin-<name>: pip install -e ".[plugins]"), need nothing;
-    TIINGO_API_KEY    a free tiingo.com account key: US stock daily bars from 1962 (environment only)
+package (liminal-plugin-<name>: pip install -e ".[plugins]"), need nothing; Tiingo (US stock daily
+bars from 1962, its forex; liminal-plugin-tiingo) a free account key, TIINGO_API_KEY (environment
+only; each plugin's keys: `python -m liminal plugins`);
     CRYPTO_VENUE_DAYS limit the crypto exchange feeds (Coinbase, Bitfinex) to this many days of history
                       (default: 0, everything they hold: Coinbase from 2015, Bitfinex from 2013)
 
@@ -147,12 +148,6 @@ ALPACA_TIERS: dict[str, Tier] = {
 }
 ALPACA_FEEDS = ("sip", "iex")
 
-# Public historical sources: (plan, max requests per run, per day). Tiingo's free plan allows 50
-# requests an hour and 1,000 a day; well inside it. (The crypto exchanges' and Cboe's are in their
-# packages: Provider.tier, per_run, per_day.)
-PUBLIC_FEEDS: dict[str, tuple[Tier, int, int]] = {
-    "tiingo": (Tier("tiingo-free", requests_per_minute=None, history_years=None, history_start=date(1962, 1, 1)), 45, 900),
-}
 ALPACA_CRYPTO_LOCS = ("us-1", "eu-1", "us")
 
 
@@ -179,7 +174,6 @@ class Settings:
     second_history_days: int = 365
     backups_keep: int = 7
     tick_min_free_gb: int = 250
-    tiingo_api_key: str | None = field(default=None, repr=False)
     gov_contact: str | None = field(default=None, repr=False)  # GOV_CONTACT: sent to agencies that ask (gov.py)
     crypto_venue_days: int = 0  # 0: all the history the exchange feeds hold
     # Coins recorded live from the exchanges' public streams (live.py); LIVE_CRYPTO=off for none.
@@ -434,7 +428,6 @@ def load_settings(
         second_history_days=_default(_int_setting(merged, "SECOND_HISTORY_DAYS"), 365),
         backups_keep=_default(_int_setting(merged, "BACKUPS_KEEP"), 7),
         tick_min_free_gb=_default(_int_setting(merged, "TICK_MIN_FREE_GB"), 250),
-        tiingo_api_key=_key(merged, "TIINGO_API_KEY"),
         gov_contact=(merged.get("GOV_CONTACT") or "").strip() or None,
         crypto_venue_days=_default(_int_setting(merged, "CRYPTO_VENUE_DAYS"), 0),
         live_coins=_live_coins(merged.get("LIVE_CRYPTO")),
