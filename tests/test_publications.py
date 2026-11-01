@@ -73,10 +73,13 @@ def test_each_agency_is_a_publisher_of_its_own_and_massives_headlines_sit_in_its
 def test_a_module_with_only_a_publisher_loads_and_a_feed_key_taken_is_left_out(monkeypatch):
     from liminal.sources import registry
 
+    from importlib.metadata import entry_points
+
     twin = Publisher("twin", "Twin", "", (Feed("fed-press", "X", "Dup", "https://x.gov/f"),), Policy(hosts=("x.gov",)),
                      order=900)  # after the Fed's: the first in order keeps the key
-    monkeypatch.setattr(registry, "_entry_points", lambda: [type("EP", (), {"name": "twin", "value": "pkg:twin",
-                                                                              "load": lambda self: twin})()])
+    real = list(entry_points(group=registry.ENTRY_POINTS))  # the Fed's plugin is a package: kept in sight
+    monkeypatch.setattr(registry, "_entry_points", lambda: [*real, type("EP", (), {"name": "twin", "value": "pkg:twin",
+                                                                                     "load": lambda self: twin})()])
     provs, pubs, errors = registry.discover_all()
     assert "twin" not in pubs and any("feed 'fed-press'" in why for _, why in errors)
     assert "fed" in pubs and "massive" in provs
@@ -168,7 +171,7 @@ def test_rate_limit_headers_are_kept_and_a_429_holds_it_off():
 
 # -- when ---------------------------------------------------------------------------------------------------
 def test_the_fed_is_read_at_2pm_on_fomc_days_and_otherwise_every_30_minutes():
-    from liminal.sources.plugins.federal import fed
+    import liminal_plugin_federal.fed as fed
 
     p = publishers()["fed"]
     press, speeches = p.feed("fed-press"), p.feed("fed-speeches")
@@ -367,7 +370,7 @@ def test_a_parsers_surprise_is_noted_and_never_stops_the_publishers_after_it():
         def json(self):
             return {"refRates": ["x"]}  # JSON of another shape: AttributeError deep in the parser
 
-    from liminal.sources.plugins.federal.nyfed import parse
+    from liminal_plugin_federal.nyfed import parse
 
     nyfed = Publisher("ny", "NY", "", (Feed("ny-r", "NY", "R", "https://markets.example.gov/r.json", "nyfed", parse=parse),),
                       Policy(hosts=("markets.example.gov",), min_minutes=5, per_day=40), order=1)

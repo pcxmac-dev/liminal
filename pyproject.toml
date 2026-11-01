@@ -33,6 +33,7 @@ plugins = [
     "liminal-plugin-tiingo @ git+https://github.com/pcxmac-dev/liminal-plugin-tiingo@v1.4.0",
     "liminal-plugin-french @ git+https://github.com/pcxmac-dev/liminal-plugin-french@v1.1.0",
     "liminal-plugin-datahub @ git+https://github.com/pcxmac-dev/liminal-plugin-datahub@v1.1.0",
+    "liminal-plugin-federal @ git+https://github.com/pcxmac-dev/liminal-plugin-federal@v1.4.0",
 ]
 
 [project.scripts]

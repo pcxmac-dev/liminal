@@ -9,7 +9,6 @@ from liminal import gov, publications
 from liminal.gov import GovDB, Source
 from liminal.sources import publishers
 from liminal.sources.publisher import parse_rss
-from liminal.sources.plugins.federal.fedreg import parse_fedreg
 
 NOW = datetime(2026, 10, 26, 6, 0, tzinfo=timezone.utc)  # Monday, 2:00 a.m. ET: no release moment near
 OFFICIAL = {n: p for n, p in publishers().items() if p.kind == "official"}
@@ -91,13 +90,6 @@ def test_feeds_are_read_into_items():
     atom = parse_rss(ATOM, Source("fed-speeches", "Fed", "Speeches", "u", item_kind="speech"))
     assert atom == [{"id": "tag:s1", "agency": "Fed", "title": "Speech", "url": "https://example.gov/s",
                      "published": "2026-10-20T15:00:00+00:00", "kind": "speech"}]
-
-
-def test_the_federal_register_tags_finras_and_the_exchanges_filings():
-    docs = {d["id"]: d for d in parse_fedreg(FEDREG)}
-    assert docs["2026-1"]["agency"] == "SEC" and docs["2026-1"]["tags"] == ["FINRA"]
-    assert docs["2026-2"]["tags"] == ["SRO"] and docs["2026-3"]["agency"] == "CFTC"
-    assert docs["2026-3"]["kind"] == "proposed rule" and docs["2026-3"]["published"] == "2026-10-22T00:00:00+00:00"
 
 
 def test_a_pass_reads_every_feed_once_the_sec_waits_for_a_contact():

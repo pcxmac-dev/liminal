@@ -11,13 +11,12 @@ Working notes so work can resume in a fresh session. Newest first.
   Blue Ocean poller; plugin API 1.10: `sources.stream.session_at`, `sources.registry.MachineLedger`;
   `config.PUBLIC_FEEDS` and the `tiingo_api_key` setting are gone, a plugin's key is in `Settings.env`),
   the dataset libraries `liminal-plugin-french` 1.1.0 and `liminal-plugin-datahub` 1.1.0 (the mirrors'
-  submodules stay in `data/github/`);
+  submodules stay in `data/github/`), the publishers `liminal-plugin-federal` 1.4.0 (the six agencies);
   each a public repository under pcxmac-dev, installed from its tag by the `plugins` extra, its
   clone beside the app's installed editable here. The app's suite now runs with the packages
   installed (`tests/conftest.py`; CI installs `.[dev,plugins]`), their records its fixtures; a
-  plugin's own parsing tests live in its repository. Next, in this order: federal, alpaca (with Blue
-  Ocean), massive (with its headlines). The recipe: docs/ARCHITECTURE.md, "Splitting the built-ins
-  into packages".
+  plugin's own parsing tests live in its repository. Next: alpaca (with Blue Ocean), then massive
+  (with its headlines). The recipe: docs/ARCHITECTURE.md, "Splitting the built-ins into packages".
 
 ## Renamed liminal (2026-11-01)
 

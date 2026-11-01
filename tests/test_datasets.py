@@ -12,10 +12,9 @@ import requests
 from liminal import datasets
 from liminal.datasets import DATASETS, due_files, fetch, status
 from liminal.sources import dataset as sdk
-from liminal.sources.plugins.federal import cftc
-from liminal.sources.plugins.federal.cftc import parse_cot
 from liminal.storage import Store
 
+import liminal_plugin_federal.cftc as cftc  # the CFTC's URL and publication rule: its package's
 import liminal_plugin_french as french  # the library's URL: its package's
 
 TODAY = date(2026, 10, 23)
@@ -104,13 +103,6 @@ def _web(url: str):
                           b"AAPL,Apple Inc.,Information Technology,Technology Hardware,Cupertino,1982-11-30,0000320193,1977\n"
                           b"JPM,JPMorgan Chase,Financials,Diversified Banks,New York,1975-06-30,0000019617,2000\n")
     return requests.ConnectionError("unreachable")
-
-
-def test_cot_series_per_market_and_field():
-    parsed = parse_cot("annual.txt", _cot("2026-03-03").encode())
-    assert parsed.series["001602:open_interest"] == ("WHEAT-SRW - CHICAGO BOARD OF TRADE: open interest", "contracts", "week")
-    assert ("001602:commercial_short", parsed.values[0][1], 200000.0) in parsed.values
-    assert len(parsed.values) == 8
 
 
 def test_fetch_keeps_each_provider_in_its_own_file(tmp_path):

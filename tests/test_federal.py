@@ -22,14 +22,14 @@ STATIC = Path(__file__).resolve().parents[1] / "src" / "liminal" / "gui" / "stat
 
 
 def test_the_federal_agencies_are_parts_of_one_plugin():
-    from liminal.sources.plugins import federal
+    import liminal_plugin_federal as federal
 
     assert [p.name for p in federal.PUBLISHERS] == ["federal", *AGENCIES]
     for gone in ("fed", "nyfed", "sec", "bls", "fedreg"):  # no plugin of their own now
-        assert importlib.util.find_spec(f"liminal.sources.plugins.{gone}") is None, gone
+        assert importlib.util.find_spec(f"liminal_plugin_{gone}") is None, gone  # no package of their own either
     pubs = publishers()
     assert list(pubs)[:7] == ["federal", *AGENCIES]  # the plugin's record first, its agencies after it
-    assert all(pubs[n].part_of == "federal" and (pubs[n].version, pubs[n].api) == ("1.3.0", "1.7") for n in AGENCIES)
+    assert all(pubs[n].part_of == "federal" and (pubs[n].version, pubs[n].api) == ("1.4.0", "1.7") for n in AGENCIES)
     assert pubs["federal"].feeds == () and pubs["federal"].part_of == ""
     assert registry.publisher_parts("federal") == AGENCIES and registry.publisher_of("sec") == "federal"
     assert registry.publisher_of("massive-news") == "massive" and registry.publisher_parts("massive-news") == []

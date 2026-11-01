@@ -426,7 +426,7 @@ def test_a_lock_is_never_seen_empty_and_one_being_written_is_held(tmp_path):
 
 def test_a_years_cot_file_closes_only_once_its_last_report_can_be_out(tmp_path, monkeypatch):
     from liminal import datasets
-    from liminal.sources.plugins.federal import cftc
+    import liminal_plugin_federal.cftc as cftc
     from liminal.storage import datasets as stored
 
     from .test_datasets import _Resp, _Session, _cot, _zip

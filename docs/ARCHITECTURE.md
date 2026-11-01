@@ -179,7 +179,8 @@ holding everything the app knows about it, so nothing else names a provider to d
 it. The built-in ones are `sources/plugins/` (Massive, Alpaca with its overnight feed on Blue Ocean,
 Bitstamp, Coinbase, Bitfinex, Tiingo with its forex feed (Cboe: a package of its own,
 `liminal-plugin-cboe`); the publishers: Federal, the federal
-agencies in one plugin (the Fed, New York Fed, SEC, BLS, Federal Register, CFTC: `plugins/federal/`),
+agencies in one plugin (the Fed, New York Fed, SEC, BLS, Federal Register, CFTC: the
+`liminal-plugin-federal` package),
 and Massive's headlines), one module each defining `PLUGIN` (Alpaca's and Tiingo's `PLUGINS`: two
 feeds each; Federal's `PUBLISHERS`), each holding its own client, source classes, live streams
 and datasets (Massive, Alpaca and Tiingo as packages with a `client.py`; the user, 2026-10-31: "every
@@ -461,14 +462,15 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
      `tiingo_api_key` field and `config.PUBLIC_FEEDS` gone); the dataset libraries
      `liminal-plugin-french` 1.1.0 and `liminal-plugin-datahub` 1.1.0 (2026-11-01; Datahub's
      mirrors' git submodules stay in the app's `data/github/`, where `LIMINAL_DATA_REPOS` points:
-     the plugin names each repository and file).
+     the plugin names each repository and file); the publishers `liminal-plugin-federal` 1.4.0
+     (2026-11-01, the six agencies with it; New York time from `sources.archive.ET`).
 
   The repositories it would make, under `pcxmac-dev`: `liminal-plugin-massive` (Massive and its
   headlines publisher, on its key), `liminal-plugin-alpaca` (Alpaca with its overnight feed on Blue
   Ocean, reached through Alpaca's API, keys and limits), `liminal-plugin-tiingo` (Tiingo with its
   forex feed: one key and account; made), `liminal-plugin-coinbase` (made), `liminal-plugin-bitstamp` (made),
   `liminal-plugin-bitfinex` (made), `liminal-plugin-cboe` (made), and the publishers `liminal-plugin-federal`
-  (the federal agencies, one plugin), the dataset libraries `liminal-plugin-french` (made) and
+  (the federal agencies, one plugin; made), the dataset libraries `liminal-plugin-french` (made) and
   `liminal-plugin-datahub` (made), and, later, a state regulators' plugin of its own.
 
 ## The Federal plugin (2026-10-30)
@@ -477,7 +479,8 @@ The user: "lets take a look at all regulatory agencies that affect corporations 
 whats already in place on this app and merge everything in to a Federal plugin, from news feeds to
 edgar access, to everything that matters"; "if there are state regulatory agencies, those would be
 in another plugin"; "if api keys are required we can address that". One publisher plugin,
-`sources/plugins/federal/`, a module per agency, each a part (`part_of="federal"`, API 1.2) with
+`liminal-plugin-federal` (a package of its own since 2026-11-01), a module per agency, each a part
+(`part_of="federal"`, API 1.2) with
 its own scrape checks. Official feeds and documented APIs only, never a page; nothing stored moves
 (gov/gov.db, datasets/cftc.db stay); new data in new files beside them. It holds three kinds:
 releases and news (read on schedules), data series (point in time, chartable), and company data

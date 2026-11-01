@@ -3,8 +3,8 @@ releases, rates), read on a schedule of its own by the recorder (publications.py
 sync; and the datasets it puts out (sources/dataset.py), fetched by `datasets` (datasets.py).
 
 A module in `sources/plugins/` defines `PUBLISHER` (a Publisher; `PUBLISHERS` for several), beside
-or instead of a feed's `PLUGIN`: the federal agencies are parts of one plugin (plugins/federal/, a
-module each: fed.py, sec.py ...; `part_of`), a vendor's headlines sit in its feed's module
+or instead of a feed's `PLUGIN`: the federal agencies are parts of one plugin (the liminal-plugin-federal
+package, a module each: fed.py, sec.py ...; `part_of`), a vendor's headlines sit in its feed's module
 (massive.py), its requests on that feed's account, and a library of datasets is a publisher with no
 feeds (the French and Datahub packages; the CFTC's in Federal).
 
