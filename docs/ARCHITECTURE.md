@@ -112,6 +112,15 @@ live recorder, whose "what changed since" read every bar's `stored_at`, had read
   version. A seek, not a read of the series: the live chart's check, derive's and the bad-data
   scan's "since the last build", the fetch check's "what this fetch stored". It is complete from
   `changes_since` and kept a week (`CHANGES_KEEP_MS`); a reader further behind reads `stored_at`, once.
+- **Calendar frames by the year** (2026-11-01). The weeks, months and years are built from the days,
+  and a rebuild covers the changed days' whole calendar years only (`derive._window`: from a week
+  before their first Jan 1, for the December week that reaches into the year, to the Jan 1 after
+  their last, exactly, so no bin of the next year is built from its first days alone). Before, any
+  changed day rebuilt the whole series' weeks, months and years, and the hourly sync's new day bar
+  on each of ~9,500 symbols rewrote about 1,500 bins apiece, 23 years of them: 14 million row
+  writes an hour into `feeds/massive.db`, each with its change log entry, for bins unchanged since
+  2003. An hour's build now rewrites this year's sixty-odd bins a symbol; the other years' bins
+  keep their `stored_at`, and a day pruned as bad data in an old year rebuilds that year alone.
 - **Bars-only mode** (`BARS_ONLY`, on by default). The app works from bars: no process opens the
   feeds' tick files but the live recorder, which records the streams' trades and builds their bars.
   The chart app, the sync, audits and checks never read them; a volume profile is spread from the
@@ -155,8 +164,10 @@ PLUGIN TYPE ENGINE|auto`); left to the app, the optimal one installed here.
   A write to an archived month in SQLite (a correction, a rebuild) marks it stale through triggers in
   the feed's file; it is read from SQLite until it is copied again into a new file. The pruned list
   and the revisions stay in SQLite, so filtered and as-of reads come out the same; so do the weeks,
-  months and years built from the days (`derive.py` rebuilds them whole, so a symbol's 2003 year
-  bar is written again every hour: archived, no month would ever have closed). The SQLite rows
+  months and years built from the days (`history.CALENDAR`): the current year's bins change with
+  every day bar, so no month of them would ever close. (Until 2026-11-01 `derive.py` rebuilt them
+  whole, a symbol's 2003 year bar written again every hour; it now rebuilds the changed days'
+  calendar years only, see Memory and disk, and they stay in SQLite all the same.) The SQLite rows
   stay ("we should always keep all source data"): freeing them is the user's decision.
 - **Documents in MongoDB** (`mongo.py`, `storage/documents.py`). MongoDB Community Server 9.0.4,
   approved by the user the same day, is unpacked under `%LOCALAPPDATA%\Programs\MongoDB` with no

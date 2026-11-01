@@ -3,6 +3,7 @@ replace them when they arrive, and what was known when stays readable."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -239,6 +240,66 @@ def test_frames_are_only_built_upward_seconds_to_10s_and_30s_and_days_to_weeks_m
     kinds = {k for (k,) in store._bars("tiingo").execute("SELECT DISTINCT timespan FROM built_bars")}
     assert kinds == {"week", "month", "year"}  # nothing finer than what it sent: gaps stay gaps
     assert store.kv_get(derive.PROGRESS_KEY) == ""  # cleared when the run ends
+
+
+def test_a_changed_day_rebuilds_the_weeks_months_and_years_of_its_year_only(store, monkeypatch):
+    """The hourly sync's new day bar on each of ~9,500 symbols rebuilt the whole series' weeks,
+    months and years (about 1,500 bins a symbol, 14 million rows an hour; 2026-11-01): now the
+    changed days' calendar years only, from a week before their Jan 1 (the December week that
+    reaches into the year) to the Jan 1 after, every other year's bins left as they are, their
+    stored_at and derivation kept; a day pruned (dirty) in another year rebuilds that year."""
+    days = {"2024-03-04": 10.0, "2024-03-05": 11.0, "2025-06-02": 20.0, "2025-12-29": 30.0, "2025-12-30": 31.0,
+            "2025-12-31": 32.0, "2026-01-02": 40.0, "2026-01-05": 41.0, "2026-06-15": 50.0}  # Mondays on, and New Year
+    with monkeypatch.context() as m:  # stored a while ago
+        _stored_at(m, 1_000)
+        store.upsert_bars("massive", "SPCX", "day", 1, [_bar(f"{d} 00:00", p) for d, p in days.items()])
+    conn = store._bars("massive")
+    clock = {"ms": int(datetime.now(timezone.utc).timestamp() * 1000)}  # derive's clock: builds minutes apart
+    monkeypatch.setattr(derive, "time_module", SimpleNamespace(time=lambda: clock["ms"] / 1000))
+
+    def build(stamp: int) -> int:
+        """A build five minutes after the last (past SLACK_MS: a write between two builds is seen by
+        one), its bins stamped `stamp` so a rebuilt bin is told from one left alone."""
+        clock["ms"] += 300_000
+        with monkeypatch.context() as m:
+            _stored_at(m, stamp)
+            return derive.build_chain(store, "massive", "SPCX", "day", "stock")
+
+    def bins() -> dict:
+        return {(span, pd.Timestamp(ts, unit="ms", tz="UTC").tz_convert(ET).strftime("%Y-%m-%d")): (stored, did, high)
+                for span, ts, stored, did, high in conn.execute(
+                    "SELECT timespan, ts, stored_at, derivation, high FROM built_bars ORDER BY timespan, ts")}
+
+    assert build(5_000) == 13  # the first build, everything held: 5 weeks, 5 months, 3 years
+    first = bins()
+    assert len(first) == 13 and {v[0] for v in first.values()} == {5_000}
+    # the sync's new bar: one day of 2026 changes. 2026's bins are built again, and the week of
+    # 2025-12-29 that reaches into it (the window starts Dec 25); 2024's and 2025's are left as they were
+    with monkeypatch.context() as m:
+        _stored_at(m, clock["ms"] + 1_000)  # written just after the first build
+        store.upsert_bars("massive", "SPCX", "day", 1, [_bar("2026-06-15 00:00", 500.0)])
+    assert build(6_000) == 6
+    second = bins()
+    rebuilt = {k for k, v in second.items() if v[0] == 6_000}
+    assert rebuilt == {("week", "2025-12-29"), ("week", "2026-01-05"), ("week", "2026-06-15"),
+                       ("month", "2026-01-01"), ("month", "2026-06-01"), ("year", "2026-01-01")}
+    assert {k: v for k, v in second.items() if k not in rebuilt} == {k: v for k, v in first.items() if k not in rebuilt}
+    assert second[("year", "2026-01-01")][2] == 501.0 and second[("week", "2025-12-29")][2] == 41.0  # Jan 2 in its week
+    # a day of 2025 pruned as bad data (baddata.py then marks its span dirty): 2025's bins are built
+    # again from the days left, the week and month left without any go, and the week of Dec 29 is
+    # whole: Jan 2 of 2026 is read in beside the window (a week of margin, not a day)
+    gone = pd.DataFrame([{"ts": _ms("2025-06-02 00:00"), "open": 20.0, "high": 21.0, "low": 19.0, "close": 20.0,
+                          "volume": 10.0, "vwap": 20.0, "transactions": 1}])
+    store.prune("massive", "SPCX", "day", 1, gone, "spike", True)
+    derive.mark_dirty(store, "massive", "SPCX", "day", _ms("2025-06-02 00:00"), _ms("2025-06-03 00:00"))
+    assert build(7_000) == 3
+    third = bins()
+    assert {k for k, v in third.items() if v[0] == 7_000} == {("week", "2025-12-29"), ("month", "2025-12-01"),
+                                                              ("year", "2025-01-01")}
+    assert ("week", "2025-06-02") not in third and ("month", "2025-06-01") not in third
+    assert third[("year", "2025-01-01")][2] == 33.0 and third[("week", "2025-12-29")][2] == 41.0
+    assert {k: v for k, v in third.items() if v[0] != 7_000} == {k: v for k, v in second.items() if k[1][:4] != "2025"}
+    assert derive.take_dirty(store, "massive", "SPCX", "day") is None  # the mark is cleared once built
 
 
 def test_multi_hour_bins_start_at_midnight_in_the_day_zone():
