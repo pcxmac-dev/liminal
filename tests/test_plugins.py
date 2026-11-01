@@ -15,18 +15,19 @@ from liminal.sources import (build_source, feed_profiles, is_archive, markets, p
                                      rate_window, registry, supports)
 from liminal.sources.registry import KeyVar, Provider
 from liminal.symbols import resolve
-from liminal.sources.plugins.alpaca import IEX_FEED
 
 from .conftest import FakeSource
 
-BUILT_IN = ["massive", "alpaca", "boats"]  # still in sources/plugins/
+BUILT_IN = ["massive"]  # still in sources/plugins/
 # Released on their own (pyproject.toml: the `plugins` extra) and installed beside the app: the suite
 # sees them as the user's app does (tests/conftest.py), each with its distribution's version.
 PACKAGED = {  # name: (its distribution's version, the contract it needs, its entry point's value)
     "bitstamp": ("1.3.0", "1.6", "liminal_plugin_bitstamp:PLUGIN"), "coinbase": ("1.3.0", "1.6", "liminal_plugin_coinbase:PLUGIN"),
     "bitfinex": ("1.2.0", "1.6", "liminal_plugin_bitfinex:PLUGIN"), "cboe": ("1.2.0", "1.6", "liminal_plugin_cboe:PLUGIN"),
-    "tiingo": ("1.4.0", "1.10", "liminal_plugin_tiingo"), "tiingofx": ("1.4.0", "1.10", "liminal_plugin_tiingo")}
+    "tiingo": ("1.4.0", "1.10", "liminal_plugin_tiingo"), "tiingofx": ("1.4.0", "1.10", "liminal_plugin_tiingo"),
+    "alpaca": ("1.4.0", "1.11", "liminal_plugin_alpaca"), "boats": ("1.4.0", "1.11", "liminal_plugin_alpaca")}
 TIINGO_BOATS = "tiingoboats"  # Tiingo's Blue Ocean feed, live: its package's
+IEX_FEED = "iex"  # Alpaca's IEX stream, live: its package's
 FEEDS = ["massive", "alpaca", "boats", "bitstamp", "coinbase", "bitfinex", "cboe", "tiingo", "tiingofx"]  # all, in order
 LISTED = [n for n in FEEDS if n not in ("boats", "tiingofx")]  # the plugins listed: Alpaca's and Tiingo's second feeds in them
 
@@ -195,14 +196,13 @@ def test_every_plugin_is_versioned_for_this_apps_contract():
     # too; Federal declares the SEC's GOV_CONTACT and the CFTC's dataset (1.4), as the dataset
     # libraries their datasets; Federal's feeds their parsers (1.7); Massive's headlines are released
     # with Massive, which declares where they are (1.8: the main file's news)
-    want = {**dict.fromkeys(("alpaca", "boats", "tiingo", "tiingofx"), ("1.3.0", "1.6")),
-            **dict.fromkeys(("massive", "massive-news"), ("1.3.0", "1.8")),
+    want = {**dict.fromkeys(("massive", "massive-news"), ("1.3.0", "1.8")),
             **{n: (v, a) for n, (v, a, _) in PACKAGED.items()},  # the packages: their distributions' versions
             **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("1.4.0", "1.7")),  # its package's
             "french": ("1.1.0", "1.4"), "datahub": ("1.1.0", "1.4")}  # the dataset libraries: packages too
     assert {p.name: (p.version, p.api) for p in plugins_} == want
     assert all(registry.api_refusal(p.api) is None for p in plugins_)
-    assert registry.PLUGIN_API == "1.10"
+    assert registry.PLUGIN_API == "1.11"
 
 
 def test_a_plugins_parts_are_released_with_it():
@@ -307,7 +307,7 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
     out = json.loads(capsys.readouterr().out)
     assert out["api"] == registry.PLUGIN_API and out["errors"] == []
     assert {(r["version"], r["api"], r["origin"]) for r in out["providers"]} == {
-        ("1.3.0", "1.6", "built in"), ("1.3.0", "1.8", "built in"),
+        ("1.3.0", "1.8", "built in"),
         *((v, a, f"package: liminal-plugin-{registry.plugin_of(n)} ({e})") for n, (v, a, e) in PACKAGED.items())}
     pubs = {r["name"]: r for r in out["publishers"]}
     # the agencies are Federal's parts; Massive's headlines are in Massive's row; the dataset libraries
@@ -326,7 +326,7 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
                and "you set: GOV_CONTACT" in line
                for line in text.splitlines())
     assert any(line.strip().startswith("and Federal Reserve (fed):") for line in text.splitlines())
-    assert "[1.3.0 for plugin API 1.6, built in]" in text
+    assert "[1.4.0 for plugin API 1.11, package: liminal-plugin-alpaca (liminal_plugin_alpaca)]" in text
     assert "[1.3.0 for plugin API 1.6, package: liminal-plugin-bitstamp (liminal_plugin_bitstamp:PLUGIN)]" in text
     assert any(line.strip().startswith("and Massive headlines (publisher massive-news):") for line in text.splitlines())
     assert not any(line.startswith("massive-news") for line in text.splitlines())
@@ -340,7 +340,7 @@ def test_the_plugins_view_shows_each_plugins_version_and_origin(tmp_path):
         out = ChartApp(store, settings=load_settings(env={}, env_file=None)).plugins()
     assert out["api"] == registry.PLUGIN_API
     assert {(p["version"], p["api"], p["origin"]) for p in out["plugins"]} == {
-        ("1.3.0", "1.6", "built in"), ("1.3.0", "1.8", "built in"),
+        ("1.3.0", "1.8", "built in"),
         *((v, a, f"package: liminal-plugin-{registry.plugin_of(n)} ({e})") for n, (v, a, e) in PACKAGED.items())}
     assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.4.0", "1.7"), ("1.3.0", "1.8"), ("1.1.0", "1.4")}
 
@@ -488,13 +488,13 @@ def test_blue_ocean_is_a_feed_of_the_alpaca_plugin():
     Alpaca's keys and limits."""
     import importlib.util
 
-    from liminal.sources.plugins import alpaca
+    import liminal_plugin_alpaca as alpaca
 
     assert [p.name for p in alpaca.PLUGINS] == ["alpaca", "boats"] and not hasattr(alpaca, "PLUGIN")
-    assert importlib.util.find_spec("liminal.sources.plugins.boats") is None  # no plugin of its own
+    assert importlib.util.find_spec("liminal_plugin_boats") is None  # no package of its own
     boats = provider("boats")
     assert (boats.title, boats.part_of, boats.account) == ("Blue Ocean", "alpaca", "alpaca")
-    assert boats.build.__module__ == "liminal.sources.plugins.alpaca"
+    assert boats.build.__module__ == "liminal_plugin_alpaca"
     assert registry.plugin_feeds("alpaca") == ["alpaca", "boats"] and registry.plugin_of("boats") == "alpaca"
     assert registry.plugin_feeds("massive") == ["massive"] and registry.plugin_of("coinbase") == "coinbase"
     s = load_settings(env={"ALPACA_API_KEY_ID": "i", "ALPACA_API_SECRET_KEY": "s"}, env_file=None)

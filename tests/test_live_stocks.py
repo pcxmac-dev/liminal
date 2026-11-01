@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import json
 
-import pytest
 
 from liminal import live
 from liminal.config import load_settings
 from liminal.gui.bars import BarEngine
 from liminal.gui.server import ChartApp
 from liminal.storage import Store
-from liminal.sources.plugins.alpaca import AlpacaIexStream
+from liminal_plugin_alpaca import AlpacaIexStream  # the stream the recorder drives: its package's
 from liminal.sources import stream
 
 T0 = 1_792_764_000_000  # 2026-10-23 14:00 UTC (10:00 in New York), ms
@@ -23,33 +22,6 @@ def _trade(i: int, price: float, size: int, iso: str) -> dict:
 
 def _iex() -> AlpacaIexStream:
     return AlpacaIexStream("PKTESTKEY", "test-secret")
-
-
-def test_iex_messages_become_trades_withdrawals_and_refusals():
-    s = _iex()
-    (auth,) = s.subscribe(())
-    assert json.loads(auth) == {"action": "auth", "key": "PKTESTKEY", "secret": "test-secret"}
-    assert "test-secret" not in repr(s) and "PKTESTKEY" not in repr(s)  # never printed
-    assert s.parse([{"T": "success", "msg": "connected"}, {"T": "success", "msg": "authenticated"}]) == [] and s.authed
-    s.parse([{"T": "subscription", "trades": ["AAPL", "MSFT"], "quotes": [], "bars": []}])
-    assert s.confirmed == {"AAPL", "MSFT"}
-
-    ((ticker, t),) = s.parse([_trade(1, 230.0, 100, "2026-10-23T14:00:01.123456789Z")])
-    assert ticker == "AAPL" and t["sip_timestamp"] == (T0 + 1123) * 1_000_000 + 456_789
-    assert t["exchange"] == ord("V") and t["tape"] == 3 and t["sequence_number"] == (1 << 6) | (ord("V") & 63)
-
-    ((_, gone),) = s.parse({"T": "x", "S": "AAPL", "i": 1, "x": "V", "p": 230.0, "s": 100, "a": "C",
-                            "t": "2026-10-23T14:00:01.123456789Z", "z": "C"})
-    assert gone["withdrawn"] and gone["sequence_number"] == t["sequence_number"]
-    was, now = s.parse({"T": "c", "S": "AAPL", "x": "V", "oi": 3, "op": 10.0, "os": 5, "oc": ["@"], "ci": 4,
-                        "cp": 10.5, "cs": 5, "cc": ["@"], "t": "2026-10-23T14:00:02Z", "z": "C"})
-    assert was[1]["withdrawn"] and was[1]["price"] == 10.0 and not now[1].get("withdrawn") and now[1]["price"] == 10.5
-
-    with pytest.raises(stream.Refused) as refused:
-        s.parse([{"T": "error", "code": 402, "msg": "auth failed"}])
-    assert refused.value.wait == 600  # bad keys: not tried again for ten minutes
-    with pytest.raises(stream.Notice):
-        s.parse([{"T": "error", "code": 405, "msg": "symbol limit exceeded"}])  # the connection stays
 
 
 def test_the_stream_follows_the_symbols_wanted_once_the_keys_are_accepted(tmp_path):

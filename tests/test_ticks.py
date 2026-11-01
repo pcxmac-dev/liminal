@@ -7,7 +7,9 @@ import pytest
 
 from liminal import collector
 from liminal.collector import ET, build_from_ticks, sync
-from liminal.config import ALPACA_TIERS, TIERS
+from liminal.config import TIERS
+
+from liminal_plugin_alpaca import ALPACA_TIERS  # the plugin's plans
 from liminal.coverage import FeedProfile, ms, plan
 from liminal.symbols import resolve
 from liminal.ticks import build_bars, eligibility
@@ -114,7 +116,7 @@ def test_a_minute_cut_by_a_stopped_run_is_built_when_its_ticks_are_complete(stor
 
 
 def test_alpaca_crypto_ticks_need_no_key():
-    from liminal.sources.plugins.alpaca.client import AlpacaClient, AlpacaSource
+    from liminal_plugin_alpaca.client import AlpacaClient, AlpacaSource
 
     session = FakeSession([FakeResponse(200, {"trades": {"BTC/USD": [
         {"i": 7, "p": 81658, "s": 0.0004, "t": "2026-10-22T12:00:00.200261576Z", "tks": "B"}]}, "next_page_token": None})])

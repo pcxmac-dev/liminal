@@ -14,7 +14,7 @@ from liminal import cli, collector, sourcing
 from liminal.config import Settings, TIERS, load_settings, with_detected
 from liminal.errors import NotEntitled
 from liminal.sources import build_source, feed_profiles, providers
-from liminal.sources.plugins.alpaca.client import AlpacaSource
+from liminal_plugin_alpaca.client import AlpacaSource
 from liminal.sources.registry import Scanned
 from liminal.storage import Store
 
@@ -44,14 +44,14 @@ def test_a_scan_answers_with_rows_or_with_the_plan_they_show_and_sets_only_its_o
 
 def test_a_detected_plan_applies_only_where_the_user_set_none():
     s = load_settings(env=KEYS, env_file=None)
-    assert s.alpaca.tier.name == "alpaca-basic" and s.variables == KEYS
+    assert s.plugin("alpaca").tier.name == "alpaca-basic" and s.variables == KEYS
     plus = with_detected(s, {"ALPACA_PLAN": "algo_trader_plus"})
-    assert plus.alpaca.tier.name == "alpaca-plus" and plus.detected == {"ALPACA_PLAN": "algo_trader_plus"}
+    assert plus.plugin("alpaca").tier.name == "alpaca-plus" and plus.detected == {"ALPACA_PLAN": "algo_trader_plus"}
     assert plus.variables == KEYS and plus.api_key == "k"  # the rest as it was
     assert with_detected(plus, {"ALPACA_PLAN": "algo_trader_plus"}) is plus  # nothing new: the same settings
-    assert with_detected(plus, {}).alpaca.tier.name == "alpaca-basic"  # a later scan found none: back to yours
+    assert with_detected(plus, {}).plugin("alpaca").tier.name == "alpaca-basic"  # a later scan found none: back to yours
     mine = load_settings(env={**KEYS, "ALPACA_PLAN": "basic"}, env_file=None)
-    assert with_detected(mine, {"ALPACA_PLAN": "algo_trader_plus"}).alpaca.tier.name == "alpaca-basic"  # yours wins
+    assert with_detected(mine, {"ALPACA_PLAN": "algo_trader_plus"}).plugin("alpaca").tier.name == "alpaca-basic"  # yours wins
     assert with_detected(s, {"ALPACA_PLAN": "platinum"}) is s  # a value its settings refuse: not applied
     direct = Settings(api_key="k", tier=TIERS["free"], db_path=Path("x.db"))
     assert with_detected(direct, {"MASSIVE_TIER": "advanced"}) is direct  # made directly: nothing to rebuild from
@@ -68,7 +68,7 @@ def test_the_plans_found_are_read_from_the_database_by_every_command(tmp_path):
     assert set(sourcing.scans_at(db)) == {"alpaca", "tiingo"}
     assert sourcing.detected_plans(sourcing.scans_at(db)) == {"ALPACA_PLAN": "algo_trader_plus"}
     applied = sourcing.apply_detected(s)
-    assert applied.alpaca.tier.name == "alpaca-plus" and applied.for_source("alpaca").tier.requests_per_minute == 9500
+    assert applied.plugin("alpaca").tier.name == "alpaca-plus" and applied.for_source("alpaca").tier.requests_per_minute == 9500
     state = providers()["alpaca"].plan_state(applied)
     assert state == [{"name": "ALPACA_PLAN", "value": "algo_trader_plus", "origin": "scan",
                       "choices": ["basic", "algo_trader_plus"]}]
@@ -90,7 +90,7 @@ class _AlpacaClient:
 
 
 def test_alpaca_tells_its_plans_apart_by_the_latest_fifteen_minutes():
-    from liminal.sources.plugins import alpaca
+    import liminal_plugin_alpaca as alpaca
 
     now = datetime(2026, 10, 27, 15, 0, tzinfo=timezone.utc)
     for refuse, plan in ((True, "basic"), (False, "algo_trader_plus")):
@@ -298,10 +298,10 @@ def test_the_chart_app_rescans_in_a_process_of_its_own_one_at_a_time(tmp_path):
 def test_the_chart_app_takes_up_a_plan_a_scan_found(tmp_path):
     store, app = _app(tmp_path)
     try:
-        assert app.settings.alpaca.tier.name == "alpaca-basic"
+        assert app.settings.plugin("alpaca").tier.name == "alpaca-basic"
         _keep(store, "alpaca", {"ALPACA_PLAN": "algo_trader_plus"})
         app._settings_at = 0.0  # SETTINGS_TTL_S passed
-        assert app.settings.alpaca.tier.name == "alpaca-plus"
+        assert app.settings.plugin("alpaca").tier.name == "alpaca-plus"
         alpaca = next(p for p in app.plugins()["plugins"] if p["name"] == "alpaca")
         assert alpaca["plan"]["vars"][0] == {"name": "ALPACA_PLAN", "value": "algo_trader_plus", "origin": "scan",
                                              "choices": ["basic", "algo_trader_plus"]}

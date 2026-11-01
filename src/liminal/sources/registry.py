@@ -88,7 +88,9 @@ DEFAULT_PER_REQUEST = 1000  # bars a request returns, for a provider that does n
 # 1.10 (2026-11-01): a poller's session calendar through the contract (sources/stream.py: session_at),
 #   and the machine-wide ledger a plugin counts its key's uses on (MachineLedger, imported here):
 #   what the Tiingo plugin reached into the app for, so it could leave as a package.
-PLUGIN_API = "1.10"
+# 1.11 (2026-11-01): a plugin's own settings (Provider.settings -> Settings.plugins, Settings.plugin):
+#   Alpaca's keys, plan, feed, crypto venue and caps, once config.py's AlpacaSettings.
+PLUGIN_API = "1.11"
 
 
 def api_version(api) -> tuple[int, int]:
@@ -265,6 +267,11 @@ class Provider:
     # Plugins view): a few requests asking what its plan really gives, each answer (what, available,
     # detail), or a `Scanned` with the plan they show too; kept, and shown in its report.
     scan: Callable[["DataSource"], "list[tuple[str, bool, str]] | Scanned"] | None = None
+    # Its own settings (plugin API 1.11): built from every variable the app read (Settings.variables)
+    # when the settings load, kept as Settings.plugins[name] and reached with Settings.plugin(name) by it
+    # and by the feeds that are parts of it; a ConfigError for a value it refuses stops the app as any
+    # setting's does (Alpaca's keys, plan, feed, venue and caps).
+    settings: Callable[[Mapping[str, str]], object] | None = None
     version: str = ""  # the plugin's own version (a package's, left empty: its distribution's)
     api: str = "1.0"  # the contract (PLUGIN_API) it was written for: another major is left out
     origin: str = "built in"  # set when loaded: built in, or the package's entry point

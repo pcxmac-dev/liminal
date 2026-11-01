@@ -463,11 +463,14 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
      `liminal-plugin-french` 1.1.0 and `liminal-plugin-datahub` 1.1.0 (2026-11-01; Datahub's
      mirrors' git submodules stay in the app's `data/github/`, where `LIMINAL_DATA_REPOS` points:
      the plugin names each repository and file); the publishers `liminal-plugin-federal` 1.4.0
-     (2026-11-01, the six agencies with it; New York time from `sources.archive.ET`).
+     (2026-11-01, the six agencies with it; New York time from `sources.archive.ET`);
+     `liminal-plugin-alpaca` 1.4.0 (2026-11-01, Blue Ocean and the IEX stream with it: API 1.11 gives a
+     plugin its own settings, `Provider.settings` built when the app's load and reached with
+     `Settings.plugin(name)`, so Alpaca's keys, plan, feed, venue and caps left `config.py`).
 
   The repositories it would make, under `pcxmac-dev`: `liminal-plugin-massive` (Massive and its
   headlines publisher, on its key), `liminal-plugin-alpaca` (Alpaca with its overnight feed on Blue
-  Ocean, reached through Alpaca's API, keys and limits), `liminal-plugin-tiingo` (Tiingo with its
+  Ocean, reached through Alpaca's API, keys and limits; made), `liminal-plugin-tiingo` (Tiingo with its
   forex feed: one key and account; made), `liminal-plugin-coinbase` (made), `liminal-plugin-bitstamp` (made),
   `liminal-plugin-bitfinex` (made), `liminal-plugin-cboe` (made), and the publishers `liminal-plugin-federal`
   (the federal agencies, one plugin; made), the dataset libraries `liminal-plugin-french` (made) and

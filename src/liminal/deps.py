@@ -84,7 +84,7 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
                      f"{used} of {settings.max_requests_per_day} used today"))
 
     # -- second feed and the one-feed-per-span rule ---------------------------------
-    a = getattr(settings, "alpaca", None)
+    a = settings.plugin("alpaca")  # the Alpaca plugin's own settings (API 1.11): keys, plan, feed, venue, caps
     if a is not None:
         out.append(Check("Alpaca", "API keys", "OK" if a.has_keys else "WARN",
                          f"set ({a.tier.name}, feed {a.feed}, crypto from {a.crypto_loc})" if a.has_keys

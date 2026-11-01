@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 
 
 from liminal.collector import ET, sync
-from liminal.config import ALPACA_TIERS
+from liminal_plugin_alpaca import ALPACA_TIERS  # the plugin's plans
 from liminal.coverage import FeedProfile, ms, plan
 from liminal.sources import provider, supports
 from liminal.symbols import resolve

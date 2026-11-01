@@ -6,7 +6,9 @@ import pytest
 
 from liminal import audit
 from liminal.collector import ET, sync
-from liminal.config import ALPACA_TIERS, TIERS
+from liminal.config import TIERS
+
+from liminal_plugin_alpaca import ALPACA_TIERS  # the plugin's plans
 from liminal.coverage import FeedProfile, has_open_time, ms, plan, subtract
 from liminal.live import WATCHLISTS_KEY
 from liminal.models import Instrument

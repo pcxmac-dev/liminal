@@ -17,7 +17,6 @@ from liminal.gui.bars import BarEngine, MERGED, calendar_key, in_session, sessio
 from liminal.gui.markets import symbol_sessions
 from liminal.sessions import ET, MarketCalendar
 from liminal.sources import build_source, feed_profiles, providers, rate_window
-from liminal.sources.plugins.alpaca.client import BoatsSource
 from liminal.storage import Store
 
 KEYS = {"MASSIVE_API_KEY": "k", "ALPACA_API_KEY_ID": "i", "ALPACA_API_SECRET_KEY": "s"}
@@ -101,7 +100,7 @@ def test_blue_ocean_is_a_feed_of_its_own_on_alpacas_keys_and_limits():
     assert "boats" not in feed_profiles(load_settings(env={}, env_file=None)) or \
         feed_profiles(load_settings(env={}, env_file=None))["boats"].assets == frozenset()  # no keys: nothing
     source = build_source("boats", s)
-    assert isinstance(source, BoatsSource) and source.name == "boats"
+    assert type(source).__name__ == "BoatsSource" and source.name == "boats"  # the plugin's, from its package
     assert source.resolutions("stock") == ("minute",) and source.native_frames("stock") == ()
     assert source.serves("stock") and not source.serves("crypto")
     params = source._bar_params("AAPL", date(2026, 10, 26), date(2026, 10, 27), "minute", 1, False, "stock", 10)

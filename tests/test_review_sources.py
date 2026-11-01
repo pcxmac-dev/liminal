@@ -13,7 +13,7 @@ import requests
 
 from liminal import cli, killswitch, live
 from liminal.errors import NotEntitled, Paused, RateLimited, SourceError, Unauthorized
-from liminal.sources.plugins.alpaca.client import AlpacaClient
+from liminal_plugin_alpaca.client import AlpacaClient  # Alpaca's client, on the app's HttpClient
 from liminal.sources.http import RETRY_WAIT_MAX, SameHostSession, retry_delay as _retry_delay
 from liminal.sources.plugins.massive.client import MassiveClient, MassiveSource
 from liminal.storage import Store
@@ -66,20 +66,6 @@ def test_a_revoked_key_stops_the_sync_after_one_request_and_kills_the_feed(tmp_p
     with Store(tmp_path / "data" / "m.db") as s:
         k = killswitch.killed(s, "massive", "fetch")
         assert k and "401" in k["why"]
-
-
-def test_alpaca_keys_the_trading_api_refuses_lose_the_reference_record_only():
-    session = FakeSession([FakeResponse(401, {"message": "unauthorized."}), FakeResponse(200, {"bars": {}}),
-                           FakeResponse(401, {"message": "unauthorized."})])
-    client = AlpacaClient("KID", "SECRET", session=session, sleep=lambda s: None)
-    with pytest.raises(NotEntitled, match="ALPACA_PAPER"):  # paper keys on the live API, or the reverse
-        client.get(f"{client.trading_url}/v2/assets/AAPL")
-    with pytest.raises(NotEntitled, match="nothing sent"):
-        client.get(f"{client.trading_url}/v2/assets/MSFT")
-    assert client.get("/v2/stocks/bars") == {"bars": {}}  # the data API still answers
-    with pytest.raises(Unauthorized):  # the data API refusing them is the keys refused
-        client.get("/v2/stocks/bars")
-    assert len(session.calls) == 3
 
 
 # -- server waits and redirects (low) --------------------------------------------------------------

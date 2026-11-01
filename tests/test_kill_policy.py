@@ -299,7 +299,7 @@ def test_keys_are_read_without_the_spaces_and_line_breaks_around_them():
 
     s = load_settings(env={"MASSIVE_API_KEY": " mk\r\n", "TIINGO_API_KEY": "tk\n", "ALPACA_API_KEY_ID": " id ",
                            "ALPACA_API_SECRET_KEY": "sk\n"}, env_file=None)
-    assert (s.api_key, s.alpaca.key_id, s.alpaca.secret_key) == ("mk", "id", "sk")
+    assert (s.api_key, s.plugin("alpaca").key_id, s.plugin("alpaca").secret_key) == ("mk", "id", "sk")
     import liminal_plugin_tiingo
 
     assert s.env["TIINGO_API_KEY"] == "tk\n" and liminal_plugin_tiingo.api_key(s) == "tk"  # a plugin's key: it strips it

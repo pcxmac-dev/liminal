@@ -48,22 +48,16 @@ Government and regulators (gov.py; the Gov view): the Fed, BLS, the Federal Regi
 Fed need nothing. GOV_CONTACT (your name and email) is sent to the agencies that ask automated
 readers to identify themselves (the SEC): their feeds wait until it is set.
 
-Alpaca (second feed; stocks and crypto). Keys are only ever read from the environment:
-    ALPACA_API_KEY_ID, ALPACA_API_SECRET_KEY   (Alpaca's own APCA_API_KEY_ID / APCA_API_SECRET_KEY
-                      also work). Without them only crypto is collected (it needs no key).
-    ALPACA_PLAN       basic | algo_trader_plus   (default: basic)
-    ALPACA_RPM        override the plan's requests-per-minute limit
-    ALPACA_FEED       sip (all US exchanges, default) | iex
-    ALPACA_CRYPTO_LOC us-1 (Kraken, default) | eu-1 (Kraken EU) | us (Alpaca's own venue)
-    ALPACA_PAPER      1 (default): keys are paper-trading keys; 0: live keys (decides the host
-                      asked for reference data; market data is the same either way)
+Alpaca (second feed; stocks and crypto) is the liminal-plugin-alpaca package: its keys
+(ALPACA_API_KEY_ID, ALPACA_API_SECRET_KEY), plan, feed, crypto venue, paper or live host and caps are
+its own settings (Provider.settings, plugin API 1.11: Settings.plugin("alpaca")), documented in its
+README; keys are only ever read from the environment. The live streams:
     LIVE_STOCKS       on (default) | off: with keys, the live recorder streams IEX's trades for the
                       symbols open on a chart (at most 30; live.py)
     LIVE_STREAMS      selected (default) | always: selected, every live stream (coins and stocks)
                       runs only for the symbols open on a chart, and with none open nothing is
                       connected (the sync downloads the time later); always, the coins of LIVE_CRYPTO
                       stream all the time, and stocks open on a chart or on the rail's watchlists
-    ALPACA_MAX_REQUESTS_PER_RUN / ALPACA_MAX_REQUESTS_PER_DAY   hard caps (default: 3000 / 30000)
 """
 from __future__ import annotations
 
@@ -138,19 +132,6 @@ def tier_for(reach: dict[str, bool]) -> str:
     return "free"
 
 
-# Alpaca market data plans (docs.alpaca.markets, Oct 2026). Basic is free: every US exchange (SIP)
-# except the latest 15 minutes, 200 requests/min; both plans go back to 2016. A little under the
-# published rate so the limiter never meets a 429.
-ALPACA_TIERS: dict[str, Tier] = {
-    "basic": Tier("alpaca-basic", requests_per_minute=190, history_years=None, history_start=date(2016, 1, 1)),
-    "algo_trader_plus": Tier("alpaca-plus", requests_per_minute=9500, history_years=None,
-                             history_start=date(2016, 1, 1)),
-}
-ALPACA_FEEDS = ("sip", "iex")
-
-ALPACA_CRYPTO_LOCS = ("us-1", "eu-1", "us")
-
-
 class ConfigError(Exception):
     pass
 
@@ -167,7 +148,6 @@ class Settings:
     # Feed order when several sources cover the same ticker (SOURCE_PRIORITY, comma-separated).
     source_priority: tuple[str, ...] = ("massive", "alpaca")
 
-    alpaca: "AlpacaSettings | None" = None
     audits_per_run: int = 2
     audits_random_per_run: int = 1
     tick_history_days: int = 365
@@ -198,6 +178,8 @@ class Settings:
     # The variables the provider plugins declare (their keys, plans and options), as read: a
     # plugin's own settings (sources/registry.py). Keys among them: never in a repr.
     env: Mapping[str, str] = field(default_factory=dict, compare=False, repr=False)
+    # The plugins' own settings (Provider.settings, plugin API 1.11), by plugin name, built when these loaded.
+    plugins: Mapping[str, object] = field(default_factory=dict, compare=False, repr=False)
     # Every variable they were read from (None: made directly, not read), and the plan variables
     # the provider plugins' scans found and these settings apply (with_detected).
     variables: "Mapping[str, str] | None" = field(default=None, compare=False, repr=False)
@@ -214,6 +196,11 @@ class Settings:
         p = get(name)
         return p.settings_view(base) if p else base
 
+    def plugin(self, name: str):
+        """A plugin's own settings (Provider.settings, plugin API 1.11), built when these loaded; None
+        when it has none, or these were made directly (no variables read)."""
+        return (self.origin or self).plugins.get(name)
+
     def require_api_key(self) -> str:
         if not self.api_key:
             raise ConfigError(
@@ -221,26 +208,6 @@ class Settings:
                 "(see .env.example)."
             )
         return self.api_key
-
-
-@dataclass(frozen=True)
-class AlpacaSettings:
-    key_id: str | None
-    secret_key: str | None
-    tier: Tier
-    feed: str = "sip"
-    crypto_loc: str = "us-1"
-    paper: bool = True
-    max_requests_per_run: int = 3000
-    max_requests_per_day: int = 30000
-
-    @property
-    def has_keys(self) -> bool:
-        return bool(self.key_id and self.secret_key)
-
-    def __repr__(self) -> str:  # never print the keys
-        return (f"AlpacaSettings(keys={'set' if self.has_keys else 'not set'}, tier={self.tier.name}, "
-                f"feed={self.feed}, crypto_loc={self.crypto_loc}, paper={self.paper})")
 
 
 def _key(merged: Mapping[str, str], *names: str) -> str | None:
@@ -251,32 +218,6 @@ def _key(merged: Mapping[str, str], *names: str) -> str | None:
         if value:
             return value
     return None
-
-
-def _alpaca(merged: Mapping[str, str]) -> AlpacaSettings:
-    plan = (merged.get("ALPACA_PLAN") or "basic").strip().lower()
-    if plan not in ALPACA_TIERS:
-        raise ConfigError(f"Unknown ALPACA_PLAN {plan!r}; choose one of {', '.join(ALPACA_TIERS)}")
-    tier = ALPACA_TIERS[plan]
-    rpm = _int_setting(merged, "ALPACA_RPM")
-    if rpm is not None:
-        tier = replace(tier, requests_per_minute=rpm or None)
-    feed = (merged.get("ALPACA_FEED") or "sip").strip().lower()
-    if feed not in ALPACA_FEEDS:
-        raise ConfigError(f"Unknown ALPACA_FEED {feed!r}; choose one of {', '.join(ALPACA_FEEDS)}")
-    loc = (merged.get("ALPACA_CRYPTO_LOC") or "us-1").strip().lower()
-    if loc not in ALPACA_CRYPTO_LOCS:
-        raise ConfigError(f"Unknown ALPACA_CRYPTO_LOC {loc!r}; choose one of {', '.join(ALPACA_CRYPTO_LOCS)}")
-    per_run = _int_setting(merged, "ALPACA_MAX_REQUESTS_PER_RUN")
-    per_day = _int_setting(merged, "ALPACA_MAX_REQUESTS_PER_DAY")
-    return AlpacaSettings(
-        key_id=_key(merged, "ALPACA_API_KEY_ID", "APCA_API_KEY_ID"),
-        secret_key=_key(merged, "ALPACA_API_SECRET_KEY", "APCA_API_SECRET_KEY"),
-        tier=tier, feed=feed, crypto_loc=loc,
-        paper=(merged.get("ALPACA_PAPER") or "1").strip().lower() not in ("0", "false", "no"),
-        max_requests_per_run=3000 if per_run is None else per_run,
-        max_requests_per_day=30000 if per_day is None else per_day,
-    )
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -387,6 +328,9 @@ def load_settings(
     for name, old in RENAMED.items():  # the app's settings under their old names
         if name not in merged and old in merged:
             merged[name] = merged[old]
+    from .sources.registry import providers  # when called, not on import: the registry imports the plugins
+
+    plugins = {name: p.settings(merged) for name, p in providers().items() if p.settings}  # their own (API 1.11)
 
     tier_name = (merged.get("MASSIVE_TIER") or "").strip().lower() or "free"  # set but empty: the default
     if tier_name not in TIERS:
@@ -421,7 +365,7 @@ def load_settings(
         source_priority=tuple(
             s.strip().lower() for s in (merged.get("SOURCE_PRIORITY") or "massive,alpaca").split(",") if s.strip()
         ),
-        alpaca=_alpaca(merged),
+        plugins=plugins,
         audits_per_run=_default(_int_setting(merged, "AUDITS_PER_RUN"), 2),
         audits_random_per_run=_default(_int_setting(merged, "AUDITS_RANDOM_PER_RUN"), 1),
         tick_history_days=_default(_int_setting(merged, "TICK_HISTORY_DAYS"), 365),

@@ -124,5 +124,5 @@ def test_keys_saved_after_a_process_started_are_read(monkeypatch):
     monkeypatch.setattr(config, "saved_user_keys", lambda: {"ALPACA_API_KEY_ID": "PKSAVED", "MASSIVE_API_KEY": "saved"})
     monkeypatch.setenv("MASSIVE_API_KEY", "fromenv")
     s = load_settings(env_file=None)
-    assert s.alpaca.key_id == "PKSAVED" and s.api_key == "fromenv"  # the process's own environment wins
-    assert load_settings(env={}, env_file=None).alpaca.key_id is None  # an explicit environment is used alone
+    assert s.plugin("alpaca").key_id == "PKSAVED" and s.api_key == "fromenv"  # the process's own environment wins
+    assert load_settings(env={}, env_file=None).plugin("alpaca").key_id is None  # an explicit environment is used alone
