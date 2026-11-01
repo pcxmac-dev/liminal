@@ -81,26 +81,27 @@ def installed(monkeypatch):
     registry._providers = None
 
 
+# A plugin of the tests' own: the exchanges' are packages, which the fixture's entry points leave out
+BASE = registry.Provider(name="base", title="Base", build=lambda s, b: None, assets=frozenset({"crypto"}), api="1.5")
+
+
 def test_an_installed_plugins_stream_is_recorded_like_the_built_ins(tmp_path, installed):
-    acme = replace(providers()["bitfinex"], name="acme", title="Acme", order=90, api="1.5",
-                   live=(Live("acmecoin", "crypto", stream=AcmeStream),))
+    acme = replace(BASE, name="acme", title="Acme", order=90, live=(Live("acmecoin", "crypto", stream=AcmeStream),))
     installed(acme)
     assert "acmecoin" in live.crypto_streams()
     rec = live.Recorder(tmp_path / "m.db", coins=("BTC",), log=lambda *_: None, connect=lambda url: None)
-    # the built-ins' streams and the fake package's: Bitstamp's is in its own package, which the fixture's
-    # entry points leave out
-    assert [s.source for s in rec.streams] == ["coinbase", "acmecoin"]
+    assert [s.source for s in rec.streams] == ["acmecoin"]  # the only crypto stream the fixture leaves
 
 
 def test_a_live_feed_is_never_another_plugins(installed):
-    base = providers()["bitfinex"]
-    thief = replace(base, name="thief", title="Thief", api="1.5", live=(Live("coinbase", "crypto", stream=AcmeStream),))
-    squatter = replace(base, name="squatter", title="Squatter", api="1.5", live=(Live("massive", "crypto", stream=AcmeStream),))
-    installed(thief, squatter)
-    assert "thief" not in providers() and "squatter" not in providers()
+    owner = replace(BASE, name="owner", title="Owner", live=(Live("acmecoin", "crypto", stream=AcmeStream),))
+    thief = replace(BASE, name="thief", title="Thief", live=(Live("acmecoin", "crypto", stream=AcmeStream),))
+    squatter = replace(BASE, name="squatter", title="Squatter", live=(Live("owner", "crypto", stream=AcmeStream),))
+    installed(owner, thief, squatter)
+    assert "owner" in providers() and "thief" not in providers() and "squatter" not in providers()
     why = " ".join(w for _, w in registry.errors())
-    assert "live feed 'coinbase'" in why and "live feed 'massive'" in why
-    assert registry.live_feeds()["coinbase"][0].name == "coinbase"
+    assert "live feed 'acmecoin'" in why and "live feed 'owner'" in why
+    assert registry.live_feeds()["acmecoin"][0].name == "owner"
 
 
 def test_the_night_poller_keeps_real_time_without_a_clock_given():

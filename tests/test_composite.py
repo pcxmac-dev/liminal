@@ -112,10 +112,10 @@ def test_audits_pair_only_feeds_of_the_same_market(store):
     store.watch_spec("coinbase", resolve("BTCUSD"))
     store.watch_spec("alpaca", resolve("BTCUSD"))
     store.add_coverage("alpaca", "BTCUSD", "minute", T0 - 10 * 86_400_000, T0)
-    from liminal.sources.http import PublicClient
-    from liminal.sources.plugins.coinbase import CoinbaseSource
+    from liminal.config import load_settings
+    from liminal.sources import build_source
 
-    src = CoinbaseSource(PublicClient("https://x.test"))
+    src = build_source("coinbase", load_settings(env={}, env_file=None))  # the plugin's source, from its package
     now = datetime.fromtimestamp(T0 / 1000, timezone.utc)
     assert random_span(store, src, feeds["coinbase"], now, random.Random(1), feeds=feeds) is None  # Kraken is another market
 

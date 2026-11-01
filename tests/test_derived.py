@@ -126,20 +126,20 @@ def test_exchange_candles_are_published_as_each_minute_closes():
     from datetime import datetime as dt
 
     from liminal import freshness
-    from liminal.config import PUBLIC_FEEDS
+    from liminal.sources import provider
 
     now = dt(2026, 10, 24, 7, 30, 20, tzinfo=pd.Timestamp("2026-10-24", tz="UTC").tzinfo)
-    exp = freshness.expected("crypto", PUBLIC_FEEDS["coinbase"][0], now)
+    exp = freshness.expected("crypto", provider("coinbase").tier, now)
     assert exp.latest == dt(2026, 10, 24, 7, 29, tzinfo=now.tzinfo)  # the newest closed minute, not yesterday
 
 
 def test_a_feed_fetches_its_own_minutes_where_it_only_has_built_ones(store):
     from datetime import date, datetime as dt, timezone
 
-    from liminal.config import PUBLIC_FEEDS
+    from liminal.sources import provider
     from liminal.coverage import FeedProfile, plan
 
-    cb = FeedProfile("coinbase", PUBLIC_FEEDS["coinbase"][0], frozenset({"crypto"}), 0, venues={"crypto": "coinbase"})
+    cb = FeedProfile("coinbase", provider("coinbase").tier, frozenset({"crypto"}), 0, venues={"crypto": "coinbase"})
     feeds = {"coinbase": cb}
     store.watch("coinbase", ["BTCUSD"], "minute")
     now = dt(2026, 10, 24, 8, 3, tzinfo=timezone.utc)  # 08:00 once the newest minutes settled (freshness.SETTLE)
@@ -154,12 +154,12 @@ def test_a_feed_fetches_its_own_minutes_where_it_only_has_built_ones(store):
 def test_a_coarser_frame_is_fetched_only_as_far_as_its_bars_are_complete():
     from datetime import datetime as dt, timezone
 
-    from liminal.config import PUBLIC_FEEDS
+    from liminal.sources import provider
     from liminal.coverage import frontier_ms
 
     # 7:32:20 once the exchange's newest minutes have settled (freshness.SETTLE: 3 minutes)
     now = dt(2026, 10, 24, 7, 35, 20, tzinfo=timezone.utc)
-    tier = PUBLIC_FEEDS["coinbase"][0]
+    tier = provider("coinbase").tier
     t = lambda h, m: int(dt(2026, 10, 24, h, m, tzinfo=timezone.utc).timestamp() * 1000)
     assert frontier_ms("crypto", tier, now, "minute") == t(7, 32)
     assert frontier_ms("crypto", tier, now, "minute:5") == t(7, 30)

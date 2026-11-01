@@ -5,13 +5,15 @@ Working notes so work can resume in a fresh session. Newest first.
 ## Plugins into their own repositories (2026-11-01)
 
 - The user: "all the plugins should be liminal-plugin-xxxx and have a separate repo". Done:
-  `liminal-plugin-cboe` 1.2.0 (the pilot), `liminal-plugin-bitstamp` 1.3.0 (its trade stream too);
+  `liminal-plugin-cboe` 1.2.0 (the pilot), `liminal-plugin-bitstamp` 1.3.0 (its trade stream too),
+  `liminal-plugin-coinbase` 1.3.0 and `liminal-plugin-bitfinex` 1.2.0 (`sources.archive.venue_view`
+  reads a plugin's plan and caps from its record);
   each a public repository under pcxmac-dev, installed from its tag by the `plugins` extra, its
   clone beside the app's installed editable here. The app's suite now runs with the packages
   installed (`tests/conftest.py`; CI installs `.[dev,plugins]`), their records its fixtures; a
-  plugin's own parsing tests live in its repository. Next, in this order: coinbase, bitfinex,
-  tiingo (with its forex feed), french, datahub, federal, alpaca (with Blue Ocean), massive (with
-  its headlines). The recipe: docs/ARCHITECTURE.md, "Splitting the built-ins into packages".
+  plugin's own parsing tests live in its repository. Next, in this order: tiingo (with its forex
+  feed), french, datahub, federal, alpaca (with Blue Ocean), massive (with its headlines). The
+  recipe: docs/ARCHITECTURE.md, "Splitting the built-ins into packages".
 
 ## Renamed liminal (2026-11-01)
 

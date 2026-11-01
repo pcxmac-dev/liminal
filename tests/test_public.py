@@ -117,19 +117,3 @@ def test_closed_feeds_are_not_started_and_can_be_reopened(tmp_path, monkeypatch,
     assert "tiingo    closed feed (public archive)" in out and "closed: archive complete" in out
     assert cli.main(["feeds", "reopen", "tiingo", "AAPL"]) == 0
     assert not cli._feed_closed(settings, "tiingo")
-
-
-def test_the_exchanges_send_five_minute_and_hourly_candles():
-    from liminal.sources.plugins.bitfinex import BitfinexSource
-    from liminal.sources.plugins.coinbase import CoinbaseSource
-
-    t0 = int(datetime(2024, 1, 1, tzinfo=timezone.utc).timestamp())
-    lo, hi = datetime.fromtimestamp(t0, timezone.utc), datetime.fromtimestamp(t0 + 3600, timezone.utc)
-    client, session = _client([FakeResponse(200, [])] * 2)
-    list(CoinbaseSource(client).bar_pages("X:BTCUSD", lo, hi, "hour", 1))
-    assert session.calls[0][1]["granularity"] == 3600
-    client, session = _client([FakeResponse(200, [])])
-    list(BitfinexSource(client).bar_pages("X:BTCUSD", lo, hi, "minute", 5))
-    assert "/candles/trade:5m:tBTCUSD/hist" in session.calls[0][0]
-    with pytest.raises(ValueError):
-        list(CoinbaseSource(client).bar_pages("X:BTCUSD", lo, hi, "minute", 3))  # not a Coinbase granularity

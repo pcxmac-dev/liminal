@@ -452,13 +452,15 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
      installed editable from its clone beside the app's (`C:\Users\ciara\source\liminal-plugin-cboe`).
   4. *Then each of the others* (the user, 2026-11-01: "all the plugins should be liminal-plugin-xxxx
      and have a separate repo"), the same way, one at a time: `liminal-plugin-bitstamp` 1.3.0
-     (2026-11-01, its trade stream with it).
+     (2026-11-01, its trade stream with it); `liminal-plugin-coinbase` 1.3.0 and
+     `liminal-plugin-bitfinex` 1.2.0 (2026-11-01: `sources.archive.venue_view` reads the plan and
+     caps from the plugin's record, no longer from `config.PUBLIC_FEEDS`).
 
   The repositories it would make, under `pcxmac-dev`: `liminal-plugin-massive` (Massive and its
   headlines publisher, on its key), `liminal-plugin-alpaca` (Alpaca with its overnight feed on Blue
   Ocean, reached through Alpaca's API, keys and limits), `liminal-plugin-tiingo` (Tiingo with its
-  forex feed: one key and account), `liminal-plugin-coinbase`, `liminal-plugin-bitstamp` (made),
-  `liminal-plugin-bitfinex`, `liminal-plugin-cboe` (made), and the publishers `liminal-plugin-federal`
+  forex feed: one key and account), `liminal-plugin-coinbase` (made), `liminal-plugin-bitstamp` (made),
+  `liminal-plugin-bitfinex` (made), `liminal-plugin-cboe` (made), and the publishers `liminal-plugin-federal`
   (the federal agencies, one plugin) and, later, a state regulators' plugin of its own.
 
 ## The Federal plugin (2026-10-30)

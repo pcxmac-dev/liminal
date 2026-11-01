@@ -16,9 +16,6 @@ from liminal.errors import BudgetExhausted, NotEntitled, Paused, SourceError
 from liminal.models import Instrument
 from liminal.sources import rate_window
 from liminal.sources.plugins.massive.client import MassiveClient
-from liminal.sources.http import PublicClient
-from liminal.sources.plugins.bitfinex import bitfinex_symbol
-from liminal.sources.plugins.coinbase import CoinbaseSource
 from liminal.storage import Store
 
 from .conftest import FakeResponse, FakeSession, FakeSource
@@ -108,32 +105,11 @@ def test_a_day_the_plan_has_not_released_is_not_a_refusal_of_history(store):
     assert NOW.date() not in days and days.get(date(2026, 10, 20)) == "ok"
 
 
-def test_bitfinex_symbols_longer_than_three_letters_take_a_colon():
-    assert bitfinex_symbol("BTC", "USD") == "tBTCUSD"
-    assert bitfinex_symbol("DOGE", "USD") == "tDOGE:USD" and bitfinex_symbol("LINK", "USD") == "tLINK:USD"
-    assert bitfinex_symbol("BCH", "USD") == "tBCHN:USD"
-
-
 def test_rate_windows_keep_inside_each_servers_published_limit():
     settings = load_settings(env={}, env_file=None)
     assert rate_window("coinbase", settings) == (8, 1.0)  # 10 a second per address
     assert rate_window("massive", settings) == (5, 62.0)  # 5 a minute, with a margin for jitter
     assert rate_window("alpaca", settings)[1] == 60.0
-
-
-def test_coinbase_stops_going_back_after_a_long_run_of_empty_windows(monkeypatch):
-    class Empty(PublicClient):
-        def __init__(self):
-            self.requests_made = 0
-
-        def get(self, path, params=None):
-            self.requests_made += 1
-            return []
-
-    src = CoinbaseSource(Empty())
-    monkeypatch.setattr(CoinbaseSource, "EMPTY_RUN", 5)
-    pages = list(src.bar_pages("SOLUSD", date(2015, 1, 26), date(2026, 10, 20), "minute", descending=True))
-    assert src.client.requests_made == 5 and all(p == [] for p in pages)  # not ~20,000 empty windows
 
 
 def test_a_delisted_symbol_is_checked_weekly_not_every_sync(store):

@@ -7,7 +7,6 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from ..config import PUBLIC_FEEDS
 from ..errors import NotEntitled
 from ..models import Instrument
 from .base import DataSource
@@ -74,11 +73,15 @@ def crypto_pair(ticker: str) -> tuple[str, str]:
 
 
 def venue_view(name: str):
-    """A crypto exchange feed's settings: all the history it holds, unless CRYPTO_VENUE_DAYS limits it."""
-    tier, per_run, per_day = PUBLIC_FEEDS[name]
-
+    """A crypto exchange feed's settings: its plugin's plan and caps (Provider.tier, per_run, per_day,
+    read from its record when asked, so the record is built with this view in it), all the history
+    it holds unless CRYPTO_VENUE_DAYS limits it."""
     def view(base):
-        t = replace(tier, history_days=base.crypto_venue_days) if base.crypto_venue_days else tier
-        return replace(base, tier=t, max_requests_per_run=per_run, max_requests_per_day=per_day, origin=base)
+        from .registry import get  # when asked, not on import: the registry imports the plugins
+
+        p = get(name)
+        tier = replace(p.tier, history_days=base.crypto_venue_days) if base.crypto_venue_days else p.tier
+        return replace(base, tier=tier, max_requests_per_run=p.per_run or base.max_requests_per_run,
+                       max_requests_per_day=p.per_day or base.max_requests_per_day, origin=base)
 
     return view

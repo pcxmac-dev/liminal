@@ -9,7 +9,6 @@ import threading
 from liminal import live
 from liminal.storage import Store
 from liminal.wsclient import OP_PING, OP_PONG, OP_TEXT, WebSocket, encode_frame
-from liminal.sources.plugins.coinbase import CoinbaseStream
 from liminal.sources import stream
 
 
@@ -50,14 +49,6 @@ def test_frames_reassemble_and_pings_are_answered():
     frame = encode_frame(OP_TEXT, b"abc", mask=b"\x01\x02\x03\x04")
     assert frame[:2] == bytes([0x81, 0x80 | 3]) and frame[2:6] == b"\x01\x02\x03\x04"
     assert bytes(b ^ frame[2:6][i % 4] for i, b in enumerate(frame[6:])) == b"abc"  # masked as required
-
-
-def test_exchange_messages_become_trades():
-    cb = CoinbaseStream().parse({"type": "match", "trade_id": 7, "product_id": "ETH-USD", "price": "2500.10",
-                                      "size": "0.5", "time": "2026-10-24T07:00:00.123456Z"})
-    assert cb == [("ETHUSD", {"sip_timestamp": 1_792_825_200_123_456_000, "sequence_number": 7, "price": 2500.1,
-                              "size": 0.5, "exchange": None, "conditions": [], "id": "7", "tape": None})]
-    assert CoinbaseStream().parse({"type": "heartbeat"}) == []
 
 
 def test_the_recorder_stores_ticks_builds_bars_and_beats(tmp_path):

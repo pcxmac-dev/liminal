@@ -28,6 +28,8 @@ dev = ["pytest>=8"]
 plugins = [
     "liminal-plugin-cboe @ git+https://github.com/pcxmac-dev/liminal-plugin-cboe@v1.2.0",
     "liminal-plugin-bitstamp @ git+https://github.com/pcxmac-dev/liminal-plugin-bitstamp@v1.3.0",
+    "liminal-plugin-coinbase @ git+https://github.com/pcxmac-dev/liminal-plugin-coinbase@v1.3.0",
+    "liminal-plugin-bitfinex @ git+https://github.com/pcxmac-dev/liminal-plugin-bitfinex@v1.2.0",
 ]
 
 [project.scripts]

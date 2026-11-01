@@ -20,10 +20,10 @@ from liminal.sources.plugins.alpaca import IEX_FEED
 
 from .conftest import FakeSource
 
-BUILT_IN = ["massive", "alpaca", "boats", "coinbase", "bitfinex", "tiingo", "tiingofx"]  # still in sources/plugins/
+BUILT_IN = ["massive", "alpaca", "boats", "tiingo", "tiingofx"]  # still in sources/plugins/
 # Released on their own (pyproject.toml: the `plugins` extra) and installed beside the app: the suite
 # sees them as the user's app does (tests/conftest.py), each with its distribution's version.
-PACKAGED = {"bitstamp": "1.3.0", "cboe": "1.2.0"}
+PACKAGED = {"bitstamp": "1.3.0", "coinbase": "1.3.0", "bitfinex": "1.2.0", "cboe": "1.2.0"}
 FEEDS = ["massive", "alpaca", "boats", "bitstamp", "coinbase", "bitfinex", "cboe", "tiingo", "tiingofx"]  # all, in order
 LISTED = [n for n in FEEDS if n not in ("boats", "tiingofx")]  # the plugins listed: Alpaca's and Tiingo's second feeds in them
 
@@ -70,7 +70,7 @@ def test_each_built_in_keeps_its_plan_rate_caps_and_markets():
     assert rate_window("coinbase", s) == (8, 1.0)
     assert rate_window("tiingo", s) == (45, 3600.0)
     assert rate_window("bitfinex", s) == (20, 60.0)
-    for name in ("coinbase", "bitfinex", "tiingo"):  # the public feeds still built in (Bitstamp's, Cboe's: in their packages)
+    for name in ("tiingo",):  # the public feed still built in (the exchanges', Cboe's: in their packages)
         tier, per_run, per_day = PUBLIC_FEEDS[name]
         view = s.for_source(name)
         assert (view.tier, view.max_requests_per_run, view.max_requests_per_day) == (tier, per_run, per_day)
@@ -195,7 +195,6 @@ def test_every_plugin_is_versioned_for_this_apps_contract():
     # with Massive, which declares where they are (1.8: the main file's news)
     want = {**dict.fromkeys(("alpaca", "boats", "tiingo", "tiingofx"), ("1.3.0", "1.6")),
             **dict.fromkeys(("massive", "massive-news"), ("1.3.0", "1.8")),
-            "coinbase": ("1.2.0", "1.6"), "bitfinex": ("1.1.0", "1.6"),
             **{n: (v, "1.6") for n, v in PACKAGED.items()},  # the packages: their distributions' versions
             **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("1.3.0", "1.7")),
             "french": ("1.0.0", "1.4"), "datahub": ("1.0.0", "1.4")}
@@ -260,7 +259,7 @@ def test_a_plugin_that_says_no_api_was_written_for_the_first_contract(installed,
     assert "acme-before" not in registry.reload()
     why = dict(registry.errors())["before (acme_before:PLUGIN)"]
     assert why == "acme-before: written for plugin API 1.0; this app offers 2.0: it needs a release for 2.x"
-    assert "liminal.sources.plugins.bitfinex" in dict(registry.errors())  # the built-ins too, until released for it
+    assert "liminal.sources.plugins.massive" in dict(registry.errors())  # the built-ins too, until released for it
 
 
 def test_every_installed_plugin_package_loads(monkeypatch):
@@ -306,7 +305,7 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
     out = json.loads(capsys.readouterr().out)
     assert out["api"] == registry.PLUGIN_API and out["errors"] == []
     assert {(r["version"], r["api"], r["origin"]) for r in out["providers"]} == {
-        ("1.1.0", "1.6", "built in"), ("1.2.0", "1.6", "built in"), ("1.3.0", "1.6", "built in"), ("1.3.0", "1.8", "built in"),
+        ("1.3.0", "1.6", "built in"), ("1.3.0", "1.8", "built in"),
         *((v, "1.6", f"package: liminal-plugin-{n} (liminal_plugin_{n}:PLUGIN)") for n, v in PACKAGED.items())}
     pubs = {r["name"]: r for r in out["publishers"]}
     # the agencies are Federal's parts; Massive's headlines are in Massive's row; the dataset libraries
@@ -319,7 +318,8 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
     assert [(r["name"], r["version"], r["account"]) for r in massive["publishers"]] == [("massive-news", "1.3.0", "massive")]
     assert cli.main(["plugins"]) == 0
     text = capsys.readouterr().out
-    assert text.startswith(f"Plugin API {registry.PLUGIN_API}") and "[1.1.0 for plugin API 1.6, built in]" in text
+    assert text.startswith(f"Plugin API {registry.PLUGIN_API}")
+    assert "[1.2.0 for plugin API 1.6, package: liminal-plugin-bitfinex (liminal_plugin_bitfinex:PLUGIN)]" in text
     assert any(line.startswith("federal") and "[1.3.0 for plugin API 1.7, built in]" in line and "you set: GOV_CONTACT" in line
                for line in text.splitlines())
     assert any(line.strip().startswith("and Federal Reserve (fed):") for line in text.splitlines())
@@ -337,7 +337,7 @@ def test_the_plugins_view_shows_each_plugins_version_and_origin(tmp_path):
         out = ChartApp(store, settings=load_settings(env={}, env_file=None)).plugins()
     assert out["api"] == registry.PLUGIN_API
     assert {(p["version"], p["api"], p["origin"]) for p in out["plugins"]} == {
-        ("1.1.0", "1.6", "built in"), ("1.2.0", "1.6", "built in"), ("1.3.0", "1.6", "built in"), ("1.3.0", "1.8", "built in"),
+        ("1.3.0", "1.6", "built in"), ("1.3.0", "1.8", "built in"),
         *((v, "1.6", f"package: liminal-plugin-{n} (liminal_plugin_{n}:PLUGIN)") for n, v in PACKAGED.items())}
     assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.3.0", "1.7"), ("1.3.0", "1.8"), ("1.0.0", "1.4")}
 
