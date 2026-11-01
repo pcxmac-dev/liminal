@@ -11,7 +11,6 @@ from massive_collate.errors import NotEntitled
 from massive_collate.sources import supports
 from massive_collate.sources.http import PublicClient
 from massive_collate.sources.plugins.bitstamp import BitstampSource
-from massive_collate.sources.plugins.cboe import CboeSource
 from massive_collate.sources.plugins.tiingo.client import TiingoSource, split_adjust
 from massive_collate.symbols import resolve
 
@@ -50,20 +49,6 @@ def test_bitstamp_pages_newest_first_and_drops_empty_minutes():
     assert len(session.calls) == 2  # stops once a page reaches the window's start
 
 
-def test_cboe_reads_one_file_for_all_history():
-    csv_text = "DATE,OPEN,HIGH,LOW,CLOSE\n01/02/1990,17.24,17.24,17.24,17.24\n01/03/1990,18.19,18.5,18.0,18.19\n"
-    resp = FakeResponse(200, None)
-    resp.text = csv_text
-    client, session = _client([resp])
-    src = CboeSource(client)
-    bars = next(src.bar_pages("I:VIX", date(1990, 1, 1), date(1990, 1, 2), "day"))
-    assert [b["c"] for b in bars] == [17.24] and bars[0]["t"] == ms(datetime(1990, 1, 2, tzinfo=ET))
-    assert len(next(src.bar_pages("VIX", date(1990, 1, 1), date(1990, 1, 31), "day"))) == 2
-    assert len(session.calls) == 1 and session.calls[0][0].endswith("/VIX_History.csv")  # cached
-    with pytest.raises(NotEntitled):
-        next(src.bar_pages("I:COMP", date(1990, 1, 1), date(1990, 1, 2), "day"))
-
-
 def test_tiingo_is_split_adjusted_only_and_needs_a_key():
     rows = [{"date": "2020-08-27T00:00:00.000Z", "open": 500.0, "high": 510.0, "low": 490.0, "close": 500.0,
              "volume": 100, "splitFactor": 1.0, "divCash": 0.8},
@@ -87,7 +72,6 @@ def test_tiingo_is_split_adjusted_only_and_needs_a_key():
 
 def test_supports():
     assert supports("bitstamp", resolve("BTCUSD")) and not supports("bitstamp", resolve("AAPL"))
-    assert supports("cboe", resolve("I:VIX")) and not supports("cboe", resolve("IXIC"))
     assert supports("tiingo", resolve("AAPL")) and not supports("tiingo", resolve("EURUSD"))
 
 
@@ -141,10 +125,13 @@ def test_closed_feeds_are_not_started_and_can_be_reopened(tmp_path, monkeypatch,
     monkeypatch.setenv("MASSIVE_DB", str(db))
     monkeypatch.setenv("MASSIVE_API_KEY", "k")
     settings = cli.load_settings(env_file=None)
+    with Store(db):
+        pass
+    assert cli._feed_closed(settings, "tiingo")  # nothing watched: closed too
     with Store(db) as s:
         s.watch_spec("tiingo", resolve("AAPL"))
         s.set_closed("tiingo", "AAPL", NOW)
-    assert cli._feed_closed(settings, "tiingo") and cli._feed_closed(settings, "cboe")  # nothing watched: closed too
+    assert cli._feed_closed(settings, "tiingo")
     assert not cli._feed_closed(settings, "bitstamp")  # an exchange: live
     assert not cli._feed_closed(settings, "massive")
     assert cli.main(["feeds"]) == 0

@@ -21,6 +21,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# the plugins released on their own, from their tags (docs/ARCHITECTURE.md: Providers are plugins)
+plugins = ["massive-plugin-cboe @ git+https://github.com/pcxmac-dev/massive-plugin-cboe@v1.2.0"]
 
 [project.scripts]
 massive-collate = "massive_collate.cli:main"

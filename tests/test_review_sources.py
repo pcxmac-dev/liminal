@@ -448,32 +448,6 @@ def test_a_years_cot_file_closes_only_once_its_last_report_can_be_out(tmp_path, 
     assert session.calls.count(url) == 2
 
 
-def _cboe(text: str):
-    from massive_collate.sources.http import PublicClient
-    from massive_collate.sources.plugins.cboe import CboeSource
-
-    resp = FakeResponse(200, None)
-    resp.text = text
-    return CboeSource(PublicClient("https://x.test/api", session=FakeSession([resp]), sleep=lambda s: None))
-
-
-def test_a_cboe_file_with_closes_only_is_read():
-    src = _cboe("﻿DATE,VVIX\n01/03/2007,87.63\n01/04/2007,88.19\n")
-    bars = next(src.bar_pages("I:VVIX", date(2007, 1, 1), date(2007, 1, 31), "day"))
-    assert [(b["o"], b["h"], b["l"], b["c"]) for b in bars] == [(87.63,) * 4, (88.19,) * 4]
-    src = _cboe("DATE,OPEN,HIGH,LOW,CLOSE\n01/02/1990,,,,17.24\n01/03/1990,18.19,18.5,18.0,18.19\n")
-    bars = next(src.bar_pages("I:VIX", date(1990, 1, 1), date(1990, 1, 31), "day"))
-    assert [b["h"] for b in bars] == [17.24, 18.5]  # a day with its close only, beside full days
-
-
-def test_a_cboe_file_that_reads_as_nothing_is_an_error_not_an_empty_history():
-    src = _cboe("Date;Index;Value\n2007-01-03;VVIX;87.63\n")  # a format of its own
-    with pytest.raises(SourceError, match="no daily rows"):
-        next(src.bar_pages("I:VVIX", date(2007, 1, 1), date(2007, 1, 31), "day"))
-    with pytest.raises(SourceError):
-        next(_cboe("").bar_pages("I:SKEW", date(2007, 1, 1), date(2007, 1, 31), "day"))
-
-
 def test_the_roll_holds_a_contract_not_fetched_yet_for_the_newest_session():
     from massive_collate.futures import roll_schedule
 

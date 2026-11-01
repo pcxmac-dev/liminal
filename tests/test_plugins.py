@@ -20,7 +20,7 @@ from massive_collate.sources.plugins.alpaca import IEX_FEED
 
 from .conftest import FakeSource
 
-BUILT_IN = ["massive", "alpaca", "boats", "bitstamp", "coinbase", "bitfinex", "cboe", "tiingo", "tiingofx"]
+BUILT_IN = ["massive", "alpaca", "boats", "bitstamp", "coinbase", "bitfinex", "tiingo", "tiingofx"]
 LISTED = [n for n in BUILT_IN if n not in ("boats", "tiingofx")]  # the plugins listed: Alpaca's and Tiingo's second feeds in them
 
 
@@ -53,7 +53,7 @@ def test_the_built_in_providers_load_in_their_order_without_errors():
     assert list(providers()) == BUILT_IN
     assert registry.errors() == []
     assert all(p.origin == "built in" and callable(p.build) for p in providers().values())
-    assert {n for n in BUILT_IN if is_archive(n)} == {"cboe", "tiingo"}
+    assert {n for n in BUILT_IN if is_archive(n)} == {"tiingo"}  # Cboe: its own package
 
 
 def test_each_built_in_keeps_its_plan_rate_caps_and_markets():
@@ -63,7 +63,7 @@ def test_each_built_in_keeps_its_plan_rate_caps_and_markets():
     assert rate_window("coinbase", s) == (8, 1.0)
     assert rate_window("tiingo", s) == (45, 3600.0)
     assert rate_window("bitfinex", s) == (20, 60.0)
-    for name in ("bitstamp", "coinbase", "bitfinex", "cboe", "tiingo"):
+    for name in ("bitstamp", "coinbase", "bitfinex", "tiingo"):
         tier, per_run, per_day = PUBLIC_FEEDS[name]
         view = s.for_source(name)
         assert (view.tier, view.max_requests_per_run, view.max_requests_per_day) == (tier, per_run, per_day)
@@ -73,7 +73,7 @@ def test_each_built_in_keeps_its_plan_rate_caps_and_markets():
     assert limited.for_source("coinbase").tier.history_days == 30
     assert limited.for_source("bitstamp").tier.history_days is None
     assert markets("massive", s)["stock"] == "sip" and markets("alpaca", s) == {"stock": "sip", "crypto": "kraken"}
-    assert markets("tiingo", s) == {"stock": "sip"} and markets("cboe", s) == {"index": "index"}
+    assert markets("tiingo", s) == {"stock": "sip"}
     assert markets("bitstamp", s) == {"crypto": "bitstamp"}
 
 
@@ -88,7 +88,7 @@ def test_what_each_built_in_serves_follows_its_keys():
     assert keyed["alpaca"].assets == {"stock", "crypto"} and keyed["tiingo"].assets == {"stock"}
     assert "future" in keyed["massive"].assets
     assert supports("coinbase", resolve("BTCUSD")) and not supports("coinbase", resolve("AAPL"))
-    assert supports("cboe", resolve("I:VIX")) and not supports("bitstamp", resolve("BTCUSD").__class__(
+    assert supports("bitstamp", resolve("BTCUSD")) and not supports("bitstamp", resolve("BTCUSD").__class__(
         **{**resolve("BTCUSD").__dict__, "ticker": "NOPEUSD"}))
 
 
@@ -98,7 +98,7 @@ def test_composite_and_audits_read_the_plugins_facts():
     assert composite.reference("crypto") == "coinbase" and composite.reference("stock") is None
     assert composite.feed_kind("alpaca", "stock") == "consolidated"
     assert composite.feed_kind("alpaca", "crypto") == "exchange"
-    assert composite.feed_kind("cboe", "index") == "official" and composite.feed_kind("composite", "crypto") == "consolidated"
+    assert composite.feed_kind("composite", "crypto") == "consolidated"
     assert audit.venue_note("alpaca", "crypto") == "one exchange's book (Kraken)" and audit.venue_note("tiingo", "stock") is None
     assert initializer.bulk_resolution("massive") == "second" and initializer.bulk_resolution("tiingo") == "auto"
     assert initializer.bulk_resolution("massive", "future") == "minute"  # one per asset class
@@ -193,7 +193,7 @@ def test_every_built_in_plugin_is_versioned_for_this_apps_contract():
     want = {**dict.fromkeys(("alpaca", "boats", "tiingo", "tiingofx"), ("1.3.0", "1.6")),
             **dict.fromkeys(("massive", "massive-news"), ("1.3.0", "1.8")),
             **dict.fromkeys(("coinbase", "bitstamp"), ("1.2.0", "1.6")),
-            **dict.fromkeys(("bitfinex", "cboe"), ("1.1.0", "1.6")),
+            "bitfinex": ("1.1.0", "1.6"),
             **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("1.3.0", "1.7")),
             "french": ("1.0.0", "1.4"), "datahub": ("1.0.0", "1.4")}
     assert {p.name: (p.version, p.api) for p in plugins_} == want
@@ -257,7 +257,27 @@ def test_a_plugin_that_says_no_api_was_written_for_the_first_contract(installed,
     assert "acme-before" not in registry.reload()
     why = dict(registry.errors())["before (acme_before:PLUGIN)"]
     assert why == "acme-before: written for plugin API 1.0; this app offers 2.0: it needs a release for 2.x"
-    assert "massive_collate.sources.plugins.cboe" in dict(registry.errors())  # the built-ins too, until released for it
+    assert "massive_collate.sources.plugins.bitfinex" in dict(registry.errors())  # the built-ins too, until released for it
+
+
+def test_every_installed_plugin_package_loads(monkeypatch):
+    """The plugins released on their own (massive-plugin-cboe ...), as installed beside the app
+    (pip install -e ".[plugins]"): each loads, none left out, each with a version; their own tests
+    are in their repositories. None installed: nothing to load."""
+    from importlib.metadata import entry_points
+
+    from massive_collate.sources import publishers
+
+    eps = list(entry_points(group=registry.ENTRY_POINTS))
+    monkeypatch.setattr(registry, "_entry_points", lambda: eps)
+    try:
+        registry.reload()
+        assert registry.errors() == []
+        packaged = [p for p in (*providers().values(), *publishers().values()) if p.origin != "built in"]
+        assert len(packaged) >= len(eps)  # an entry point may name a module of several
+        assert all(p.origin.startswith("package: ") and p.version for p in packaged)
+    finally:
+        registry._providers = None
 
 
 def test_a_packages_plugin_without_a_version_takes_its_distributions(monkeypatch):
@@ -360,7 +380,7 @@ def test_the_fetcher_tabs_carry_each_plugins_key_hints(tmp_path):
     assert "crypto needs no key" in feeds["alpaca"]["keysNote"]
     assert feeds["tiingo"]["keysNote"] == "key not set (TIINGO_API_KEY)" and feeds["tiingo"]["keysChip"] == "no key"
     assert feeds["massive"]["keys"] is True and feeds["coinbase"]["keys"] is None
-    assert feeds["cboe"]["archive"] and feeds["coinbase"]["title"] == "Coinbase"
+    assert feeds["tiingo"]["archive"] and feeds["coinbase"]["title"] == "Coinbase"
 
 
 def test_plugin_tiers_keep_their_history_start():

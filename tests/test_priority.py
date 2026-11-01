@@ -153,7 +153,7 @@ def test_limits_list_every_server_with_its_window_and_wait(store):
     store.kv_set("fetch:wait:massive", json.dumps({"until": t + 10, "seconds": 10, "reason": "limit: 5 requests per minute"}))
     store.kv_set("fetch:wait:coinbase", json.dumps({"until": t - 5, "seconds": 1, "reason": "over"}))
     rows = {r["source"]: r for r in limits(store, settings, now)}
-    assert {"massive", "alpaca", "bitstamp", "coinbase", "bitfinex", "cboe", "tiingo"} <= set(rows)
+    assert {"massive", "alpaca", "bitstamp", "coinbase", "bitfinex", "tiingo"} <= set(rows)
     m = rows["massive"]
     assert m["keptTo"] == "5 requests per 62 s" and m["window"]["used"] == 5 and m["window"]["freeIn"] == 12.0
     assert m["wait"]["reason"].startswith("limit") and rows["coinbase"]["wait"] is None  # a past wait is over

@@ -136,7 +136,7 @@ def test_every_source_has_a_state_and_the_status_bar_knows_when_none_can_fetch(t
     assert rows["bitstamp"]["state"] == "down" and "network down" in rows["bitstamp"]["why"]
     assert rows["bitfinex"]["state"] == "limited"
     assert rows["tiingo"]["state"] == "off" and "TIINGO_API_KEY" in rows["tiingo"]["why"]
-    assert rows["cboe"]["state"] == "idle"
+    assert rows["alpaca"]["state"] == "idle"
     assert can_fetch(list(rows.values()))
     assert not can_fetch([{"state": "down"}, {"state": "limited"}, {"state": "off"}])
     assert not can_fetch([{"state": "off"}])

@@ -37,7 +37,8 @@ Settings come from environment variables, optionally loaded from a `.env` file
                       off: commands that read ticks (exports, volume profiles from trades) may
 
 Public historical sources (closed feeds: they fill history nobody else holds, then are not asked
-again): Bitstamp (crypto minute bars from 2011) and Cboe (index daily history) need nothing;
+again): Bitstamp (crypto minute bars from 2011) and Cboe (index daily history; its own package,
+massive-plugin-cboe: pip install -e ".[plugins]") need nothing;
     TIINGO_API_KEY    a free tiingo.com account key: US stock daily bars from 1962 (environment only)
     CRYPTO_VENUE_DAYS limit the crypto exchange feeds (Coinbase, Bitfinex) to this many days of history
                       (default: 0, everything they hold: Coinbase from 2015, Bitfinex from 2013)
@@ -148,7 +149,6 @@ PUBLIC_FEEDS: dict[str, tuple[Tier, int, int]] = {
                  3000, 20000),
     "bitfinex": (Tier("bitfinex-public", requests_per_minute=20, history_years=None, history_start=date(2013, 4, 1)),
                  300, 2000),
-    "cboe": (Tier("cboe-public", requests_per_minute=30, history_years=None, history_start=date(1990, 1, 1)), 50, 200),
     "tiingo": (Tier("tiingo-free", requests_per_minute=None, history_years=None, history_start=date(1962, 1, 1)), 45, 900),
 }
 ALPACA_CRYPTO_LOCS = ("us-1", "eu-1", "us")

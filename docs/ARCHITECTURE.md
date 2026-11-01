@@ -174,7 +174,8 @@ PLUGIN TYPE ENGINE|auto`); left to the app, the optimal one installed here.
 Every data provider the fetcher uses is a plugin: one `Provider` record (`sources/registry.py`)
 holding everything the app knows about it, so nothing else names a provider to decide how to treat
 it. The built-in ones are `sources/plugins/` (Massive, Alpaca with its overnight feed on Blue Ocean,
-Bitstamp, Coinbase, Bitfinex, Cboe, Tiingo with its forex feed; the publishers: Federal, the federal
+Bitstamp, Coinbase, Bitfinex, Tiingo with its forex feed (Cboe: a package of its own,
+`massive-plugin-cboe`); the publishers: Federal, the federal
 agencies in one plugin (the Fed, New York Fed, SEC, BLS, Federal Register, CFTC: `plugins/federal/`),
 and Massive's headlines), one module each defining `PLUGIN` (Alpaca's and Tiingo's `PLUGINS`: two
 feeds each; Federal's `PUBLISHERS`), each holding its own client, source classes, live streams
@@ -328,7 +329,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     `sources.archive` (`Archive`: a public feed's source; `bounds`, `ms`, `ET`, `CRYPTO_PAIRS`,
     `crypto_pair`, `EXCHANGE_FRAMES`, `venue_view`). Each vendor's client and source classes are in
     its plugin: `plugins/massive/client.py` (`MassiveClient`, `MassiveSource`), `plugins/alpaca/client.py`,
-    `plugins/tiingo/client.py`, and the exchanges' and Cboe's in their modules; `sources/massive.py`,
+    `plugins/tiingo/client.py`, and the exchanges' in their modules (Cboe's in its package); `sources/massive.py`,
     `alpaca.py` and `public.py` are gone, and Massive's base URL is its plugin's (`MASSIVE_BASE_URL`
     only overrides it). No plugin imports another, and the app imports none by name
     (`tests/test_plugin_boundary.py`).
@@ -406,7 +407,8 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     found on the next start, listed as `package: <distribution> (<entry point>)`; one that leaves
     `version` empty shows its distribution's version. Its keys are declared like the built-ins'
     (`KeyVar`), so the key script and the Plugins view offer them unasked.
-- **Splitting the built-ins into packages: the plan** (nothing split yet; the user decides first).
+- **Splitting the built-ins into packages: the plan** (the user, 2026-10-31: "Yes, Cboe pilot
+  first"; Cboe split, the others still built in).
   1. *In this repository first*, so each plugin can leave without taking app code with it (each a
      minor of the API where it adds to the contract):
      - done (2026-10-31, API 1.6): the HTTP client every feed builds on out of `sources/massive.py`
@@ -424,21 +426,31 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
        from the plugin's record instead (new fields, a minor each);
      - done (2026-10-31, API 1.6): each source class next to its plugin (`MassiveSource`,
        `sources/alpaca.py`, the public venues' classes in `sources/public.py`).
-  2. *Then one repository and package per vendor*, its own version from 1.0.0 (tags `v1.0.0`), its
-     own tests run against the app installed (the fakes it needs from `tests/conftest.py` copied
-     in), its own changelog, depending on `massive-collate` from the release offering its API up to
-     the next major. The built-in module leaves `sources/plugins/` in the same app release that
-     brings the package (an optional extra of the app's `pyproject.toml`, from the packages' tags),
-     so no feed is missing between the two. The app keeps the contract's own tests (a fake package
-     plugin, the version check) and a test that every installed plugin loads.
+  2. *Then one repository and package per vendor*, its version going on from the built-in's (tags
+     `v1.2.0`), kept in its `pyproject.toml` only (`PLUGIN.version` left empty: the distribution's
+     is shown), its own tests run against the app installed (the fakes it needs from
+     `tests/conftest.py` copied in), its own changelog, depending on `massive-collate` (which of the
+     app's releases can load it is its `api`, checked on loading, not a version bound). The
+     built-in module leaves `sources/plugins/` in the same app release that brings the package (an
+     optional extra of the app's `pyproject.toml`, from the packages' tags),
+     so no feed is missing between the two: the package installed first (a built-in keeps its name,
+     so the package is reported and left out until the module goes). The app keeps the contract's
+     own tests (a fake package plugin, the version check) and a test that every installed plugin
+     loads (`test_every_installed_plugin_package_loads`); the rest of its suite never sees an
+     installed package (`tests/conftest.py`: `no_installed_plugins`), and a test that used the
+     plugin as an example uses a built-in or moves to the package. The app's CI installs
+     `.[dev,plugins]`; a package's CI installs the app from git (`MASSIVE_REF`).
   3. *A pilot first*: Cboe (one keyless feed, a closed archive, the smallest), to prove the path
-     (install, entry point, version shown, its tests, its CI) before the others.
+     (install, entry point, version shown, its tests, its CI) before the others. Done 2026-10-31:
+     [massive-plugin-cboe](https://github.com/pcxmac-dev/massive-plugin-cboe) 1.2.0, its plan
+     and caps out of `config.PUBLIC_FEEDS` into it, `sources/plugins/cboe.py` gone; here it is
+     installed editable from its clone beside the app's (`C:\Users\ciara\source\massive-plugin-cboe`).
 
   The repositories it would make, under `pcxmac-dev`: `massive-plugin-massive` (Massive and its
   headlines publisher, on its key), `massive-plugin-alpaca` (Alpaca with its overnight feed on Blue
   Ocean, reached through Alpaca's API, keys and limits), `massive-plugin-tiingo` (Tiingo with its
   forex feed: one key and account), `massive-plugin-coinbase`, `massive-plugin-bitstamp`,
-  `massive-plugin-bitfinex`, `massive-plugin-cboe`, and the publishers `massive-plugin-federal`
+  `massive-plugin-bitfinex`, `massive-plugin-cboe` (made), and the publishers `massive-plugin-federal`
   (the federal agencies, one plugin) and, later, a state regulators' plugin of its own.
 
 ## The Federal plugin (2026-10-30)
