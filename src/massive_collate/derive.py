@@ -22,11 +22,16 @@ bars, so a gap in the finer data stays a gap.
 - A rebuilt window loses the bins left without base bars (a trade withdrawn, a bar deleted).
 - 1 week (from Monday), 1 month and 1 year from the daily bars (the feed's official ones first).
 - Incremental: the span of a feed's base bars stored since the last build (stored_at) is
-  rebuilt, from the day before its first changed bar to the day after its last (weeks, months and
-  years: all of them, they are few), so a corrected minute rebuilds the frames above it and a
-  backfill of old history rebuilds that history only; a first build covers everything held.
-- Built in chunks of days, each read with a day of base bars either side and keeping the bins
-  that start inside it, so a bin across a chunk's edge (a CME session from 18:00) is whole.
+  rebuilt, from the day before its first changed bar to the day after its last, so a corrected
+  minute rebuilds the frames above it and a backfill of old history rebuilds that history only; a
+  first build covers everything held. Weeks, months and years: the changed days' whole calendar
+  years (_window), so the hourly sync's new day bar rebuilds this year's bins and no other year's.
+  (Until 2026-11-01 any changed day rebuilt them all: about 1,500 bins a symbol, 23 years of
+  weeks, months and years, for each of ~9,500 symbols every hour, 14 million row writes an hour
+  into feeds/massive.db and the change log's entries for them.)
+- Built in chunks of days, each read with a bin's extent of base bars either side (a day; a week
+  for the frames from days) and keeping the bins that start inside it, so a bin across a chunk's
+  edge (a CME session from 18:00, a week reaching into January) is whole.
 - One symbol at a time (build_symbol): the sync builds each symbol's frames as soon as its fetch
   is stored, and a pass over everything (run) after the sync and in the live recorder. While it
   runs, kv `derive:progress` says what it is building (the status bar).
@@ -61,7 +66,12 @@ CHAIN_VERSIONS = {"second": 2}
 PROGRESS_KEY = "derive:progress"
 CHUNK_DAYS = {"second": 5, "minute": 60}
 SLACK_MS = 60_000  # writers' stored_at can commit out of order: look back a minute
-DAY_MS = 86_400_000  # the base bars read either side of a chunk: a bin's whole extent (a CME session is 23 h)
+DAY_MS = 86_400_000
+# The base bars read either side of a chunk: a bin's whole extent, so a bin that starts inside the
+# chunk and reaches past its edge is whole (a CME session is 23 h; a week from the last Monday of
+# a year's window reaches six days into the next year).
+READ_MARGIN_MS = {"day": 7 * DAY_MS}  # the other bases: DAY_MS
+YEAR_MARGIN_DAYS = 7  # a year's window starts this long before its Jan 1: the December week that reaches into it
 UTC_DAYS = ("crypto", "fx")
 LABELS = {"second": "s", "minute": "m", "hour": "h", "day": "D", "week": "W", "month": "M", "year": "Y"}
 
@@ -149,6 +159,22 @@ def aggregate(bars: pd.DataFrame, timespan: str, multiplier: int, asset: str) ->
             for t, o, h, l, c, v, w, n in zip(g.index, g["o"], g["h"], g["l"], g["c"], g["v"], vw, g["n"])]
 
 
+def _window(lo: int, hi: int, base: str, zone) -> tuple[date, date]:
+    """The days [first, last) whose bins a build over base bars spanning [lo, hi] (ms) makes again
+    (dropped, then built from the base bars there). From seconds and minutes: the day before to
+    the day after (a CME session is dated by the day it ends). From days (weeks, months, years):
+    the changed days' whole calendar years, from YEAR_MARGIN_DAYS before their first Jan 1 (the
+    week of the December before that reaches into the year) to the Jan 1 after their last, exactly
+    (a bin of the next year would be built from its first days alone). Every bin a changed day is
+    in starts inside; the other years' bins are left as they are. Until 2026-11-01 every changed
+    day rebuilt the whole series' weeks, months and years: the hourly sync's new day bar on each
+    of ~9,500 symbols rewrote 23 years of them apiece, 14 million rows an hour."""
+    a, b = (datetime.fromtimestamp(t / 1000, zone).date() for t in (lo, hi))
+    if base == "day":
+        return date(a.year, 1, 1) - timedelta(days=YEAR_MARGIN_DAYS), date(b.year + 1, 1, 1)
+    return a - timedelta(days=1), b + timedelta(days=2)
+
+
 def build_chain(store, source: str, ticker: str, base: str, asset: str = "stock") -> int:
     """Build (or rebuild) the frames above one base frame (CHAINS) for one series from what
     changed since the last build. Returns bars stored."""
@@ -169,10 +195,9 @@ def build_chain(store, source: str, ticker: str, base: str, asset: str = "stock"
                        max([dirty[1]] + ([changed[1]] if changed else [])))
         if changed is None:
             return 0
-        lo, hi = edges if base == "day" else changed  # weeks, months, years: all again
+        lo, hi = changed
     zone = day_zone(asset)
-    first = datetime.fromtimestamp(lo / 1000, zone).date() - timedelta(days=1)
-    last = datetime.fromtimestamp(hi / 1000, zone).date() + timedelta(days=2)  # a session dated by the day it ends
+    first, last = _window(lo, hi, base, zone)
     did = provenance.record(store, "bars-from-bars", f"{source}:{ticker}", {
         "from": base, "frames": [label(t, m) for t, m in frames],
         "days": "UTC dates" if zone is timezone.utc else
@@ -181,21 +206,17 @@ def build_chain(store, source: str, ticker: str, base: str, asset: str = "stock"
                   "average price; the feed's own bars first, built ones where it sent none; only upward"},
         {"bars": f"{source}:{ticker}:{base}"}, (_midnight_ms(first, zone), _midnight_ms(last, zone)))
     stored = 0
-    if base == "day":  # weeks, months, years: rebuilt whole, so a bin left without days goes
-        for timespan, multiplier in frames:
-            store.drop_built_frame(source, ticker, timespan, multiplier, 0, 2**62)
+    margin = READ_MARGIN_MS.get(base, DAY_MS)
     day = first
     while day < last:
         end = min(last, day + timedelta(days=CHUNK_DAYS.get(base, 100_000)))
         lo_ms, hi_ms = _midnight_ms(day, zone), _midnight_ms(end, zone)
-        window = store.bars_window([source], ticker, base, lo_ms - DAY_MS, hi_ms + DAY_MS)  # whole bins at the edges
+        window = store.bars_window([source], ticker, base, lo_ms - margin, hi_ms + margin)  # whole bins at the edges
         for timespan, multiplier in frames:
-            if base != "day":  # bins left without base bars go (weeks to years: all rebuilt below)
-                store.drop_built_frame(source, ticker, timespan, multiplier, lo_ms, hi_ms)
+            store.drop_built_frame(source, ticker, timespan, multiplier, lo_ms, hi_ms)  # bins left without base bars go
             if len(window):
                 bins = aggregate(window, timespan, multiplier, asset)
-                if base != "day":  # this chunk's bins; the margin's belong to the chunks either side
-                    bins = [b for b in bins if lo_ms <= b["t"] < hi_ms]
+                bins = [b for b in bins if lo_ms <= b["t"] < hi_ms]  # this chunk's; the margin's belong to those either side
                 stored += store.upsert_built_bars(source, ticker, timespan, multiplier, bins, did)
         day = end
     store.set_derivation_rows(did, stored)
