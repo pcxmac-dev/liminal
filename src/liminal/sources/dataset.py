@@ -12,11 +12,14 @@ import io
 import math
 import zipfile
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Callable
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
+# Times before 1970 (Shiller's data starts in 1871, French's in 1926) are reached by arithmetic from
+# here: datetime.fromtimestamp refuses a negative time on Windows up to Python 3.14 (OSError 22).
+EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 @dataclass
@@ -51,7 +54,8 @@ def ms(d: date) -> int:
 
 
 def day_of(ts: int) -> date:
-    return datetime.fromtimestamp(ts / 1000, ET).date()
+    """The US/Eastern day of a time in ms (any year: EPOCH)."""
+    return (EPOCH + timedelta(milliseconds=ts)).astimezone(ET).date()
 
 
 def at(d: date, hour: int = 0, minute: int = 0) -> int:
