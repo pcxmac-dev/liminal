@@ -9,7 +9,6 @@ from liminal.collector import ET, Refusals, history_floor
 from liminal.config import asset_tier, load_settings
 from liminal.freshness import plan_delay
 from liminal.sources import build_source
-from liminal.sources.plugins.massive.client import asset_class
 from liminal.storage import Store
 
 from .conftest import FakeResponse, FakeSession
@@ -18,25 +17,19 @@ TODAY = date(2026, 10, 24)
 
 
 def test_the_stocks_plan_does_not_reach_the_other_asset_classes():
-    tier = load_settings(env={"MASSIVE_TIER": "advanced", "MASSIVE_TIER_FUTURES": "starter"}, env_file=None).tier
+    tier = load_settings(env={"MASSIVE_TIER": "advanced", "MASSIVE_TIER_FUTURES": "starter"}, env_file=None).for_source("massive").tier
     assert tier.name == "advanced" and asset_tier(tier, "stock") is tier
     assert asset_tier(tier, "crypto").name == "free" and asset_tier(tier, "future").name == "starter"
     assert history_floor(tier, TODAY, "stock") == date(2003, 9, 10)
     assert history_floor(tier, TODAY, "crypto") == date(2024, 10, 25)  # the free plan's two years
     assert plan_delay(tier, "stock").describe() == "real time"
     assert plan_delay(tier, "crypto").kind == "utc_day"  # free crypto: the previous UTC day
-    free = load_settings(env={}, env_file=None).tier
+    free = load_settings(env={}, env_file=None).for_source("massive").tier
     assert free.by_asset == () and asset_tier(free, "crypto") is free
 
 
 def test_each_request_is_counted_against_its_asset_classs_rate():
-    assert asset_class("https://api.massive.com/v2/aggs/ticker/X:BTCUSD/range/1/minute/a/b") == "crypto"
-    assert asset_class("https://api.massive.com/v2/aggs/ticker/C%3AEURUSD/range/1/day/a/b") == "fx"
-    assert asset_class("/v3/reference/tickers/I:SPX") == "index"
-    assert asset_class("/futures/v1/aggs/ESZ6") == "future"
-    assert asset_class("/v2/aggs/grouped/locale/global/market/crypto/2026-10-23") == "crypto"
-    assert asset_class("/v2/aggs/ticker/AAPL/range/1/minute/a/b") == "stock"
-
+    # which class a request is (asset_class): the plugin's own tests
     settings = load_settings(env={"MASSIVE_API_KEY": "k", "MASSIVE_TIER": "advanced"}, env_file=None)
     src = build_source("massive", settings)
     assert src.client._limiter.max_calls is None  # stocks: unlimited on Advanced

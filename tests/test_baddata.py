@@ -152,7 +152,7 @@ def test_the_chart_shows_filtered_data_unless_asked_for_all_of_it(store):
 
 # -- rule 3: a feed's own bar against its own finer bars; the fetch's second answer; audits ----
 from liminal.collector import verify_fetched  # noqa: E402
-from liminal.config import TIERS  # noqa: E402
+from liminal_plugin_massive import TIERS  # noqa: E402
 from liminal.coverage import FeedProfile  # noqa: E402
 
 

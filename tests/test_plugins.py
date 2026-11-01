@@ -18,14 +18,15 @@ from liminal.symbols import resolve
 
 from .conftest import FakeSource
 
-BUILT_IN = ["massive"]  # still in sources/plugins/
+BUILT_IN: list[str] = []  # none left in sources/plugins/ (2026-11-01): every provider is a package
 # Released on their own (pyproject.toml: the `plugins` extra) and installed beside the app: the suite
 # sees them as the user's app does (tests/conftest.py), each with its distribution's version.
 PACKAGED = {  # name: (its distribution's version, the contract it needs, its entry point's value)
     "bitstamp": ("1.3.0", "1.6", "liminal_plugin_bitstamp:PLUGIN"), "coinbase": ("1.3.0", "1.6", "liminal_plugin_coinbase:PLUGIN"),
     "bitfinex": ("1.2.0", "1.6", "liminal_plugin_bitfinex:PLUGIN"), "cboe": ("1.2.0", "1.6", "liminal_plugin_cboe:PLUGIN"),
     "tiingo": ("1.4.0", "1.10", "liminal_plugin_tiingo"), "tiingofx": ("1.4.0", "1.10", "liminal_plugin_tiingo"),
-    "alpaca": ("1.4.0", "1.11", "liminal_plugin_alpaca"), "boats": ("1.4.0", "1.11", "liminal_plugin_alpaca")}
+    "alpaca": ("1.4.0", "1.11", "liminal_plugin_alpaca"), "boats": ("1.4.0", "1.11", "liminal_plugin_alpaca"),
+    "massive": ("1.4.0", "1.11", "liminal_plugin_massive")}
 TIINGO_BOATS = "tiingoboats"  # Tiingo's Blue Ocean feed, live: its package's
 IEX_FEED = "iex"  # Alpaca's IEX stream, live: its package's
 FEEDS = ["massive", "alpaca", "boats", "bitstamp", "coinbase", "bitfinex", "cboe", "tiingo", "tiingofx"]  # all, in order
@@ -67,7 +68,7 @@ def test_the_feeds_load_in_their_order_without_errors():
     assert {n for n in FEEDS if is_archive(n)} == {"tiingo", "cboe"}
 
 
-def test_each_built_in_keeps_its_plan_rate_caps_and_markets():
+def test_each_plugin_keeps_its_plan_rate_caps_and_markets():
     s = load_settings(env={"MASSIVE_API_KEY": "k"}, env_file=None)
     assert rate_window("massive", s) == (5, 62.0)
     assert rate_window("alpaca", s) == (190, 60.0)
@@ -75,7 +76,7 @@ def test_each_built_in_keeps_its_plan_rate_caps_and_markets():
     assert rate_window("tiingo", s) == (45, 3600.0)
     assert rate_window("bitfinex", s) == (20, 60.0)
     assert s.for_source("alpaca").tier.name == "alpaca-basic" and s.for_source("alpaca").max_requests_per_day == 30000
-    assert s.for_source("massive") is s
+    assert s.for_source("massive").tier.name == "free" and s.tier.name == "none"  # the base: no feed's plan
     limited = load_settings(env={"CRYPTO_VENUE_DAYS": "30"}, env_file=None)
     assert limited.for_source("coinbase").tier.history_days == 30
     assert markets("massive", s)["stock"] == "sip" and markets("alpaca", s) == {"stock": "sip", "crypto": "kraken"}
@@ -149,28 +150,49 @@ def test_a_plugin_that_fails_to_load_is_left_out_and_reported(installed):
     assert any("a second provider named 'acme'" in w for w in why.values())
 
 
-def test_an_installed_package_never_replaces_a_built_in(installed):
+def test_of_two_plugins_of_one_name_the_first_in_order_is_kept(installed):
     from liminal.sources import publishers
     from liminal.sources.publisher import Policy, Publisher
 
-    # named as a built-in and listed before it: the built-in is kept all the same; of two packages of one
-    # name (the publishers are all packages now), the first in order is kept
-    impostor = Provider(name="massive", title="Not Massive", build=lambda s, b: None, assets=frozenset(), order=-5)
+    # every plugin is a package: of two of one name, the first in order is kept, the other reported
+    owner_feed = replace(ACME, name="own", title="Owner", order=-6)
+    impostor = replace(ACME, name="own", title="Not Owner", order=-5)
     owner = Publisher("owner", "Owner", "", (), Policy(), order=-6)
     rival = Publisher("owner", "Not Owner", "", (), Policy(), order=-5)
-    found = installed(("first", "impostor:PLUGIN", lambda: impostor), ("own", "owner:PUBLISHER", lambda: owner),
-                      ("pub", "rival:PUBLISHER", lambda: rival))
-    assert list(found) == BUILT_IN and provider("massive").title == "Massive"
+    found = installed(("first", "owner:PLUGIN", lambda: owner_feed), ("second", "impostor:PLUGIN", lambda: impostor),
+                      ("own", "owner:PUBLISHER", lambda: owner), ("pub", "rival:PUBLISHER", lambda: rival))
+    assert list(found) == ["own"] and provider("own").title == "Owner"
     assert publishers()["owner"].title == "Owner"
     why = dict(registry.errors())
-    assert "a second provider named 'massive': the first kept (built in)" in why["package: impostor:PLUGIN"]
+    assert "a second provider named 'own': the first kept" in why["package: impostor:PLUGIN"]
     assert "a second publisher named 'owner': the first kept" in why["package: rival:PUBLISHER"]
+
+
+def test_a_module_dropped_into_sources_plugins_still_loads_and_keeps_its_name(tmp_path, monkeypatch, installed):
+    """The built-ins' way stays open: a module in sources/plugins/ defining PLUGIN is found on the next
+    start with origin "built in" and, of two plugins of one name, kept over any package whatever the order."""
+    import sys
+
+    from liminal.sources import plugins as dropins
+
+    (tmp_path / "dropin.py").write_text("""from liminal.sources.registry import Provider
+PLUGIN = Provider(name='dropin', title='Dropped in', build=lambda s, b: None, assets=frozenset({'stock'}), order=500)
+""", encoding="utf-8")
+    monkeypatch.setattr(dropins, "__path__", [*dropins.__path__, str(tmp_path)])
+    rival = replace(ACME, name="dropin", title="Packaged rival", order=-9)  # listed first: the module is kept all the same
+    try:
+        found = installed(("rival", "rival:PLUGIN", lambda: rival))
+        assert list(found) == ["dropin"] and provider("dropin").title == "Dropped in"
+        assert provider("dropin").origin == "built in"
+        assert "a second provider named 'dropin': the first kept (built in)" in dict(registry.errors())["package: rival:PLUGIN"]
+    finally:
+        sys.modules.pop("liminal.sources.plugins.dropin", None)
 
 
 def test_a_module_may_give_several_providers(installed):
     other = Provider(name="acme2", title="Acme Two", build=lambda s, b: None, assets=frozenset({"crypto"}), order=5)
     found = installed(("acme", "acme_feed", lambda: SimpleNamespace(PLUGINS=[ACME, other])))
-    assert list(found)[:2] == ["massive", "acme2"] and "acme" in found
+    assert list(found) == ["acme2", "acme"]  # in their order (5, then Acme's 100): the fakes are the only entry points
 
 
 # -- the plugin contract's version (registry.PLUGIN_API) ---------------------------------------------
@@ -196,7 +218,7 @@ def test_every_plugin_is_versioned_for_this_apps_contract():
     # too; Federal declares the SEC's GOV_CONTACT and the CFTC's dataset (1.4), as the dataset
     # libraries their datasets; Federal's feeds their parsers (1.7); Massive's headlines are released
     # with Massive, which declares where they are (1.8: the main file's news)
-    want = {**dict.fromkeys(("massive", "massive-news"), ("1.3.0", "1.8")),
+    want = {"massive-news": ("1.4.0", "1.11"),  # Massive's headlines: released with Massive's package
             **{n: (v, a) for n, (v, a, _) in PACKAGED.items()},  # the packages: their distributions' versions
             **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("1.4.0", "1.7")),  # its package's
             "french": ("1.1.0", "1.4"), "datahub": ("1.1.0", "1.4")}  # the dataset libraries: packages too
@@ -261,7 +283,6 @@ def test_a_plugin_that_says_no_api_was_written_for_the_first_contract(installed,
     assert "acme-before" not in registry.reload()
     why = dict(registry.errors())["before (acme_before:PLUGIN)"]
     assert why == "acme-before: written for plugin API 1.0; this app offers 2.0: it needs a release for 2.x"
-    assert "liminal.sources.plugins.massive" in dict(registry.errors())  # the built-ins too, until released for it
 
 
 def test_every_installed_plugin_package_loads(monkeypatch):
@@ -307,7 +328,6 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
     out = json.loads(capsys.readouterr().out)
     assert out["api"] == registry.PLUGIN_API and out["errors"] == []
     assert {(r["version"], r["api"], r["origin"]) for r in out["providers"]} == {
-        ("1.3.0", "1.8", "built in"),
         *((v, a, f"package: liminal-plugin-{registry.plugin_of(n)} ({e})") for n, (v, a, e) in PACKAGED.items())}
     pubs = {r["name"]: r for r in out["publishers"]}
     # the agencies are Federal's parts; Massive's headlines are in Massive's row; the dataset libraries
@@ -317,7 +337,7 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
     assert pubs["federal"]["parts"][-1]["datasets"] == ["cftc-cot-legacy"] and len(pubs["french"]["datasets"]) == 4
     assert [k["name"] for k in pubs["federal"]["keys"]] == ["GOV_CONTACT"]  # the SEC's, set for the plugin
     massive = next(r for r in out["providers"] if r["name"] == "massive")
-    assert [(r["name"], r["version"], r["account"]) for r in massive["publishers"]] == [("massive-news", "1.3.0", "massive")]
+    assert [(r["name"], r["version"], r["account"]) for r in massive["publishers"]] == [("massive-news", "1.4.0", "massive")]
     assert cli.main(["plugins"]) == 0
     text = capsys.readouterr().out
     assert text.startswith(f"Plugin API {registry.PLUGIN_API}")
@@ -340,9 +360,8 @@ def test_the_plugins_view_shows_each_plugins_version_and_origin(tmp_path):
         out = ChartApp(store, settings=load_settings(env={}, env_file=None)).plugins()
     assert out["api"] == registry.PLUGIN_API
     assert {(p["version"], p["api"], p["origin"]) for p in out["plugins"]} == {
-        ("1.3.0", "1.8", "built in"),
         *((v, a, f"package: liminal-plugin-{registry.plugin_of(n)} ({e})") for n, (v, a, e) in PACKAGED.items())}
-    assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.4.0", "1.7"), ("1.3.0", "1.8"), ("1.1.0", "1.4")}
+    assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.4.0", "1.7"), ("1.4.0", "1.11"), ("1.1.0", "1.4")}
 
 
 def test_unknown_providers_are_refused_by_name():
@@ -424,7 +443,7 @@ def test_the_window_kept_is_inside_every_server_limit_never_rounded_above_one():
 
 
 def test_the_client_keeps_the_rate_limit_headers_its_server_sends():
-    from liminal.sources.plugins.massive.client import MassiveClient
+    from liminal_plugin_massive.client import MassiveClient
 
     class Answer:
         status_code, headers = 200, {"X-RateLimit-Limit": "200", "X-RateLimit-Remaining": "17", "Server": "x"}

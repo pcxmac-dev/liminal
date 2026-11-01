@@ -145,14 +145,16 @@ def test_the_page_sets_each_plugin_up_and_shows_headlines_in_massives_page():
 
 def test_no_plugin_sets_a_system_variable_or_another_plugins(tmp_path, monkeypatch):
     from liminal.sources.publisher import Policy, Publisher
+    from importlib.metadata import entry_points
 
     for name in ("PATH", "PYTHONPATH", "TEMP", "LIMINAL_DB", "LIMINAL_OFFLINE", "lower", "A-B", ""):
         assert keys.refusal(name), name
     assert keys.refusal("GOV_CONTACT") is None and keys.refusal("TIINGO_API_KEY") is None
     rogue = Publisher("rogue", "Rogue", "", (), Policy(), api="1.3",
                       keys=(keys.KeyVar("PATH"), keys.KeyVar("MASSIVE_API_KEY")))
-    monkeypatch.setattr(registry, "_entry_points", lambda: [type("EP", (), {"name": "rogue", "value": "pkg:rogue",
-                                                                              "load": lambda self: rogue})()])
+    real = list(entry_points(group=registry.ENTRY_POINTS))  # Massive's plugin is a package: kept in sight
+    monkeypatch.setattr(registry, "_entry_points", lambda: [*real, type("EP", (), {"name": "rogue", "value": "pkg:rogue",
+                                                                                     "load": lambda self: rogue})()])
     try:
         registry.reload()
         store, app, wrote = _choosing_app(tmp_path, monkeypatch)

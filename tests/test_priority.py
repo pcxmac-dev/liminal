@@ -9,12 +9,13 @@ import pytest
 
 from liminal import cli, collector
 from liminal.collector import ET, sync
-from liminal.config import TIERS, load_settings
+from liminal.config import load_settings
+from liminal_plugin_massive import TIERS
 from liminal.gui import server
 from liminal.gui.activity import limits
 from liminal.gui.server import ChartApp
 from liminal.ratelimit import KvLedger, RateLimiter, describe, window_state
-from liminal.sources.plugins.massive.client import MassiveClient
+from liminal_plugin_massive.client import MassiveClient
 from liminal.storage import Store
 
 from .conftest import FakeResponse, FakeSession, FakeSource

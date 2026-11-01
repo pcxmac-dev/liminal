@@ -15,7 +15,7 @@ from liminal import cli, killswitch, live
 from liminal.errors import NotEntitled, Paused, RateLimited, SourceError, Unauthorized
 from liminal_plugin_alpaca.client import AlpacaClient  # Alpaca's client, on the app's HttpClient
 from liminal.sources.http import RETRY_WAIT_MAX, SameHostSession, retry_delay as _retry_delay
-from liminal.sources.plugins.massive.client import MassiveClient, MassiveSource
+from liminal_plugin_massive.client import MassiveClient, MassiveSource
 from liminal.storage import Store
 from liminal.sources import stream
 

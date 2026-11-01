@@ -68,9 +68,9 @@ nothing and the next run continues where it left off.
 python -m pip install -e ".[dev,plugins]"
 ```
 
-`plugins` installs the provider plugins released as packages of their own (`liminal-plugin-<name>`,
-each a repository under [pcxmac-dev](https://github.com/pcxmac-dev), listed in `pyproject.toml`; every
-plugin is to be one); the others are still built in. Without it the app runs without those feeds.
+`plugins` installs the provider plugins, each a package of its own (`liminal-plugin-<name>`, a
+repository under [pcxmac-dev](https://github.com/pcxmac-dev), listed in `pyproject.toml`). Every
+data provider is one, Massive included: without them the app has no feeds.
 
 Save each API key with `tools/set-key.ps1`: it asks for the key with the input hidden (not shown,
 not kept in the shell's history, not written to a file) and saves it as a user environment variable,
@@ -174,7 +174,7 @@ python -m liminal gui                  # chart app in your browser (localhost on
 | `sources/base.py` | `DataSource` interface every provider implements |
 | `sources/registry.py` | The plugin registry and contract (`Provider`, `PLUGIN_API`) |
 | `sources/http.py` | The HTTP client every plugin's builds on (auth headers, rate limit, caps, retries) |
-| `sources/plugins/` | Every external data provider, one plugin each: its client, streams and datasets |
+| `sources/plugins/` | Empty: every data provider is a package of its own, `liminal-plugin-<name>` (its client, streams, datasets); a local module dropped here still loads |
 | `coverage.py` | One feed per span: what a feed may download, given the ledger and the ranking |
 | `audit.py` | Feed-against-feed audits: comparison, box stats, verdicts |
 | `composite.py` | Composite and reference models across exchanges; quality scores |

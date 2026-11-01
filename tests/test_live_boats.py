@@ -152,7 +152,7 @@ def test_the_day_cap_shows_idle_on_tiingos_limits_and_any_other_error_down(tmp_p
 
 def test_a_lower_limit_found_while_a_client_runs_is_kept_from_then_on():
     from liminal.ratelimit import RateLimiter
-    from liminal.sources.plugins.massive.client import MassiveClient
+    from liminal_plugin_massive.client import MassiveClient
 
     client = MassiveClient("k", rate_limiter=RateLimiter(190, 60.0))
     assert client.tighten(95, 60.0) and client._limiter.max_calls == 95

@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 
 from liminal import collector
 from liminal.collector import ET, sync
-from liminal.config import TIERS
+from liminal_plugin_massive import TIERS
 from liminal.initializer import ORDER_KEY
 from liminal.live import WATCHLISTS_KEY
 

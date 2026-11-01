@@ -7,7 +7,7 @@ import pytest
 
 from liminal import collector
 from liminal.collector import ET, build_from_ticks, sync
-from liminal.config import TIERS
+from liminal_plugin_massive import TIERS
 
 from liminal_plugin_alpaca import ALPACA_TIERS  # the plugin's plans
 from liminal.coverage import FeedProfile, ms, plan

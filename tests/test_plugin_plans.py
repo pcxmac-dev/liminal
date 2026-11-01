@@ -11,7 +11,8 @@ from pathlib import Path
 import pytest
 
 from liminal import cli, collector, sourcing
-from liminal.config import Settings, TIERS, load_settings, with_detected
+from liminal.config import Settings, load_settings, with_detected
+from liminal_plugin_massive import TIERS
 from liminal.errors import NotEntitled
 from liminal.sources import build_source, feed_profiles, providers
 from liminal_plugin_alpaca.client import AlpacaSource
@@ -47,13 +48,13 @@ def test_a_detected_plan_applies_only_where_the_user_set_none():
     assert s.plugin("alpaca").tier.name == "alpaca-basic" and s.variables == KEYS
     plus = with_detected(s, {"ALPACA_PLAN": "algo_trader_plus"})
     assert plus.plugin("alpaca").tier.name == "alpaca-plus" and plus.detected == {"ALPACA_PLAN": "algo_trader_plus"}
-    assert plus.variables == KEYS and plus.api_key == "k"  # the rest as it was
+    assert plus.variables == KEYS and plus.plugin("massive").api_key == "k"  # the rest as it was
     assert with_detected(plus, {"ALPACA_PLAN": "algo_trader_plus"}) is plus  # nothing new: the same settings
     assert with_detected(plus, {}).plugin("alpaca").tier.name == "alpaca-basic"  # a later scan found none: back to yours
     mine = load_settings(env={**KEYS, "ALPACA_PLAN": "basic"}, env_file=None)
     assert with_detected(mine, {"ALPACA_PLAN": "algo_trader_plus"}).plugin("alpaca").tier.name == "alpaca-basic"  # yours wins
     assert with_detected(s, {"ALPACA_PLAN": "platinum"}) is s  # a value its settings refuse: not applied
-    direct = Settings(api_key="k", tier=TIERS["free"], db_path=Path("x.db"))
+    direct = Settings(tier=TIERS["free"], db_path=Path("x.db"))
     assert with_detected(direct, {"MASSIVE_TIER": "advanced"}) is direct  # made directly: nothing to rebuild from
 
 
@@ -108,7 +109,7 @@ def test_alpaca_tells_its_plans_apart_by_the_latest_fifteen_minutes():
 
 
 def test_massive_finds_its_stocks_plan_and_leaves_the_other_classes_to_you():
-    from liminal.sources.plugins import massive
+    import liminal_plugin_massive as massive
 
     reach = {"day_3y": True, "day_6y": True, "day_11y": False, "day_21y": False, "second": True, "trades": True,
              "quotes": False}

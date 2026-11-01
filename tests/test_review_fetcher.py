@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 
 from liminal import collector
 from liminal.collector import ET, sync
-from liminal.config import TIERS
+from liminal_plugin_massive import TIERS
 from liminal.coverage import ms
 from liminal.models import Exchange, Stock, country
 

@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 
 from liminal import collector, freshness
 from liminal.collector import ET, sync
-from liminal.config import TIERS
+from liminal_plugin_massive import TIERS
 
 from .conftest import FakeSource
 

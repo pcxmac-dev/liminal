@@ -6,7 +6,8 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from liminal import sourcing
-from liminal.config import TIERS, load_settings
+from liminal.config import load_settings
+from liminal_plugin_massive import TIERS
 from liminal.coverage import FeedProfile, day_start_ms, plan
 from liminal.sessions import ET
 from liminal.sources import capacity, feed_profiles, providers, registry

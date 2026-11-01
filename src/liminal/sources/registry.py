@@ -1,9 +1,9 @@
 """Data providers are plugins: one `Provider` each, holding everything the app needs to know about it.
 
-A provider plugin is a module that defines `PLUGIN` (a Provider; `PLUGINS` for several). The ones
-built in sit in `sources/plugins/`, one module per provider: a module dropped there is found on the
-next start. A provider shipped as its own package registers under the entry point group
-`liminal.providers` (pointing at the module, or at the Provider itself).
+A provider plugin is a module that defines `PLUGIN` (a Provider; `PLUGINS` for several). Every one
+is a package of its own now (liminal-plugin-<name>, 2026-11-01), registering under the entry point
+group `liminal.providers` (pointing at the module, or at the Provider itself); a module dropped in
+`sources/plugins/` is still found on the next start, as the built-ins were.
 
 What a plugin gives:
 - `build(settings, request_budget)`: its DataSource (sources/base.py), with its limiter and caps.

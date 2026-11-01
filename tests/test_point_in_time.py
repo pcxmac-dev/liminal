@@ -8,7 +8,7 @@ from datetime import datetime
 import numpy as np
 
 from liminal import freshness
-from liminal.config import TIERS
+from liminal_plugin_massive import TIERS
 
 from liminal_plugin_alpaca import ALPACA_TIERS  # the plugin's plans
 from liminal.storage import Store

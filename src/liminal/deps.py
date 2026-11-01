@@ -68,9 +68,12 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
     out: list[Check] = []
 
     # -- data source access ---------------------------------------------------------
-    out.append(Check("Massive API", "API key", "OK" if settings.api_key else "FAIL",
-                     "set" if settings.api_key else "MASSIVE_API_KEY not set",
-                     "" if settings.api_key else "set MASSIVE_API_KEY (environment or .env)"))
+    m = settings.plugin("massive")  # the Massive plugin's own settings (API 1.11); None without the plugin
+    keyed = bool(m and m.api_key)
+    out.append(Check("Massive API", "API key", "OK" if keyed else "FAIL",
+                     "set" if keyed else "MASSIVE_API_KEY not set" if m else "the Massive plugin is not installed",
+                     "" if keyed else "set MASSIVE_API_KEY (environment or .env)" if m
+                     else "pip install -e \".[plugins]\" (liminal-plugin-massive)"))
     runs = store.runs(50)
     ok = next((r for r in runs if r["status"] == "ok" and r["command"] == "sync"), None)
     out.append(_fresh("Massive API", "Scheduled sync", ok["finished_at"] if ok else None, now, 0.2, 1,
@@ -80,8 +83,9 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
                      f"{len(errors)} of the last 10 runs failed" + (f": {errors[0]['message'][:80]}" if errors else ""),
                      "read the log; a plan change can refuse an endpoint" if errors else ""))
     used = store.requests_today(source)
-    out.append(Check("Massive API", "Daily request cap", "OK" if used < settings.max_requests_per_day * 0.9 else "WARN",
-                     f"{used} of {settings.max_requests_per_day} used today"))
+    cap = settings.for_source(source).max_requests_per_day  # the feed's own cap (its plugin's settings)
+    out.append(Check("Massive API", "Daily request cap", "OK" if used < cap * 0.9 else "WARN",
+                     f"{used} of {cap} used today"))
 
     # -- second feed and the one-feed-per-span rule ---------------------------------
     a = settings.plugin("alpaca")  # the Alpaca plugin's own settings (API 1.11): keys, plan, feed, venue, caps

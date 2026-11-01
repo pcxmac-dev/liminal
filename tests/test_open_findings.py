@@ -76,7 +76,7 @@ def test_a_late_change_mid_history_reaches_the_composite(store):
 
     from liminal import composite
     from liminal.coverage import FeedProfile
-    from liminal.config import TIERS
+    from liminal_plugin_massive import TIERS
     from liminal.symbols import resolve
 
     mk = lambda n, v: FeedProfile(n, TIERS["free"], frozenset({"crypto"}), venues={"crypto": v})  # noqa: E731
@@ -161,7 +161,7 @@ def test_a_finished_utc_day_of_a_round_the_clock_asset_counts_at_once(monkeypatc
     from types import SimpleNamespace
 
     from liminal import coverage, freshness
-    from liminal.config import TIERS
+    from liminal_plugin_massive import TIERS
 
     last = datetime(2026, 10, 28, 23, 59, tzinfo=timezone.utc)  # an end-of-day plan's newest: the day's last minute
     monkeypatch.setattr(freshness, "expected", lambda asset, tier, now: SimpleNamespace(latest=last))
@@ -177,7 +177,7 @@ def test_a_release_not_in_at_the_first_sync_after_it_is_asked_again_hourly(store
     from datetime import date, datetime, timedelta, timezone
 
     from liminal import collector, freshness
-    from liminal.config import TIERS
+    from liminal_plugin_massive import TIERS
 
     tier = TIERS["free"]
     assert freshness.plan_delay(tier, "stock").kind == "eod"

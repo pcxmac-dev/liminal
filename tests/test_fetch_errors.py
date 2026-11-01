@@ -11,11 +11,12 @@ import requests
 
 from liminal import collector
 from liminal.collector import ET, sync
-from liminal.config import TIERS, load_settings
+from liminal.config import load_settings
+from liminal_plugin_massive import TIERS
 from liminal.errors import BudgetExhausted, NotEntitled, Paused, SourceError
 from liminal.models import Instrument
 from liminal.sources import rate_window
-from liminal.sources.plugins.massive.client import MassiveClient
+from liminal_plugin_massive.client import MassiveClient
 from liminal.storage import Store
 
 from .conftest import FakeResponse, FakeSession, FakeSource

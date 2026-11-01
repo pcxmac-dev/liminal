@@ -35,6 +35,7 @@ plugins = [
     "liminal-plugin-datahub @ git+https://github.com/pcxmac-dev/liminal-plugin-datahub@v1.1.0",
     "liminal-plugin-federal @ git+https://github.com/pcxmac-dev/liminal-plugin-federal@v1.4.0",
     "liminal-plugin-alpaca @ git+https://github.com/pcxmac-dev/liminal-plugin-alpaca@v1.4.0",
+    "liminal-plugin-massive @ git+https://github.com/pcxmac-dev/liminal-plugin-massive@v1.4.0",
 ]
 
 [project.scripts]

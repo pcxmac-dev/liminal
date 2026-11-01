@@ -6,7 +6,7 @@ import pytest
 from liminal.config import ConfigError, load_settings
 from liminal.errors import BudgetExhausted, NotEntitled, RateLimited, SourceError
 from liminal.ratelimit import RateLimiter
-from liminal.sources.plugins.massive.client import MassiveClient
+from liminal_plugin_massive.client import MassiveClient
 
 from .conftest import FakeResponse, FakeSession
 
@@ -100,7 +100,7 @@ def test_pagination_follows_next_url_on_same_host_only():
 
 
 def test_settings_defaults_to_free_plan(tmp_path):
-    s = load_settings(env={}, env_file=None)
+    s = load_settings(env={}, env_file=None).for_source("massive")  # Massive's view of the app's settings: its plan and caps
     assert s.tier.name == "free" and s.tier.requests_per_minute == 5 and s.tier.history_years == 2
     assert s.max_requests_per_run == 250 and s.max_requests_per_day == 2000
 
@@ -114,7 +114,8 @@ def test_env_file_does_not_override_environment(tmp_path):
     f = tmp_path / ".env"
     f.write_text("MASSIVE_API_KEY=fromfile\nMASSIVE_TIER=starter\n")
     s = load_settings(env={"MASSIVE_API_KEY": "fromenv"}, env_file=f)
-    assert s.api_key == "fromenv" and s.tier.name == "starter"
+    m = s.plugin("massive")  # Massive's own settings, read with the app's
+    assert m.api_key == "fromenv" and m.tier.name == "starter" and s.for_source("massive").tier.name == "starter"
 
 
 def test_keys_saved_after_a_process_started_are_read(monkeypatch):
@@ -124,5 +125,5 @@ def test_keys_saved_after_a_process_started_are_read(monkeypatch):
     monkeypatch.setattr(config, "saved_user_keys", lambda: {"ALPACA_API_KEY_ID": "PKSAVED", "MASSIVE_API_KEY": "saved"})
     monkeypatch.setenv("MASSIVE_API_KEY", "fromenv")
     s = load_settings(env_file=None)
-    assert s.plugin("alpaca").key_id == "PKSAVED" and s.api_key == "fromenv"  # the process's own environment wins
+    assert s.plugin("alpaca").key_id == "PKSAVED" and s.plugin("massive").api_key == "fromenv"  # the process's own environment wins
     assert load_settings(env={}, env_file=None).plugin("alpaca").key_id is None  # an explicit environment is used alone

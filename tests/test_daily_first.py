@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from liminal import collector
 from liminal.audit import daily_history
 from liminal.collector import ET, sync
-from liminal.config import TIERS
+from liminal_plugin_massive import TIERS
 from liminal.coverage import FeedProfile
 from liminal.initializer import ORDER_KEY
 

@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 import pytest
 
 from liminal.collector import ET, history_floor, invert_bars, sync
-from liminal.config import TIERS
+from liminal_plugin_massive import TIERS
 from liminal.symbols import resolve
 
 from .conftest import FakeSource

@@ -93,7 +93,7 @@ def test_a_reply_missing_many_listings_retires_none(store):
 
 
 def test_futures_products_are_asked_for_one_day():
-    from liminal.sources.plugins.massive.client import MassiveSource
+    from liminal_plugin_massive.client import MassiveSource
 
     class Client:
         requests_made = 0
@@ -139,7 +139,7 @@ def test_no_allowance_no_requests(store):
 
 def test_sync_does_directory_work_only_after_the_watchlist_and_only_when_allowed(store):
     from liminal.collector import ET, sync
-    from liminal.config import TIERS
+    from liminal_plugin_massive import TIERS
 
     src = DirSource(entitled=("minute",))
     sync(src, store, TIERS["free"], datetime(2026, 10, 23, 12, tzinfo=ET), log=lambda m: None, directory_allowance=0)

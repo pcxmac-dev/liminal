@@ -11,7 +11,7 @@ import requests
 
 from liminal import cli, killswitch, live, proc
 from liminal.collector import sync
-from liminal.config import TIERS
+from liminal_plugin_massive import TIERS
 from liminal.errors import NotEntitled, RateLimited, SourceError
 from liminal.gui import activity
 from liminal.storage import Store
@@ -265,7 +265,7 @@ def test_a_feed_on_another_feeds_account_is_killed_with_it_for_as_long_as_the_se
 
 def test_a_429_carries_its_wait_and_a_key_with_a_line_break_is_never_sent_or_repeated():
     from liminal.errors import Unauthorized
-    from liminal.sources.plugins.massive.client import MassiveClient
+    from liminal_plugin_massive.client import MassiveClient
 
     from .conftest import FakeResponse, FakeSession
 
@@ -299,7 +299,7 @@ def test_keys_are_read_without_the_spaces_and_line_breaks_around_them():
 
     s = load_settings(env={"MASSIVE_API_KEY": " mk\r\n", "TIINGO_API_KEY": "tk\n", "ALPACA_API_KEY_ID": " id ",
                            "ALPACA_API_SECRET_KEY": "sk\n"}, env_file=None)
-    assert (s.api_key, s.plugin("alpaca").key_id, s.plugin("alpaca").secret_key) == ("mk", "id", "sk")
+    assert (s.plugin("massive").api_key, s.plugin("alpaca").key_id, s.plugin("alpaca").secret_key) == ("mk", "id", "sk")
     import liminal_plugin_tiingo
 
     assert s.env["TIINGO_API_KEY"] == "tk\n" and liminal_plugin_tiingo.api_key(s) == "tk"  # a plugin's key: it strips it

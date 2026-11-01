@@ -248,7 +248,7 @@ class FakeNews:
 @pytest.fixture
 def massive_news(monkeypatch):
     from liminal.config import load_settings
-    from liminal.sources.plugins import massive
+    import liminal_plugin_massive as massive
 
     fake = FakeNews()
     monkeypatch.setattr(massive, "build", lambda settings, budget, max_retries=4: fake)

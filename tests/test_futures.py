@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from liminal.futures import continuous, roll_schedule, session_dates
-from liminal.sources.plugins.massive.client import normalize_future_bar
+from liminal_plugin_massive.client import normalize_future_bar
 
 ET = "America/New_York"
 

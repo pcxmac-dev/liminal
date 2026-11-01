@@ -10,7 +10,8 @@ import pytest
 
 from liminal import collector, initializer
 from liminal.collector import ET, sync
-from liminal.config import TIERS, load_settings
+from liminal.config import load_settings
+from liminal_plugin_massive import TIERS
 from liminal.storage import Store
 from liminal.symbols import resolve
 

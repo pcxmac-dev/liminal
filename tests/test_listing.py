@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 import pytest
 
 from liminal.collector import ET, sync
-from liminal.config import TIERS
+from liminal_plugin_massive import TIERS
 from liminal.models import Exchange, Stock, country, parse_symbol
 from liminal.storage import Store
 

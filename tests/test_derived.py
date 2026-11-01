@@ -170,7 +170,7 @@ def test_only_seconds_minutes_and_days_are_fetched_every_other_frame_is_built(st
     from datetime import datetime as dt, timedelta
 
     from liminal.collector import ET, sync
-    from liminal.config import TIERS
+    from liminal_plugin_massive import TIERS
 
     from .conftest import FakeSource
 

@@ -12,7 +12,8 @@ import pytest
 
 from liminal import cli, collector, config, killswitch, publications, runner
 from liminal.collector import StopRun, sync
-from liminal.config import TIERS, load_settings
+from liminal.config import load_settings
+from liminal_plugin_massive import TIERS
 from liminal.gov import GovDB
 from liminal.sources import registry
 from liminal.sources.fetching import Fetched, Fetcher, Job

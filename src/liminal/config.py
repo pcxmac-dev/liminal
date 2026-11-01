@@ -3,16 +3,10 @@
 Settings come from environment variables, optionally loaded from a `.env` file
 (variables already set in the environment win):
 
-    MASSIVE_API_KEY   required for any API call
-    MASSIVE_TIER      free | starter | developer | advanced   (default: free): your Stocks plan; sets
-                      the history the collector reaches back to. `python -m liminal plan` finds it
-    MASSIVE_TIER_INDICES / _CURRENCIES / _CRYPTO / _FUTURES   the plan of each other asset class
-                      (Massive sells one per class; default: free)
-    MASSIVE_RPM       override the tier's requests-per-minute limit (0 = unlimited)
     LIMINAL_DB        path of the SQLite database (default: ~/LiminalData/liminal.db)
-    MASSIVE_BASE_URL  API base URL (default: Massive's own, its plugin's)
-    MASSIVE_MAX_REQUESTS_PER_RUN   hard cap on API requests in one command (default: 250)
-    MASSIVE_MAX_REQUESTS_PER_DAY   hard cap on API requests per day, all runs (default: 2000)
+    (A feed's key, plans and caps are its plugin's own settings, read with these (Provider.settings,
+    plugin API 1.11): Massive's MASSIVE_API_KEY, MASSIVE_TIER and the other classes' plans, MASSIVE_RPM,
+    MASSIVE_BASE_URL and MASSIVE_MAX_REQUESTS_PER_RUN / _DAY are liminal-plugin-massive's, in its README.)
     LIMINAL_REFRESH_HOURS  extra minimum hours between refreshes of a backfilled symbol (default: 0;
                            symbols are already only refreshed when their plan should have new data)
     SOURCE_PRIORITY   feed order when sources overlap (default: massive,alpaca); a span is downloaded by
@@ -94,16 +88,9 @@ class Tier:
 
 # Backfill depth used when a plan has no history limit and its source no known start.
 UNLIMITED_BACKFILL_YEARS = 20
-
-# Stocks plan limits. Check your plan on massive.com and override with
-# MASSIVE_RPM if yours differs.
-TIERS: dict[str, Tier] = {
-    "free": Tier("free", requests_per_minute=5, history_years=2),
-    "starter": Tier("starter", requests_per_minute=None, history_years=5),
-    "developer": Tier("developer", requests_per_minute=None, history_years=10),
-    # Advanced: all of Massive's stock history, which begins 2003-09-10 (`plan`, 2026-10-24).
-    "advanced": Tier("advanced", requests_per_minute=None, history_years=None, history_start=date(2003, 9, 10)),
-}
+# The settings' plan where no feed's view has set one (Settings.for_source): no plan at all. Each
+# feed's plans are its plugin's (Massive's TIERS in liminal-plugin-massive).
+NO_PLAN = Tier("none", requests_per_minute=None, history_years=None)
 
 
 def asset_tier(tier: Tier, asset: str | None) -> Tier:
@@ -114,34 +101,16 @@ def asset_tier(tier: Tier, asset: str | None) -> Tier:
     return tier
 
 
-# The variables naming Massive's plan for each asset class besides stocks (MASSIVE_TIER).
-MASSIVE_CLASS_TIERS = {"index": "MASSIVE_TIER_INDICES", "fx": "MASSIVE_TIER_CURRENCIES",
-                       "crypto": "MASSIVE_TIER_CRYPTO", "future": "MASSIVE_TIER_FUTURES"}
-
-
-def tier_for(reach: dict[str, bool]) -> str:
-    """The Massive stocks plan (TIERS) a plan probe's reach matches (MassiveSource.plan_reach):
-    Advanced has quotes and more than 10 years, Developer trades and 10 years, Starter 5 years,
-    the free plan 2."""
-    if reach.get("quotes") or reach.get("day_11y") or reach.get("day_21y"):
-        return "advanced"
-    if reach.get("trades") or reach.get("day_6y"):
-        return "developer"
-    if reach.get("day_3y") or reach.get("second"):
-        return "starter"
-    return "free"
-
-
 class ConfigError(Exception):
     pass
 
 
 @dataclass(frozen=True)
 class Settings:
-    api_key: str | None = field(repr=False)  # never in a repr (a log line, a traceback's locals)
-    tier: Tier
     db_path: Path
-    base_url: str = ""  # MASSIVE_BASE_URL; empty: Massive's own (its plugin's)
+    # This feed's plan and request caps, as its plugin's view sets them (for_source); the base has no
+    # feed's plan. A feed's key is its plugin's own setting (Settings.plugin), never here.
+    tier: Tier = NO_PLAN
     max_requests_per_run: int = 250
     max_requests_per_day: int = 2000
     refresh_hours: float = 0.0
@@ -200,24 +169,6 @@ class Settings:
         """A plugin's own settings (Provider.settings, plugin API 1.11), built when these loaded; None
         when it has none, or these were made directly (no variables read)."""
         return (self.origin or self).plugins.get(name)
-
-    def require_api_key(self) -> str:
-        if not self.api_key:
-            raise ConfigError(
-                "MASSIVE_API_KEY is not set. Set it in your environment or in a .env file "
-                "(see .env.example)."
-            )
-        return self.api_key
-
-
-def _key(merged: Mapping[str, str], *names: str) -> str | None:
-    """A key's value from the first of its variables set, spaces and line breaks around it taken off
-    (one pasted with a newline made every request fail, the key repeated in the error)."""
-    for name in names:
-        value = (merged.get(name) or "").strip()
-        if value:
-            return value
-    return None
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -332,35 +283,11 @@ def load_settings(
 
     plugins = {name: p.settings(merged) for name, p in providers().items() if p.settings}  # their own (API 1.11)
 
-    tier_name = (merged.get("MASSIVE_TIER") or "").strip().lower() or "free"  # set but empty: the default
-    if tier_name not in TIERS:
-        raise ConfigError(f"Unknown MASSIVE_TIER {tier_name!r}; choose one of {', '.join(TIERS)}")
-    tier = TIERS[tier_name]
-
-    rpm = _int_setting(merged, "MASSIVE_RPM")
-    if rpm is not None:
-        tier = replace(tier, requests_per_minute=rpm or None)
-    classes = []
-    for asset, var in MASSIVE_CLASS_TIERS.items():
-        name = (merged.get(var) or "free").strip().lower()
-        if name not in TIERS:
-            raise ConfigError(f"Unknown {var} {name!r}; choose one of {', '.join(TIERS)}")
-        if name != tier.name:
-            classes.append((asset, TIERS[name]))
-    tier = replace(tier, by_asset=tuple(classes))
-
-    per_run = _int_setting(merged, "MASSIVE_MAX_REQUESTS_PER_RUN")
-    per_day = _int_setting(merged, "MASSIVE_MAX_REQUESTS_PER_DAY")
     refresh = _float_setting(merged, "LIMINAL_REFRESH_HOURS")  # hours, fractions too (0.5)
     from .sources.registry import variables
 
     return Settings(
-        api_key=_key(merged, "MASSIVE_API_KEY"),
-        tier=tier,
         db_path=Path(merged["LIMINAL_DB"]).expanduser() if merged.get("LIMINAL_DB") else DEFAULT_DB_PATH,
-        base_url=(merged.get("MASSIVE_BASE_URL") or "").rstrip("/"),
-        max_requests_per_run=250 if per_run is None else per_run,
-        max_requests_per_day=2000 if per_day is None else per_day,
         refresh_hours=float(refresh or 0),
         source_priority=tuple(
             s.strip().lower() for s in (merged.get("SOURCE_PRIORITY") or "massive,alpaca").split(",") if s.strip()

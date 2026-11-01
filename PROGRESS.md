@@ -13,12 +13,15 @@ Working notes so work can resume in a fresh session. Newest first.
   the dataset libraries `liminal-plugin-french` 1.1.0 and `liminal-plugin-datahub` 1.1.0 (the mirrors'
   submodules stay in `data/github/`), the publishers `liminal-plugin-federal` 1.4.0 (the six agencies),
   `liminal-plugin-alpaca` 1.4.0 (Blue Ocean and the IEX stream too; plugin API 1.11: a plugin's own
-  settings, `Provider.settings` and `Settings.plugin`, so `AlpacaSettings` left `config.py`);
+  settings, `Provider.settings` and `Settings.plugin`, so `AlpacaSettings` left `config.py`),
+  `liminal-plugin-massive` 1.4.0 (its headlines too; the last built-in: its key, `TIERS`, `tier_for`
+  and caps are its own settings, the app's base `Settings` have no feed's plan, `plan` is a
+  feed's capabilities scan). `sources/plugins/` is empty: every data provider is a package;
   each a public repository under pcxmac-dev, installed from its tag by the `plugins` extra, its
   clone beside the app's installed editable here. The app's suite now runs with the packages
   installed (`tests/conftest.py`; CI installs `.[dev,plugins]`), their records its fixtures; a
-  plugin's own parsing tests live in its repository. Next: massive (with its headlines), the last
-  built-in. The recipe: docs/ARCHITECTURE.md, "Splitting the built-ins into packages".
+  plugin's own parsing tests live in its repository. Done, all nine; the recipe stays in
+  docs/ARCHITECTURE.md, "Splitting the built-ins into packages", for the next provider.
 
 ## Renamed liminal (2026-11-01)
 

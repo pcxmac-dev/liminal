@@ -9,9 +9,10 @@ import pytest
 
 from liminal import cli, initializer
 from liminal.collector import ET, sync
-from liminal.config import TIERS, load_settings, tier_for
+from liminal.config import load_settings
+from liminal_plugin_massive import TIERS, tier_for
 from liminal.errors import NotEntitled
-from liminal.sources.plugins.massive.client import MassiveSource
+from liminal_plugin_massive.client import MassiveSource
 from liminal.storage import Store
 
 from .conftest import FakeSource
@@ -124,6 +125,16 @@ def test_a_new_plan_has_its_refusals_asked_again(store):
     cli._note_tier(store, load_settings(env={"MASSIVE_TIER": "developer"}, env_file=None), log.append)
     assert store.conn.execute("SELECT COUNT(*) FROM entitlements").fetchone()[0] == 0
     assert store.grouped_days("massive") == {} and "free -> developer" in log[0]
+
+
+def test_the_plan_change_check_stays_quiet_without_the_massive_plugin(store):
+    from dataclasses import replace
+
+    log = []
+    cli._note_tier(store, load_settings(env={}, env_file=None), log.append)  # noted: the free plan
+    without = replace(load_settings(env={}, env_file=None), plugins={})  # the plugin not installed: no settings of its own
+    cli._note_tier(store, without, log.append)
+    assert log == [] and store.kv_get(cli.TIER_KEY) == "free"  # no plan of Massive's to notice: nothing reset
 
 
 def test_an_unlimited_plan_reaches_back_to_where_its_history_begins():

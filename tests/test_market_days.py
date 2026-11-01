@@ -11,7 +11,7 @@ import pytest
 
 from liminal import collector
 from liminal.collector import ET, MARKET_DAYS_BACK, fetch_market_moves, market_days, sync_bars
-from liminal.config import TIERS
+from liminal_plugin_massive import TIERS
 from liminal.coverage import FeedProfile, day_start_ms
 from liminal.errors import NotEntitled
 from liminal.storage import Store

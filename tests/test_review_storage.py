@@ -300,7 +300,8 @@ def test_an_empty_head_becomes_none_in_one_transaction(store):
 
 def test_the_api_key_is_not_in_a_repr_of_the_settings():
     s = config.load_settings({"MASSIVE_API_KEY": "SECRET-KEY-123"}, env_file=None)
-    assert s.api_key == "SECRET-KEY-123" and "SECRET-KEY-123" not in repr(s)
+    m = s.plugin("massive")  # the key is the plugin's own setting: out of its repr and the settings'
+    assert m.api_key == "SECRET-KEY-123" and "SECRET-KEY-123" not in repr(s) + repr(m)
 
 
 # -- Low: derivation records, migrations, revisions, exports, composite, settings ----------------
@@ -412,7 +413,7 @@ def test_a_composite_bar_no_longer_made_is_removed_from_the_rebuilt_span(store):
     from datetime import datetime, timezone
 
     from liminal.coverage import FeedProfile
-    from liminal.config import TIERS
+    from liminal_plugin_massive import TIERS
     from liminal.symbols import resolve
 
     t0 = int(datetime(2026, 10, 1, 15, tzinfo=timezone.utc).timestamp() * 1000)
@@ -439,7 +440,7 @@ def test_a_composite_bar_no_longer_made_is_removed_from_the_rebuilt_span(store):
 ])
 def test_settings_parse_fractional_hours_and_an_empty_tier(env, hours, tier):
     s = config.load_settings(env, env_file=None)
-    assert s.refresh_hours == hours and s.tier.name == tier
+    assert s.refresh_hours == hours and s.for_source("massive").tier.name == tier  # Massive's plan: its plugin's view
 
 
 def test_a_settings_file_drops_comments_after_values(tmp_path):

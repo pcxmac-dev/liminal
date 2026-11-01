@@ -272,17 +272,22 @@ TIER_KEY = "tier:massive"
 
 
 def tier_key(settings: Settings) -> str:
-    """The Massive plans in force, every asset class's: what a plan change is noticed by."""
-    return ",".join([settings.tier.name, *(f"{a}={t.name}" for a, t in sorted(settings.tier.by_asset))])
+    """The Massive plans in force, every asset class's (its plugin's view of the settings): what a plan
+    change is noticed by."""
+    tier = settings.for_source("massive").tier
+    return ",".join([tier.name, *(f"{a}={t.name}" for a, t in sorted(tier.by_asset))])
 
 
 def _note_tier(store: Store, settings: Settings, log) -> None:
     """When MASSIVE_TIER changes, what the old plan refused may be allowed now (or the reverse):
     Massive's cached entitlements and the market days it refused are asked again, and each
     symbol's resolution is found again (the old plan's finest was remembered)."""
+    if settings.plugin("massive") is None:
+        return  # the Massive plugin is not installed (or these settings were made directly): no plan of its to notice
     seen = store.kv_get(TIER_KEY)
     key = tier_key(settings)
-    if seen == key or (seen == settings.tier.name and not settings.tier.by_asset):
+    tier = settings.for_source("massive").tier
+    if seen == key or (seen == tier.name and not tier.by_asset):
         return
     if seen:
         store.clear_entitlements("massive")
@@ -307,29 +312,11 @@ def reresolve(store: Store, feed: str) -> int:
 
 
 def cmd_plan(args, settings: Settings) -> int:
-    """Which Massive stocks plan the key has, from what it may ask for (eight small requests),
-    next to MASSIVE_TIER, which sets how far back the collector reaches."""
-    import json
-
-    from .config import TIERS, tier_for
-
-    args.source = "massive"
-    with api_run(args, settings, "plan") as (source, store, log):
-        if source is None:
-            return 0
-        reach = source.plan_reach(args.ticker)
-        found = tier_for(reach)
-        oldest = source.oldest_day(args.ticker)
-        log("plan: " + ", ".join(f"{k} {'yes' if v else 'no'}" for k, v in reach.items()) + f" -> {found}")
-        store.kv_set("plan:massive", json.dumps({"at": datetime.now().astimezone().isoformat(timespec="seconds"),
-                                                 "reach": reach, "tier": found, "oldest": str(oldest)}))
-        print(f"{args.ticker}'s daily bars begin {oldest or 'nowhere on this plan'}")
-        years = TIERS[found].history_years
-        print(f"Massive plan found: {found} ({f'{years} years' if years else 'all'} of history); "
-              f"MASSIVE_TIER is {settings.tier.name}")
-        if found != settings.tier.name:
-            print(f"Set the user environment variable MASSIVE_TIER={found} for the collector to use it.")
-    return 0
+    """Which plan a feed's key has, from what it may ask for: its plugin's capability scan, `capabilities`
+    for one feed (default Massive, whose scan probes its stocks plan next to MASSIVE_TIER, which sets
+    how far back the collector reaches; the plan found is used wherever you set none)."""
+    args.name = args.source
+    return cmd_capabilities(args, settings)
 
 
 def cmd_initialize(args, settings: Settings) -> int:
@@ -1687,8 +1674,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="do not rescan the provider plugins' capabilities and plans at the start")
     s.set_defaults(func=cmd_gui)
 
-    s = sub.add_parser("plan", help="find which Massive plan your key has (eight small requests)")
-    s.add_argument("--ticker", default="AAPL", help="a symbol with long history (default AAPL)")
+    s = sub.add_parser("plan", help="find which plan a feed's key has (--source, default massive): its plugin's "
+                                    "capability scan, a few small requests; the plan found is used where you set none")
     s.set_defaults(func=cmd_plan)
 
     s = sub.add_parser("initialize", help="one-time: every NYSE and Nasdaq listing and every CME Group futures "

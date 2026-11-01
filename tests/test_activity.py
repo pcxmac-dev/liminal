@@ -3,7 +3,8 @@ import calendar
 from datetime import date, datetime, timedelta, timezone
 
 from liminal.collector import ET, sync
-from liminal.config import TIERS, load_settings
+from liminal.config import load_settings
+from liminal_plugin_massive import TIERS
 from liminal.gui import activity as act
 from liminal.gui.server import ChartApp
 from liminal.storage import Store

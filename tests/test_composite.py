@@ -7,7 +7,7 @@ import pytest
 
 from liminal import composite
 from liminal.coverage import FeedProfile
-from liminal.config import TIERS
+from liminal_plugin_massive import TIERS
 from liminal.symbols import resolve
 
 T0 = int(datetime(2026, 10, 1, 15, tzinfo=timezone.utc).timestamp() * 1000)

@@ -176,14 +176,13 @@ PLUGIN TYPE ENGINE|auto`); left to the app, the optimal one installed here.
 
 Every data provider the fetcher uses is a plugin: one `Provider` record (`sources/registry.py`)
 holding everything the app knows about it, so nothing else names a provider to decide how to treat
-it. The built-in ones are `sources/plugins/` (Massive, Alpaca with its overnight feed on Blue Ocean,
-Bitstamp, Coinbase, Bitfinex, Tiingo with its forex feed (Cboe: a package of its own,
-`liminal-plugin-cboe`); the publishers: Federal, the federal
-agencies in one plugin (the Fed, New York Fed, SEC, BLS, Federal Register, CFTC: the
-`liminal-plugin-federal` package),
-and Massive's headlines), one module each defining `PLUGIN` (Alpaca's and Tiingo's `PLUGINS`: two
-feeds each; Federal's `PUBLISHERS`), each holding its own client, source classes, live streams
-and datasets (Massive, Alpaca and Tiingo as packages with a `client.py`; the user, 2026-10-31: "every
+it. Every one is a package of its own since 2026-11-01 (`liminal-plugin-<name>`, a repository each
+under pcxmac-dev, installed by the app's `plugins` extra): Massive with its headlines publisher,
+Alpaca with its overnight feed on Blue Ocean, Bitstamp, Coinbase, Bitfinex, Tiingo with its forex
+feed, Cboe; the publishers Federal (the federal agencies in one plugin: the Fed, New York Fed, SEC,
+BLS, Federal Register, CFTC) and the dataset libraries Ken French and Datahub. Each is a module
+defining `PLUGIN` (Alpaca's and Tiingo's `PLUGINS`: two feeds each; Federal's `PUBLISHERS`), holding
+its own client, source classes, live streams, datasets and settings (the user, 2026-10-31: "every
 external data provider must be in a plugin structure"), on the contract's shared pieces
 (`sources/http.py`, `archive.py`, `stream.py`, `dataset.py`). A module added to `sources/plugins/` is found on the next start; a
 provider shipped as its own package registers under the entry point group `liminal.providers`.
@@ -201,15 +200,15 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
   default: a plan from `tier`/`per_run`/`per_day`, the plan's rate a minute, keys set when every
   key's variable is, each asset class its own market.
 - **Keys and settings.** Keys stay in the user's environment variables only. `Settings.env` holds
-  the variables the plugins declare (never in a repr), read like the built-ins' from the saved user
+  the variables the plugins declare (never in a repr), read from the saved user
   variables too (`config.saved_names`). `tools/set-key.ps1` asks the app for the plugins
   (`python -m liminal plugins --json`: names and whether set, never a value) and offers a
   menu per provider: set, replace or remove its keys, typed hidden.
 - **Read everywhere from the registry**: the sync's feed list and `--source` choices, feed profiles
   and the one-download-per-span rule, the Fetcher's tabs, rows, limits and health, `status`, `feeds`,
   `deps`, the composite model's reference and priors, audits, the initializer, the monthly caps,
-  the live recorder's streams and pollers (`Provider.live`, API 1.5). Not yet: Massive's own
-  commands (`plan`, the plan-change check).
+  the live recorder's streams and pollers (`Provider.live`, API 1.5), `plan` (the capabilities scan
+  of the feed given). Not yet: the plan-change check (`cli._note_tier`), Massive's alone.
 - **The standard report.** Every plugin reports in one form (`Provider.report`: a `Report`): its
   plan, its keys, its limits (requests a day: its daily cap or its rate where tighter; per run; a
   monthly symbol cap; what its server publishes), one `Capability` per job it can do on that plan
@@ -230,7 +229,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
   user, 2026-10-29), from its kept scans' times against the rescan's start; one asked in this run
   is back to its state, and a public feed with no scan keeps its own.
   - Massive: its stocks plan from `plan_reach` (daily bars 3, 6, 11, 21 years back, 1-second bars,
-    trades, quotes; `config.tier_for`): `MASSIVE_TIER`. The other classes' plans are not probed: a
+    trades, quotes; the plugin's `tier_for`): `MASSIVE_TIER`. The other classes' plans are not probed: a
     free class is held to 5 requests a minute, and a probe that took one for paid would lift that.
   - Alpaca: the consolidated tape's latest 15 minutes are served on Algo Trader Plus and refused
     on Basic (`AlpacaSource.recent_allowed`): `ALPACA_PLAN`. Blue Ocean shares Alpaca's.
@@ -256,7 +255,8 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
   `PLUGIN_API` itself, which would always match). At discovery a plugin written for another major,
   or for a newer minor than the app offers, is left out and reported with the ones that fail to
   load (`errors()`, `plugins`, the key script, the Plugins view's "Left out"), never fatal. An `api`
-  left out is 1.0. Each built-in's release and contract is in its module (`plugins` lists them).
+  left out is 1.0. Each plugin's release is its distribution's and its contract (`api`) in its module
+  (`plugins` lists both).
   `plugins` (and its `--json`: `api`, each
   plugin's `version`, `api`, `origin`; the publishers too), the key script's list and the Plugins
   view show each plugin's version and origin.
@@ -298,8 +298,8 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     page, released with it (its version and contract), on its key and limits; Massive's kill stops
     them as its account's. A part, a feed or a publisher, is never a Plugins view entry of its own
     (the user, 2026-10-31: "massive headlines should not be separate from massive same thing with
-    federal agencies and federal"); `test_a_plugins_parts_are_released_with_it` holds the built-ins
-    to their plugin's release.
+    federal agencies and federal"); `test_a_plugins_parts_are_released_with_it` holds a plugin's parts
+    to its release.
   - **1.4** (2026-10-31) lets `Publisher.datasets` hold the `Dataset` definitions themselves
     (`sources/dataset.py`: its files, parser, publication rule, the file it is kept in; a name, as in
     1.2, still lists one another plugin declares). Every external data provider is in a plugin (the
@@ -394,10 +394,10 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     feed's source base, `sources.archive.Archive`.
   - **The fields that matter across releases.** `name` is the feed's name everywhere (its database
     file, ledgers, watchlist rows, kept scans), so a release never renames it. `origin` is set by
-    the registry, never by the plugin. `order` places it in lists (the built-in feeds 0-61, the
+    the registry, never by the plugin. `order` places it in lists (the feeds 0-61, the
     publishers 200-300, the dataset libraries 400-410, a package's 100 unless it says). Of two
-    plugins of one name a built-in is always kept (an installed package never replaces one, whatever
-    its order), between packages the first by order; the other is reported. What each other field gives: the bullets above and the
+    plugins of one name the first by order is kept (a module in `sources/plugins/` before any
+    package, as the built-ins were); the other is reported. What each other field gives: the bullets above and the
     docstrings of `sources/registry.py` and `sources/publisher.py`.
   - **A package registers** under the entry point group `liminal.providers`, naming a
     module that defines `PLUGIN`/`PLUGINS` and/or `PUBLISHER`/`PUBLISHERS`, or one record:
@@ -409,7 +409,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
 
     Installed into the app's environment (`.venv\Scripts\python.exe -m pip install ...`) it is
     found on the next start, listed as `package: <distribution> (<entry point>)`; one that leaves
-    `version` empty shows its distribution's version. Its keys are declared like the built-ins'
+    `version` empty shows its distribution's version. Its keys are declared as every plugin's
     (`KeyVar`), so the key script and the Plugins view offer them unasked.
 - **Splitting the built-ins into packages: the plan** (the user, 2026-10-31: "Yes, Cboe pilot
   first"; Cboe split; 2026-11-01: "all the plugins should be liminal-plugin-xxxx and have a separate
@@ -466,10 +466,14 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
      (2026-11-01, the six agencies with it; New York time from `sources.archive.ET`);
      `liminal-plugin-alpaca` 1.4.0 (2026-11-01, Blue Ocean and the IEX stream with it: API 1.11 gives a
      plugin its own settings, `Provider.settings` built when the app's load and reached with
-     `Settings.plugin(name)`, so Alpaca's keys, plan, feed, venue and caps left `config.py`).
+     `Settings.plugin(name)`, so Alpaca's keys, plan, feed, venue and caps left `config.py`);
+     `liminal-plugin-massive` 1.4.0 (2026-11-01, its headlines with it; the last: its key, plans
+     (`TIERS`, `tier_for`) and caps are its own settings too, the app's base `Settings` keep no
+     feed's plan (`NO_PLAN` until a feed's view sets one), `plan` is the capabilities scan of one
+     feed, and `sources/plugins/` is empty).
 
-  The repositories it would make, under `pcxmac-dev`: `liminal-plugin-massive` (Massive and its
-  headlines publisher, on its key), `liminal-plugin-alpaca` (Alpaca with its overnight feed on Blue
+  The repositories, under `pcxmac-dev`, all made: `liminal-plugin-massive` (Massive and its
+  headlines publisher, on its key; made), `liminal-plugin-alpaca` (Alpaca with its overnight feed on Blue
   Ocean, reached through Alpaca's API, keys and limits; made), `liminal-plugin-tiingo` (Tiingo with its
   forex feed: one key and account; made), `liminal-plugin-coinbase` (made), `liminal-plugin-bitstamp` (made),
   `liminal-plugin-bitfinex` (made), `liminal-plugin-cboe` (made), and the publishers `liminal-plugin-federal`

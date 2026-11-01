@@ -88,7 +88,7 @@ def test_symbol_sessions_for_annotations():
 
 def test_scan_only_and_fetch_endpoint(tmp_path):
     from liminal.collector import scan
-    from liminal.config import TIERS
+    from liminal_plugin_massive import TIERS
     from liminal.gui.server import ChartApp
     from liminal.storage import Store
     from liminal.symbols import resolve

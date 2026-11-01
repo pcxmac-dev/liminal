@@ -5,11 +5,13 @@ opened in the chart goes first: the daily-first sweep stops for it, the Fetcher 
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 
 from liminal import collector
 from liminal.collector import ET, sync
-from liminal.config import TIERS, load_settings
+from liminal.config import load_settings
+from liminal_plugin_massive import TIERS
 from liminal.gui import activity
 from liminal.live import WATCHLISTS_KEY
 
@@ -83,7 +85,8 @@ def test_the_fetcher_lists_an_opened_symbol_as_next_and_says_why_others_wait(sto
                                                      "l": 1, "c": 1, "v": 1}])  # behind: newer sessions published
     collector.request_priority(store, "OPEN", NOW.astimezone(timezone.utc))
     collector.set_updates_pause(store, 7, NOW)
-    settings = load_settings(env={"MASSIVE_API_KEY": "k"}, env_file=None)
+    # the fake feed has no plugin, so no view sets its plan: the free plan on the settings themselves
+    settings = replace(load_settings(env={"MASSIVE_API_KEY": "k"}, env_file=None), tier=FREE)
     rows = {r["ticker"]: r for r in activity.symbol_rows(store, settings, "fake", NOW)}
     assert rows["OPEN"]["state"] == "next" and "opened in the chart" in rows["OPEN"]["note"]
     assert rows["IDLE"]["state"] == "held" and "updates paused until 2026-10-28" in rows["IDLE"]["note"]
@@ -142,7 +145,7 @@ def test_an_opened_symbol_is_next_only_on_the_feeds_with_something_to_fetch(stor
     for t in ("FRESH", "OLD"):
         store.watch("tiingo", [t], "minute", exchange="XNAS")  # the archive has not visited either
         collector.request_priority(store, t, NOW.astimezone(timezone.utc))
-    settings = load_settings(env={"MASSIVE_API_KEY": "k", "TIINGO_API_KEY": "t"}, env_file=None)
+    settings = replace(load_settings(env={"MASSIVE_API_KEY": "k", "TIINGO_API_KEY": "t"}, env_file=None), tier=FREE)
     rows = {r["ticker"]: r for r in activity.symbol_rows(store, settings, "fake", NOW)}
     assert rows["OLD"]["state"] == "next" and rows["FRESH"]["state"] != "next"
     archive = activity.symbol_rows(store, settings, "tiingo", NOW)

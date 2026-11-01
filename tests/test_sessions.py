@@ -141,7 +141,7 @@ def test_crypto_freshness_on_the_free_plan_is_the_previous_utc_day():
     from datetime import datetime, timezone
 
     from liminal import freshness
-    from liminal.config import TIERS
+    from liminal_plugin_massive import TIERS
 
     exp = freshness.expected("crypto", TIERS["free"], datetime(2026, 10, 24, 4, 17, tzinfo=timezone.utc))  # a Saturday
     assert exp.latest == datetime(2026, 10, 23, 23, 59, tzinfo=timezone.utc)

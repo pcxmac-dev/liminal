@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from liminal import collector
-from liminal.config import TIERS
+from liminal_plugin_massive import TIERS
 from liminal.collector import ET, history_floor, sync
 
 from .conftest import FakeSource
