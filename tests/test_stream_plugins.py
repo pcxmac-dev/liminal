@@ -87,7 +87,9 @@ def test_an_installed_plugins_stream_is_recorded_like_the_built_ins(tmp_path, in
     installed(acme)
     assert "acmecoin" in live.crypto_streams()
     rec = live.Recorder(tmp_path / "m.db", coins=("BTC",), log=lambda *_: None, connect=lambda url: None)
-    assert [s.source for s in rec.streams] == ["bitstamp", "coinbase", "acmecoin"]
+    # the built-ins' streams and the fake package's: Bitstamp's is in its own package, which the fixture's
+    # entry points leave out
+    assert [s.source for s in rec.streams] == ["coinbase", "acmecoin"]
 
 
 def test_a_live_feed_is_never_another_plugins(installed):

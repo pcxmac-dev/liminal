@@ -36,16 +36,17 @@ def no_found_limits(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def no_installed_plugins(monkeypatch):
-    """The suite tests the app and its built-in plugins, never the plugin packages installed beside
-    it (liminal-plugin-cboe ...: each tested in its own repository): their entry points are hidden,
-    a test gives its own (test_plugins.py: `installed`), and test_plugins.py loads the installed ones
-    on their own. Plugins found with a package's (on collection, or by a test) are found again."""
+def installed_plugins_seen_fakes_forgotten():
+    """The suite runs with the plugin packages released on their own installed beside the app
+    (pyproject.toml's `plugins` extra; CI installs `.[dev,plugins]`), as the user's app does: with
+    every plugin leaving sources/plugins/ (2026-11-01), their records are the fixtures where a test
+    names a feed. A plugin's own tests are in its repository. A test's fake entry points
+    (test_plugins.py: `installed`) are forgotten before the next test: the plugins are found again."""
     from liminal.sources import registry
 
-    monkeypatch.setattr(registry, "_entry_points", lambda: ())
     if registry._providers is not None and any(
-            p.origin != "built in" for p in (*registry._providers.values(), *registry._publishers.values())):
+            not p.origin.startswith(("built in", "package: liminal-plugin-"))
+            for p in (*registry._providers.values(), *registry._publishers.values())):
         registry._providers = None
 
 
