@@ -153,7 +153,8 @@ def test_a_plugin_pointing_off_this_machine_or_out_of_the_data_folder_is_left_ou
           Database("acme/bars.parquet/", "bars"), Database(MAIN, "its rows", shared=True)]
     bad = {"far": Database("mongodb://db.example.com:27017/liminal.filings", "filings"),
            "srv": Database("mongodb+srv://cluster0.example.net/liminal", "filings"),
-           "out": Database("../elsewhere.db", "bars"), "abs": Database("C:/data/acme.db", "bars"),
+           "out": Database("../elsewhere.db", "bars"),
+           "abs": Database(str(Path(__file__).resolve().with_name("acme.db")), "bars"),  # absolute here, on Linux too
            "odd": Database("acme/x.db", "bars", engine="oracle"), "pg": Database("postgres://127.0.0.1/x", "bars"),
            "main": Database(MAIN, "its rows")}
     installed(replace(ACME, databases=tuple(ok)),

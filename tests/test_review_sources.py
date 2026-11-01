@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -518,6 +519,8 @@ def test_live_derivations_are_kept_per_day_of_the_bars_and_per_rules(tmp_path):
 
     first = stocks._tape_rules(Rules(), "iex")
     held.pop(0)
-    stocks._rules["iex"] = (1.0, *stocks._rules["iex"][1:])  # read long ago: read again
+    # read long ago: read again (an hour and more back on the monotonic clock, which on a machine
+    # just booted, such as a CI runner, is itself under an hour: 1.0 would still count as recent)
+    stocks._rules["iex"] = (time.monotonic() - live.RULES_SECONDS - 1, *stocks._rules["iex"][1:])
     second = stocks._tape_rules(Rules(), "iex")
     assert first[1] != second[1]  # other rules, another digest: another derivation record
