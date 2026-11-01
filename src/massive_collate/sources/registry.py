@@ -19,6 +19,8 @@ What a plugin gives:
   only what the user chose (`plan_choices`, offered by the key script and the Plugins view).
 - facts the rest of the app asks: its kind of data for the composite model, the exchange it is the
   reference for, the bars one request returns, a monthly symbol cap, the bulk symbols' resolution.
+- where its data is (`plugin_databases`, API 1.8; layout.py): each feed's files, its datasets' and
+  publishers', its rows in the main file, and any database its own code writes besides (`databases`).
 - its capabilities (`provides`, `plan_resolutions`, `per_request`, `streams`), from which it reports
   in one standard form (`report`, a `Report`): its subscription, its limits, one line per job it
   can do on that plan (asset class, resolution, market, how far back, how fresh, bars a request)
@@ -43,6 +45,8 @@ from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from typing import TYPE_CHECKING, Callable, Iterable, Mapping
 
+from .. import layout
+from ..layout import MAIN, Database  # noqa: F401 - plugins import them from here
 from ..ratelimit import MachineLedger, RateLimiter
 from .keys import KeyVar  # noqa: F401 - plugins import it from here
 from .publisher import Publisher
@@ -74,7 +78,10 @@ DEFAULT_PER_REQUEST = 1000  # bars a request returns, for a provider that does n
 # 1.7 (2026-10-31): Feed.parse and Feed.item_kind (sources.publisher: Read, parse_rss): each feed's
 #   parser in its plugin (the Federal Register's, the New York Fed's), an RSS feed read by the
 #   contract's reader.
-PLUGIN_API = "1.7"
+# 1.8 (2026-10-31): the databases a plugin's data is in (layout.Database: plugin_databases), and
+#   Provider.databases, Publisher.databases: any its own code writes besides the standard ones (a
+#   SQLite, DuckDB or Parquet file in the data folder, or a MongoDB collection on this machine).
+PLUGIN_API = "1.8"
 
 
 def api_version(api) -> tuple[int, int]:
@@ -234,6 +241,8 @@ class Provider:
     # its bars are one venue's share of the market (API 1.5; Blue Ocean's nights): a chart of all
     # feeds uses them only where no feed of the whole market has the span, never for days
     partial: bool = False
+    # databases its own code writes besides its feeds' files (API 1.8; layout.Database): none built in
+    databases: tuple[Database, ...] = ()
     # Callbacks (None: the default described at each method).
     view: Callable[["Settings"], "Settings"] | None = None
     rate: Callable[["Settings"], tuple[int | None, float]] | None = None
@@ -624,6 +633,11 @@ def discover_all() -> tuple[dict[str, Provider], dict[str, Publisher], list[tupl
             kind = "publisher" if isinstance(p, Publisher) else "provider"
             errors.append((p.origin, f"a second {kind} named {p.name!r}: the first kept ({first})"))
             continue
+        why = _databases_refused(p.databases)
+        if why:
+            kind = "publisher" if isinstance(p, Publisher) else "provider"
+            errors.append((p.origin, f"{kind} {p.name!r}: {why}"))
+            continue
         if isinstance(p, Publisher):
             clash = next((f.key for f in p.feeds if f.key in keys), None)
             if clash:
@@ -651,6 +665,19 @@ def discover_all() -> tuple[dict[str, Provider], dict[str, Publisher], list[tupl
         mine[p.name] = p
     in_order = lambda d: dict(sorted(d.items(), key=lambda kv: (kv[1].order, kv[0])))  # noqa: E731
     return in_order(out), in_order(pubs), errors
+
+
+def _databases_refused(dbs: Iterable[Database]) -> str | None:
+    """Why a plugin's own databases are refused (API 1.8): an engine the app has not, a server off this
+    machine, a path out of the data folder, or the app's own file (the main one, gov.db) not declared
+    shared."""
+    for d in dbs:
+        why = layout.not_here(d)
+        if why:
+            return why
+        if not d.shared and d.where in (layout.MAIN, layout.GOV):
+            return f"{d.where}: the app's file, every plugin's (declare it shared)"
+    return None
 
 
 def providers() -> dict[str, Provider]:
@@ -730,6 +757,58 @@ def plugin_feeds(name: str) -> list[str]:
     return [name, *(n for n in providers() if n != name and plugin_of(n) == name)]
 
 
+def _and(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def plugin_databases(name: str) -> list[Database]:
+    """Every database a plugin's data is in (API 1.8; layout.py), each once (what it holds of the
+    plugin's together), in this order: each feed's bars and trades (feeds/<feed>.db, -ticks.db; its
+    live feeds' too: Alpaca's iex), its datasets' files and their downloads (datasets/<file>.db,
+    sources/datasets/<file>/), what its publishers read (gov/gov.db), the databases its own code
+    writes (`databases`), and its rows in the main file. A feed plugin's include its feeds' and
+    publishers' (Massive: its headlines); a publisher's, its parts' (Federal: its agencies'); a part's,
+    its own. The user, 2026-10-31: "the plugin will point to the databases it stores the data in"."""
+    ps, pubs = providers(), publishers()
+    found: list[Database] = []
+    main: list[str] = []
+    declared: list[Database] = []
+    if name in ps:
+        for n in plugin_feeds(name) if plugin_of(name) == name else [name]:
+            f = ps[n]
+            for feed, called in ((n, label(n)), *((x.name, x.label or x.name) for x in f.live if x.name != n)):
+                found += [Database(layout.bars(feed), f"{called}: bars"), Database(layout.ticks(feed), f"{called}: trades")]
+            declared += f.databases
+        main.append("its rows by feed: requests a day, events, the reference it gave")
+        parts = publisher_parts(name) if plugin_of(name) == name else []
+    else:
+        parts = [n for n in (name, *publisher_parts(name)) if n in pubs]
+    sets: dict[str, list[str]] = {}
+    for n in parts:
+        for d in pubs[n].declared:
+            sets.setdefault(d.provider, []).append(d.name)
+    for provider, names in sets.items():
+        found += [Database(layout.dataset_file(provider), f"series of {', '.join(names)}"),
+                  Database(layout.downloads(provider), "its files, every version as downloaded")]
+    if sets:
+        main.append("its fetched files' ledger")
+    readers = [pubs[n] for n in parts if pubs[n].feeds]
+    if readers:
+        own = [q.title for q in readers if q.read is None]
+        found.append(Database(layout.GOV, (f"what {_and(own)} read" + ", and " if own else "")
+                              + "the reads' record: requests, robots.txt, rechecks", shared=True))
+    declared += [d for n in parts for d in pubs[n].databases]
+    found += [d for d in declared if d.where != layout.MAIN]
+    if main:  # the main file last, what the app keeps of it first
+        found.append(Database(layout.MAIN, "; ".join(main), shared=True))
+    found += [d for d in declared if d.where == layout.MAIN]
+    out: dict[str, Database] = {}
+    for d in found:
+        was = out.get(d.where)
+        out[d.where] = d if was is None else replace(was, holds=f"{was.holds}; {d.holds}", shared=was.shared or d.shared)
+    return list(out.values())
+
+
 def label(name: str) -> str:
     """How a feed is named to the user: a plugin's own by its name, one part of another plugin as
     that plugin with what it is of it (the user, 2026-10-30: "the source isn't blue ocean its alpaca
@@ -786,7 +865,8 @@ def menu(settings: "Settings | None" = None) -> list[dict]:
                "keys": [key_row(k) for k in plugin_keys(p.name)],
                "publishers": [_publisher_row(publishers()[n]) for n in publisher_parts(p.name)],
                "planChoices": [{"name": v, "choices": list(c)} for v, c in p.plan_choices.items()],
-               "planNote": p.plan_note, "scan": p.scan is not None, "feeds": []}
+               "planNote": p.plan_note, "scan": p.scan is not None, "feeds": [],
+               "databases": [database_row(d) for d in plugin_databases(p.name)]}
         for n in plugin_feeds(p.name)[1:]:
             f = providers()[n]
             feed = {"name": f.name, "title": f.title, "label": label(n), "about": f.about, "assets": sorted(f.assets)}
@@ -801,10 +881,20 @@ def menu(settings: "Settings | None" = None) -> list[dict]:
     return out
 
 
+def database_row(d: Database, main=None) -> dict:
+    """A database for the `plugins` command and the Plugins view; with the main file's path, where it
+    is here and its size (None: not made yet, or a server's)."""
+    row = {"where": d.where, "holds": d.holds, "shared": d.shared, "engine": d.kind}
+    if main is not None:
+        at = layout.locate(d.where, main)
+        row.update(path=str(at) if at else d.where, bytes=layout.size(d.where, main))
+    return row
+
+
 def _publisher_row(p: Publisher) -> dict:
     return {"name": p.name, "title": p.title, "about": p.about, "kind": p.kind, "account": p.account,
             "origin": p.origin, "version": p.version, "api": p.api, "datasets": list(p.dataset_names),
-            "keys": [key_row(k) for k in p.keys]}
+            "keys": [key_row(k) for k in p.keys], "databases": [database_row(d) for d in plugin_databases(p.name)]}
 
 
 def publisher_menu() -> list[dict]:

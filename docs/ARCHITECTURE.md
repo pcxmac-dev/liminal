@@ -201,7 +201,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     An unknown value is Starter.
 - **The plugin contract, versioned** (2026-10-29; the user: "eventually plugins will need to be in
   their own repo with their own version"). The app offers `registry.PLUGIN_API` (major.minor, now
-  1.7). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
+  1.8). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
   major.minor.patch) and the contract it was written for (`api`: a literal such as `"1.0"`, never
   `PLUGIN_API` itself, which would always match). At discovery a plugin written for another major,
   or for a newer minor than the app offers, is left out and reported with the ones that fail to
@@ -296,6 +296,19 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     (`item_kind`: the Fed's speeches, the SEC's trading suspensions, BLS's data releases). `gov.py`
     keeps what they send and makes the Federal view; it parses no agency's answer. With it no
     provider's host is named outside `sources/plugins/` but the links people follow.
+  - **1.8** (2026-10-31) adds where a plugin's data is (the user: "the plugin will point to the
+    databases it stores the data in"): `layout.py` names the data folder's files and
+    `registry.plugin_databases(name)` lists each plugin's (`layout.Database`: where, what it holds
+    of the plugin's, shared or its own, its engine): each feed's bars and trades
+    (`feeds/<feed>.db`, `-ticks.db`, its live feeds' too), its datasets' files and their downloads
+    (`datasets/<file>.db`, `sources/datasets/<file>/`), what its publishers read (`gov/gov.db`) and
+    its rows in the main file, with any its own code writes besides (`Provider.databases`,
+    `Publisher.databases`: Massive's headlines, the main file's news). The Store, `gov.db_path` and
+    the datasets' downloads take their paths from `layout.py`. An engine is SQLite, DuckDB, Parquet,
+    a MongoDB collection or a folder of files (the user: "lets prep for mongo and duck"); a server
+    off this machine, a path out of the data folder, an unknown engine or the main file not declared
+    shared is refused at loading. `plugins --json` and the Plugins view (each plugin's Databases,
+    with its size here) show them (`tests/test_plugin_databases.py`).
   - **What a plugin may rely on (API 1.0)**, and nothing else of `massive_collate`:
     `sources.registry`: `PLUGIN_API`, `Provider`, `KeyVar`, `Scanned`, and `Report`, `Limits`,
     `Capability` for a `reporter`; the helpers `limiter`, `machine_caps`, `public_client`,

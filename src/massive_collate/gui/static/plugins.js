@@ -47,6 +47,12 @@
     const [n, s] = r;
     return Math.abs(s - 3600) < 120 ? `${num(n)} an hour` : Math.abs(s - 60) < 5 ? `${num(n)} a minute` : `${num(n)} per ${num(s)} s`;
   };
+  const ENGINES = { sqlite: 'SQLite', duckdb: 'DuckDB', parquet: 'Parquet', mongodb: 'MongoDB', files: 'files' };
+  const size = (n) => {
+    let v = n, i = 0;
+    while (v >= 1024 && i < 5) { v /= 1024; i++; }
+    return `${i === 0 || v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${['B', 'KB', 'MB', 'GB', 'TB', 'PB'][i]}`;
+  };
   const days = (d) => (d < 1 / 24 ? 'under an hour' : d < 1 ? `${(d * 24).toFixed(1)} h` : `${num(d)} days`);
   const chip = (state) => `<span class="ex-state pl-${esc(state.replace(' ', '-'))}">${esc(STATE[state] || state)}</span>`;
   const tile = (title, big, small) => `<div class="tile"><h5>${title}</h5><div class="big">${big}</div><small>${small}</small></div>`;
@@ -334,11 +340,25 @@
   }
 
   function pubMainHtml(p) {
-    if (p.parts.length) return `${(p.keys || []).length ? pubSetupHtml(p) : ''}${partsHtml(p)}`;
+    if (p.parts.length) return `${(p.keys || []).length ? pubSetupHtml(p) : ''}${partsHtml(p)}${databasesHtml(p)}`;
     if (!p.feeds.length) {
-      return `${datasetsHtml(p)}${p.policy.terms ? `<h4>Terms</h4><div class="small">${esc(p.policy.terms)}</div>` : ''}`;
+      return `${datasetsHtml(p)}${databasesHtml(p)}${p.policy.terms ? `<h4>Terms</h4><div class="small">${esc(p.policy.terms)}</div>` : ''}`;
     }
-    return `${pubSetupHtml(p)}${readsHtml(p)}`;
+    return `${pubSetupHtml(p)}${readsHtml(p)}${databasesHtml(p)}`;
+  }
+
+  // where a plugin's data is (registry.plugin_databases, API 1.8; the user, 2026-10-31: "the plugin
+  // will point to the databases it stores the data in"): each database, what it holds of the plugin's,
+  // its engine and its size here; a shared one (the main file, gov.db) holds only some rows of it
+  function databasesHtml(p) {
+    const dbs = p.databases || [];
+    if (!dbs.length) return '';
+    const rows = dbs.map((d) => `<tr><td><code title="${esc(d.path || d.where)}">${esc(d.where)}</code>${d.shared
+      ? ` <span class="chip" title="The app's and other plugins' too: only this plugin's rows in it are its">shared</span>` : ''}</td>
+      <td class="small">${esc(d.holds)}</td><td>${esc(ENGINES[d.engine] || d.engine)}</td>
+      <td class="num">${d.bytes == null ? `<span class="p-muted">${d.engine === 'mongodb' ? 'a server' : 'none yet'}</span>` : size(d.bytes)}</td></tr>`).join('');
+    return `<h4>Databases</h4><table class="act-table ex-mini pl-dbs"><thead><tr><th>Database</th><th>What it holds</th><th>Engine</th><th class="num">Size</th></tr></thead>
+      <tbody>${rows}</tbody></table><div class="p-muted small">In the data folder, beside the main file; hover a name for its path here.</div>`;
   }
 
   // what a publisher reads: its feeds with their last and next reads, its schedule, its scrape
@@ -449,7 +469,7 @@
     const p = plugin();
     if (!p) return '<div class="empty">No plugin found.</div>';
     return `${setupHtml(p.name, p.keys)}${feedsHtml(p)}${planHtml(p)}${limitsHtml(p)}${capabilitiesHtml(p)}${scanHtml(p)}
-      ${p.notes.length ? `<h4>Notes</h4>${p.notes.map((n) => `<div class="small">${esc(n)}</div>`).join('')}` : ''}${publishersHtml(p)}`;
+      ${p.notes.length ? `<h4>Notes</h4>${p.notes.map((n) => `<div class="small">${esc(n)}</div>`).join('')}` : ''}${publishersHtml(p)}${databasesHtml(p)}`;
   }
 
   // -- right: its part in the delivery scheme, its usage, its keys ---------------------------

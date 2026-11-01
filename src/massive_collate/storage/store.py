@@ -7,6 +7,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
+from ..layout import DATASETS, FEEDS
 from .admin import AdminStore
 from .appstate import AppStateStore
 from .audits import AuditStore
@@ -32,8 +33,8 @@ class Store(ProvenanceStore, AdminStore, FeedStore, PrunedStore, DatasetStore, D
         memory = str(path) == ":memory:"
         if not memory:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.feeds_dir = Path(feeds_dir) if feeds_dir else (None if memory else self.path.with_name("feeds"))
-        self.datasets_dir = Path(datasets_dir) if datasets_dir else (None if memory else self.path.with_name("datasets"))
+        self.feeds_dir = Path(feeds_dir) if feeds_dir else (None if memory else self.path.with_name(FEEDS))
+        self.datasets_dir = Path(datasets_dir) if datasets_dir else (None if memory else self.path.with_name(DATASETS))
         self._dataset_conns: dict[str, sqlite3.Connection] = {}
         self._check_same_thread = check_same_thread
         self.conn = sqlite3.connect(str(path), check_same_thread=check_same_thread, timeout=BUSY_TIMEOUT_S)

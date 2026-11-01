@@ -12,7 +12,7 @@ from ....config import MASSIVE_CLASS_TIERS, TIERS, asset_tier, tier_for
 from ....ratelimit import MachineLedger, RateLimiter
 from ....symbols import ASSETS
 from ...publisher import Feed, Policy, Publisher
-from ...registry import KeyVar, Provider, Scanned, limiter, machine_caps, minute_window
+from ...registry import MAIN, Database, KeyVar, Provider, Scanned, limiter, machine_caps, minute_window
 from .client import BASE_URL, PAGE_LIMIT, MassiveClient, MassiveSource
 
 # plan_reach's answers, and the plans that have each (config.tier_for)
@@ -58,7 +58,8 @@ def scan(source) -> Scanned:
 
 
 PLUGIN = Provider(
-    version="1.2.0", api="1.6",  # its own release (its client in it), and the contract it needs (sources.http)
+    # its own release, and the contract it needs: sources.http (1.6), its headlines' database (1.8)
+    version="1.3.0", api="1.8",
     name="massive", title="Massive", build=build, assets=frozenset(ASSETS), order=0,
     about="stocks, indices, currencies, crypto and futures: 1-second and minute bars, reference data, news",
     keys=(KeyVar("MASSIVE_API_KEY"),), signup="massive.com: your dashboard's API keys",
@@ -107,4 +108,5 @@ PUBLISHER = Publisher(
     policy=Policy(min_minutes=30, per_day=60, terms="your Massive plan's terms; one request a read",
                   terms_url="https://massive.com/terms"),
     read=read_headlines,
+    databases=(Database(MAIN, "Massive headlines: the news", shared=True),),  # read_headlines saves them there
 )

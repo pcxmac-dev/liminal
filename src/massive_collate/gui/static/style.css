@@ -1023,6 +1023,8 @@ main > .view.ex-view:not([hidden]) { display: grid; }
 /* Setup: each variable a plugin reads, typed and saved here (never shown back) */
 .pl-setup td { vertical-align: middle; }
 .pl-setup input.pl-key { width: 100%; min-width: 140px; font-size: 12px; padding: 2px 6px; box-sizing: border-box; }
+.pl-dbs code { white-space: nowrap; }
+.pl-dbs td { vertical-align: top; }
 .pl-key-btns { white-space: nowrap; text-align: right; }
 .pl-key-btns button + button { margin-left: 4px; }
 /* a publisher (news and publications): its feeds' states, its scrape checks */

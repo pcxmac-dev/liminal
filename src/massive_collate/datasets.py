@@ -47,6 +47,7 @@ from typing import Iterator
 
 import requests
 
+from .layout import downloads
 from .sources.dataset import ET, Dataset, Parsed  # noqa: F401 - Parsed: the stores' and tests' import
 
 USER_AGENT = "massive-collate/1 (personal research; historical archive)"
@@ -191,7 +192,7 @@ def _keep(store, ds: Dataset, file: str, blob: bytes, sha: str) -> Path | None:
     """Keep this version of a downloaded file: <data>/sources/datasets/<provider>/<name>.<sha12><ext>."""
     if store.datasets_dir is None:
         return None
-    base = store.datasets_dir.parent / "sources" / "datasets" / ds.provider
+    base = store.datasets_dir.parent / downloads(ds.provider)
     f = Path(file)
     dest = base / f"{f.stem}.{sha[:12]}{f.suffix}"
     if not dest.exists():

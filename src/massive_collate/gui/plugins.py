@@ -19,6 +19,11 @@ A publisher can be part of a feed plugin (Massive's headlines: Publisher.part_of
 Federal's (the user, 2026-10-31: "massive headlines should not be separate from massive same thing
 with federal agencies and federal"); what it reads comes from publications.view.
 
+Each plugin points to the databases its data is in (registry.plugin_databases, API 1.8): its feeds'
+files, its datasets' and publishers', its rows in the main file, each with what it holds of the
+plugin's and its size here (the user, 2026-10-31: "the plugin will point to the databases it stores
+the data in").
+
 Each plugin is set up here: every variable it reads (registry.plugin_keys: its keys, its feeds' and
 publishers', a detail of yours such as GOV_CONTACT) with whether it is set, typed into the view and
 saved as your user environment variable (ChartApp.set_key); its plan chosen (ChartApp.set_plan).
@@ -31,7 +36,8 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from ..sources import providers
-from ..sources.registry import PLUGIN_API, errors, key_row, label, plugin_feeds, plugin_keys, plugin_of, publisher_parts
+from ..sources.registry import (PLUGIN_API, database_row, errors, key_row, label, plugin_databases, plugin_feeds,
+                                plugin_keys, plugin_of, publisher_parts)
 
 GROUPS = ("Feeds with keys", "Public feeds")
 
@@ -161,6 +167,8 @@ def view(store, settings, feeds: dict, scheme, scans: dict, running: dict | None
             "delivery": delivery, "load": round(scheme.load.get(name, 0.0), 3),
         }
     out = [_fold(e, [entries[n] for n in plugin_feeds(name)[1:]]) for name, e in entries.items() if plugin_of(name) == name]
+    for e in out:
+        e["databases"] = [database_row(d, store.path) for d in plugin_databases(e["name"])]
     return {"plugins": out, "groups": list(GROUPS), "errors": [{"where": w, "why": why} for w, why in errors()],
             "api": PLUGIN_API,
             "running": running, "offline": bool(settings.offline),

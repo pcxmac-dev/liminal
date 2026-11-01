@@ -34,6 +34,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
+from .layout import gov_db
 from .sources.publisher import Feed
 
 USER_AGENT = "massive-collate/1 (personal research)"
@@ -117,7 +118,7 @@ CREATE TABLE IF NOT EXISTS holds (      -- nothing sent until: a publisher refus
 def db_path(main_db: Path | str) -> Path | None:
     """gov/gov.db beside the main database (None for an in-memory one)."""
     p = Path(main_db)
-    return None if str(main_db) == ":memory:" else p.parent / "gov" / "gov.db"
+    return None if str(main_db) == ":memory:" else gov_db(p)
 
 
 class GovDB:

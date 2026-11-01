@@ -27,6 +27,7 @@ from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Callable
 
+from ..layout import Database
 from .dataset import Dataset
 from .keys import KeyVar
 
@@ -99,6 +100,9 @@ class Publisher:
     # what the user sets for it (API 1.3): a key, or a detail of theirs it sends where asked (the SEC:
     # GOV_CONTACT); user environment variables, set from the Plugins view or the key script
     keys: tuple[KeyVar, ...] = ()
+    # databases its own code writes besides gov/gov.db and its datasets' files (API 1.8;
+    # layout.Database): a vendor's `read` saving elsewhere (Massive's headlines: the main file's news)
+    databases: tuple[Database, ...] = ()
     # its own version and the plugin contract it was written for (sources/registry.py: PLUGIN_API)
     version: str = ""
     api: str = "1.0"

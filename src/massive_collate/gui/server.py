@@ -602,10 +602,13 @@ class ChartApp:
             held = {d["name"]: d for d in self.datasets()["datasets"]}
             for p in out:
                 p["datasetRows"] = [held[n] for n in p["datasets"] if n in held]
-        from ..sources.registry import key_row, plugin_keys
+        from ..sources.registry import database_row, key_row, plugin_databases, plugin_keys, publisher_of
 
         for p in out:  # what you set for it (its parts' too, for a plugin of several): set or not, never a value
             p["keys"] = [key_row(k, self.settings) for k in plugin_keys(p["name"])]
+            # where a plugin's data is, its parts' too (a part's are in its plugin's page)
+            p["databases"] = ([database_row(d, self.store.path) for d in plugin_databases(p["name"])]
+                              if publisher_of(p["name"]) == p["name"] else [])
         return out
 
     def start_recheck(self, name: str) -> dict:
