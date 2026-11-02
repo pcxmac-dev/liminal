@@ -116,6 +116,7 @@ class ChartApp:
         # ticker -> (counted at, by feed and rule) for the ROW_COUNTS_KEPT symbols counted last: under _panel_lock
         self._pruned_counts: OrderedDict[str, tuple[float, dict]] = _BoundedCache(ROW_COUNTS_KEPT)
         self._status_lock = threading.Lock()  # the Fetcher view and status bar
+        self._queue_lock = threading.Lock()  # the fetcher's requests and the plugins' queue
         self._activity: dict[str, tuple[float, tuple, dict]] = {}  # feed -> (made at, (lines, open symbol), answer)
         self._official_at: float | None = None  # when the official holidays were last applied (OFFICIAL_TTL_S)
         self._activity_rows: dict = {}  # activity.activity's symbol rows (SYMBOL_ROWS_TTL_S)
@@ -173,6 +174,9 @@ class ChartApp:
         # all waited behind it).
         self._panel_store = store.reader()
         self._status_store = store.reader()  # the Fetcher view and status bar
+        # the fetcher's requests and the plugins' queue, never behind the status poll (seconds on
+        # thousands of symbols: the fetcher's own page showed an empty stack and queue meanwhile)
+        self._queue_store = store.reader()
         self._deps_store = store.reader()  # dependency checks
         self._datasets_store = store.reader()  # the datasets list
         self._symbols_store = store.reader()  # the symbol list
@@ -185,6 +189,7 @@ class ChartApp:
         """Every store closed (release): the readers', the engine's, the main one's connections,
         gov.db, the paper account's, and the sampler ended."""
         for lock, name in ((self._panel_lock, "_panel_store"), (self._status_lock, "_status_store"),
+                           (self._queue_lock, "_queue_store"),
                            (self._deps_lock, "_deps_store"), (self._datasets_lock, "_datasets_store"),
                            (self._symbols_lock, "_symbols_store"), (self._profiles_lock, "_profiles_store")):
             with lock:
@@ -318,15 +323,15 @@ class ChartApp:
         """The fetcher's status: its own here, else as it last wrote it in the file."""
         if self._fetcher is not None:
             return self._fetcher.status()
-        with self._status_lock:
-            return read_status(self._status_store)
+        with self._queue_lock:
+            return read_status(self._queue_store)
 
     def requests(self, q: dict[str, str]) -> dict:
         """The fetcher's requests (storage/requests.py) as the Fetcher view shows them, with its status."""
         limit = max(1, min(int(q.get("limit", 200)), 2000))
-        with self._status_lock:
-            rows = self._status_store.request_rows(q.get("state") or None, limit)
-            counts = self._status_store.request_counts()
+        with self._queue_lock:
+            rows = self._queue_store.request_rows(q.get("state") or None, limit)
+            counts = self._queue_store.request_counts()
         return {"rows": rows, "counts": counts, "kinds": list(REQUEST_KINDS), "status": self.fetcher_status(),
                 "limit": limit}
 
@@ -1452,8 +1457,8 @@ class ChartApp:
         # The opened symbol's own request: its end is not every feed's (Massive's pass goes on beside it)
         req = self._symbol_request
         if req is not None:
-            with self._status_lock:
-                row = self._status_store.request_get(req[1])
+            with self._queue_lock:
+                row = self._queue_store.request_get(req[1])
             out["symbolRun"] = {"ticker": req[0], "going": row is not None and row["state"] in OPEN_REQUEST}
         else:
             out["symbolRun"] = None
@@ -1464,8 +1469,8 @@ class ChartApp:
         from . import queue
 
         limit = max(1, min(int(q.get("limit", 300)), 2000))
-        with self._status_lock:
-            return queue.view(self._status_store, q.get("plugin") or None, q.get("kind") or None,
+        with self._queue_lock:
+            return queue.view(self._queue_store, q.get("plugin") or None, q.get("kind") or None,
                               q.get("state") or None, limit)
 
     def plugin_fetching(self, name: str) -> dict:
@@ -1783,6 +1788,14 @@ class ChartApp:
             serving = any(r["source"] in tiers and r["asset"] in assets[r["source"]] for r in rows)
             found = collector.needs_fetch(self.store, ticker, tiers, now, assets) if serving else []
             need = [name for name in tiers if name in found]  # the feeds it waits for, in their ranked order
+            # A retired symbol (no longer listed): its stored data to look at, nothing new to ask for
+            # (the user, 2026-11-02); asked of the fetcher only while a feed's history of it is still
+            # incomplete (needs_fetch: up to its last listed day), once, so a source that still has
+            # it completes it.
+            retired = all(r.get("retired_on") for r in rows)
+            if retired and not need:
+                return {"ticker": ticker, "feeds": feeds, "state": "retired",
+                        "retiredOn": max(str(r["retired_on"]) for r in rows)}
             if serving and not self.settings.offline and not self._halted() and not need:
                 # up to date on every feed: nothing new can exist yet (out of session, or not released)
                 due = [e.next_due for e in (expected(freshness.hours(r["source"], r["asset"]), tiers[r["source"]], now)

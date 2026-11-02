@@ -62,6 +62,7 @@ const state = {
   drawingId: null,
   loadToken: 0,
   restoredFor: null,
+  userPick: null,  // the symbol you picked (openSymbol): the start's layout never opens its own over it
 };
 
 const $ = (id) => document.getElementById(id);
@@ -2073,16 +2074,23 @@ $('typeSelect').addEventListener('change', (e) => {
 function openSymbol(ticker, source = null) {
   if (!['stock', 'analysis'].includes(document.body.dataset.pane)) window.showPane?.('stock', { toggle: false });
   state.picked = String(ticker).toUpperCase();  // yours: it goes in your register (activity.js), not one opened by itself
+  state.userPick = state.picked;
   const known = state.symbols.some((s) => s.ticker === String(ticker).toUpperCase());
   return (known ? selectSymbol(ticker, source) : loadSymbols().then(() => selectSymbol(ticker, source))).catch(showError);
 }
 
 window.addEventListener('liminal:open-symbol', (e) => openSymbol(e.detail));
 
+let symbolsLoading = null;  // the list on its way (seconds with thousands of symbols): asked once, shared
 async function loadSymbols() {
-  state.symbols = await api('/api/symbols');
-  state.symbolsLoaded = true;
-  window.dispatchEvent(new CustomEvent('liminal:symbols'));  // the watchlist draws its rows at once
+  if (!symbolsLoading) {
+    symbolsLoading = api('/api/symbols').then((list) => {
+      state.symbols = list;
+      state.symbolsLoaded = true;
+      window.dispatchEvent(new CustomEvent('liminal:symbols'));  // the watchlist draws its rows at once
+    }).finally(() => { symbolsLoading = null; });
+  }
+  return symbolsLoading;
 }
 
 function symbolInfo(ticker) {
@@ -3373,7 +3381,9 @@ async function applyLayout(l) {
       : firstStored() ? { ticker: firstStored().ticker, source: MERGED } : null;
     // A layout saved on a reference exchange only because that was once the default opens merged.
     if (sym && sym.source === symbolInfo(sym.ticker).models?.reference) sym.source = MERGED;
-    if (sym) await selectSymbol(sym.ticker, sym.source);
+    // Not over a symbol you picked while the page was still starting: the layout's answer came after
+    // the pick, and a symbol picked at once went back to the layout's (ELME to SPCX, 2026-11-02).
+    if (sym && !state.userPick) await selectSymbol(sym.ticker, sym.source);
   } finally {
     state.applyingLayout = false;
   }
@@ -3381,6 +3391,7 @@ async function applyLayout(l) {
 
 async function loadLayout(id) {
   if (layout.dirty) await saveLayout();
+  state.userPick = null;  // a layout you open yourself opens its symbol
   await applyLayout(await api(`/api/layouts/${id}`));
 }
 
@@ -4033,6 +4044,7 @@ $('pHighlight').addEventListener('click', (e) => {
 // -- start -------------------------------------------------------------------------
 (async function start() {
   if (FETCHER_MODE) {  // the fetcher's page: no chart, no layout, no symbol; the symbol list names the views' symbols
+    $('statusText').textContent = 'The fetcher: its requests and queue, the plugins, the data. The chart is in the app.';
     try { await loadSymbols(); } catch (err) { showError(err); }
     return;
   }
