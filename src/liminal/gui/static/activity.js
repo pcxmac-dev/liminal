@@ -391,12 +391,27 @@
         <td>${name}</td>
         <td>${esc(title[r.plugin] || r.plugin)}${r.partLabel ? `<div class="sub">${esc(r.partLabel)}</div>` : ''}</td>
         <td><span class="state ${Q_CLASS[r.state] || ''}">${esc(Q_LABEL[r.state] || r.state)}</span>${r.attempts > 1 ? `<div class="sub">try ${num(r.attempts)}</div>` : ''}</td>
+        <td class="q-prog">${downloaded(r)}</td>
         <td class="sub">${esc(r.error || r.detail || '')}</td>
         <td class="num">${r.requests ? num(r.requests) : '–'}${r.rows ? `<div class="sub">${num(r.rows)} rows</div>` : ''}${r.bytes ? `<div class="sub">${size(r.bytes)}</div>` : ''}</td>
         <td>${qWhen(r)}</td></tr>`;
-    }).join('') + (rows.length >= queue.limit ? `<tr><td colspan="6" class="empty">The first ${num(rows.length)} shown: what is being
+    }).join('') + (rows.length >= queue.limit ? `<tr><td colspan="7" class="empty">The first ${num(rows.length)} shown: what is being
         fetched, then what waits (in its order), held, failed and the newest done. Filter by plugin, kind or state for the rest.</td></tr>` : '')
-      : `<tr><td colspan="6" class="empty">${total ? 'Nothing in this filter.' : 'Nothing on the queue yet: the next run of each plugin puts what it will fetch here.'}</td></tr>`;
+      : `<tr><td colspan="7" class="empty">${total ? 'Nothing in this filter.' : 'Nothing on the queue yet: the next run of each plugin puts what it will fetch here.'}</td></tr>`;
+  }
+
+  // How much of a symbol this plugin has downloaded (the user, 2026-11-02): its share of the history
+  // it is to hold, as a bar, and the first and last day stored at each resolution it sends.
+  const RES_LABEL = { day: 'days', minute: 'minutes', second: 'seconds' };
+  const shortDay = (d) => (d || '').slice(2);
+  function downloaded(r) {
+    const p = r.progress;
+    if (!p) return r.kind === 'bars' ? '<span class="p-muted">–</span>' : '';
+    const pct = Math.round((p.share || 0) * 100);
+    const spans = Object.entries(p.stored || {}).map(([res, [a, b]]) => `${RES_LABEL[res] || res} ${shortDay(a)}→${shortDay(b)}`);
+    const note = p.retiredOn ? ` · retired ${shortDay(p.retiredOn)}` : '';
+    return `<div class="q-bar" title="${pct}% of the history this plugin is to hold, back to ${esc(p.target || '')}"><span style="width:${pct}%"></span></div>
+      <div class="sub">${pct}%${spans.length ? ' · ' + esc(spans.join(' · ')) : ' · nothing stored here'}${esc(note)}</div>`;
   }
 
   function renderFetcherView() {

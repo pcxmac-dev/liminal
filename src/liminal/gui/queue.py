@@ -15,10 +15,12 @@ from pathlib import Path
 
 from .. import collector, killswitch
 from ..proc import pid_alive
-from ..sources import providers, publishers
+from ..sources import feed_profiles, providers, publishers
 from ..sources.registry import label, plugin_feeds, plugin_of, publisher_of, publisher_parts
 from ..symbols import ASSETS, resolve
-from .activity import fetching_feeds, limits, log_path, log_tail
+from .activity import ET, fetching_feeds, limits, log_path, log_tail, symbol_status
+
+RESOLUTIONS = ("day", "minute", "second")  # the bars a feed sends, coarsest first
 
 
 def _plugins() -> dict[str, str]:
@@ -55,14 +57,52 @@ def _asset(ticker: str) -> str | None:
         return None
 
 
+def _day(ms: int) -> str:
+    return datetime.fromtimestamp(ms / 1000, ET).date().isoformat()
+
+
+def progress(store, feed: str, ticker: str, tier, today, now: datetime) -> dict | None:
+    """How much of a symbol's bars a feed has downloaded (the user, 2026-11-02: "how much of the
+    symbol has been downloaded respective of the plugin its associated with on the queue"): the
+    share of the history the feed is to hold (from its plan's floor or the listing, to today or to
+    the symbol's last listed day: activity.symbol_status), its state there, and what is stored at
+    each resolution the feed sends (first and last day). None: the feed does not watch it."""
+    item = next(iter(store.watchlist(feed, ticker)), None)
+    if item is None:
+        return None
+    stored: dict[str, list[str]] = {}
+    edges: dict[str, tuple] = {}
+    for ts in RESOLUTIONS:
+        e = store.bar_edges(feed, ticker, ts)
+        if e:
+            edges[ts] = e
+            stored[ts] = [_day(e[0]), _day(e[1])]
+    finest = edges.get("minute") or edges.get("second") or edges.get("day")
+    floor = collector.history_floor(tier, today, item["asset"])
+    st = symbol_status(item, finest, floor, today, now, tier, None)
+    return {"share": st["progress"], "state": st["state"], "target": st["target"], "stored": stored,
+            "retiredOn": item["retired_on"].isoformat() if item.get("retired_on") else None}
+
+
 def view(store, plugin: str | None = None, kind: str | None = None, state: str | None = None,
-         limit: int = 300) -> dict:
+         limit: int = 300, settings=None) -> dict:
     """The Fetcher: the queue's rows (running, waiting, held, failed, the newest done), counted by
-    plugin, kind and state, with each plugin's title."""
+    plugin, kind and state, with each plugin's title; with `settings`, each symbol's bars row says
+    how much of it its feed has downloaded (progress)."""
     alive: dict[int, bool] = {}
     rows = [_row(r, alive) for r in store.queue_rows(plugin, kind, None if state == "stopped" else state, limit)]
     if state == "stopped":
         rows = [r for r in rows if r["state"] == "stopped"]
+    if settings is not None:
+        tiers = {n: p.tier for n, p in feed_profiles(settings).items()}
+        now = datetime.now(timezone.utc)
+        today = now.astimezone(ET).date()
+        for r in rows:
+            if r["kind"] == "bars" and r["part"] in tiers:
+                try:
+                    r["progress"] = progress(store, r["part"], r["key"], tiers[r["part"]], today, now)
+                except Exception:  # noqa: BLE001 - a row's measure never fails the queue
+                    r["progress"] = None
     counts = _counts(store, alive)
     titles = _plugins()
     totals: dict[str, int] = {}

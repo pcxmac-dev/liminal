@@ -1471,7 +1471,7 @@ class ChartApp:
         limit = max(1, min(int(q.get("limit", 300)), 2000))
         with self._queue_lock:
             return queue.view(self._queue_store, q.get("plugin") or None, q.get("kind") or None,
-                              q.get("state") or None, limit)
+                              q.get("state") or None, limit, settings=self.settings)
 
     def plugin_fetching(self, name: str) -> dict:
         """A plugin's fetching status for its page (gui/queue.py): its state, queue, feeds, limits, runs, log."""

@@ -237,6 +237,43 @@ def test_the_fetcher_and_a_plugins_page_read_the_queue(tmp_path):
             app.plugin_fetching("nope")
 
 
+def test_each_symbols_row_says_how_much_of_it_its_plugin_has_downloaded(tmp_path):
+    """The user, 2026-11-02: "i need to see how much of the symbol has been downloaded respective
+    of the plugin its associated with on the queue"."""
+    from datetime import date
+
+    from liminal.gui import queue
+    from liminal.gui.server import ChartApp
+
+    path = tmp_path / "m.db"
+    settings = load_settings(env={"LIMINAL_DB": str(path), "MASSIVE_API_KEY": "k"}, env_file=None)
+    with Store(path, check_same_thread=False) as store:
+        store.watch("massive", ["SPY", "NEWCO"], "minute", exchange="XNYS")
+        day_ms = 86_400_000
+        first = 1_700_000_000_000  # 2023-11-14
+        store.upsert_bars("massive", "SPY", "day", 1, [{"t": first + i * day_ms, "o": 1, "h": 2, "l": 0.5, "c": 1.5, "v": 10}
+                                                       for i in range(0, 700, 7)])
+        store.upsert_bars("massive", "SPY", "minute", 1, [{"t": first + 600 * day_ms, "o": 1, "h": 2, "l": 0.5, "c": 1.5, "v": 10}])
+        floor = collector.history_floor(settings.for_source("massive").tier, date(2026, 11, 2), "stock")
+        store.set_backfilled("massive", "SPY", floor)  # its history complete to the plan's floor
+        store.queue_put("massive", "massive", "bars", [{"key": "SPY", "detail": "stock: new data"},
+                                                       {"key": "NEWCO", "detail": "stock: backfill"}])
+        store.queue_put("federal", "bls", "news", [{"key": "bls-cpi", "title": "BLS: Consumer Price Index"}])
+        app = ChartApp(store, settings=settings)
+        rows = {r["key"]: r for r in app.queue({})["rows"]}
+        spy = rows["SPY"]["progress"]
+        assert spy["share"] == 1.0 and spy["state"] in ("current", "new") and spy["retiredOn"] is None
+        assert set(spy["stored"]) == {"day", "minute"} and spy["stored"]["day"][0] == "2023-11-14"
+        assert spy["stored"]["day"][1] > spy["stored"]["day"][0] and spy["target"]
+        new = rows["NEWCO"]["progress"]
+        assert new["share"] == 0.0 and new["stored"] == {} and new["state"] == "queued"  # nothing downloaded yet
+        assert "progress" not in rows["bls-cpi"]  # a news read has no history to measure
+        # without the settings (no feed's plan known) the queue says nothing about it
+        assert "progress" not in {r["key"]: r for r in queue.view(store)["rows"]}["SPY"]
+        assert queue.progress(store, "massive", "NOPE", settings.for_source("massive").tier, date(2026, 11, 2),
+                              datetime(2026, 11, 2, tzinfo=timezone.utc)) is None  # not watched there
+
+
 def test_the_reader_keeps_no_queue_without_the_main_store():
     reader(Site()).step(NOW, publishers={"t": pub()})  # no store: nothing to keep, nothing raised
     assert GovDB(None) is not None
