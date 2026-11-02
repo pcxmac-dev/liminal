@@ -20,44 +20,16 @@ from .sessions import ET
 from .symbols import resolve
 from .sources import DataSource, build_source, feed_profiles, is_archive, providers, supports
 from .storage import COMPOSITE, Store, feeds_backup_dir
+from .host import attach_fetcher, wait_for_fetcher, wait_for_requests  # noqa: F401 (the fetcher's clients' side)
+from .logs import LOG_KEEP, LOG_MAX_BYTES, Logger  # noqa: F401
+from .proc import hold_until_interrupted
+from .sources import feed_closed as _feed_closed
+from .stores import HISTORY_BUDGET_S, HISTORY_LOCK, history_due  # noqa: F401
 
 TASK_NAME = "LiminalSync"
 
 
 # -- helpers -------------------------------------------------------------------
-
-LOG_MAX_BYTES = 20 * 1024 * 1024  # a log file is rotated past this ...
-LOG_KEEP = 5  # ... and this many old ones are kept (liminal.log.1 newest): ~120 MB at most
-
-
-class Logger:
-    """Print and append to a log file next to the database, rotated at LOG_MAX_BYTES."""
-
-    def __init__(self, path: Path | None):
-        self.path = path
-        if path:
-            path.parent.mkdir(parents=True, exist_ok=True)
-
-    def __call__(self, msg: str) -> None:
-        line = f"{datetime.now().isoformat(timespec='seconds')} {msg}"
-        print(msg, flush=True)
-        if self.path:
-            self._rotate()
-            with self.path.open("a", encoding="utf-8") as f:
-                f.write(line + "\n")
-
-    def _rotate(self) -> None:
-        try:
-            if self.path.stat().st_size < LOG_MAX_BYTES:
-                return
-            for i in range(LOG_KEEP - 1, 0, -1):
-                older = self.path.with_name(f"{self.path.name}.{i}")
-                if older.exists():
-                    older.replace(self.path.with_name(f"{self.path.name}.{i + 1}"))
-            self.path.replace(self.path.with_name(f"{self.path.name}.1"))
-        except OSError:
-            pass  # another process rotated it, or it is not there yet: write on
-
 
 def prune_backups(folder: Path, keep: int) -> list[str]:
     """The retention policy for `admin backup`'s backups (massive-YYYYMMDD-HHMMSS.db, with its
@@ -384,42 +356,35 @@ def cmd_sync(args, settings: Settings) -> int:
     return code
 
 
-def dispatch(settings: Settings, log=None) -> int:
-    """`sync` run by hand: a run of each feed set up here that is not fetching already, each the
-    host `feed-NAME` (start_feed), held while this command runs and waited for (Ctrl+C lets them
-    go: each stops at its next request); a closed archive is not started. Then the publishers' due
-    feeds and the stores' pass. Returns how many feeds were fetching (started now, or going on from
-    before). The user, 2026-11-01: fetching goes on only while the app, or a command, is in use."""
-    from . import proc
-
+def dispatch(settings: Settings, log=None, tickers: set[str] | None = None) -> int:
+    """`sync` run by hand: the fetcher (fetcher.py: the host `fetcher`, started if none answers)
+    held while this command runs and asked for a standing pass (every feed's run, the closed
+    months' copy, the extras), or with `tickers` for those symbols (requests on its stack); waited
+    for until it has nothing going on (Ctrl+C lets it go: with nobody else holding it, it ends
+    and each run stops at its next request). Returns 1 when the fetcher was held, 0 when none
+    answered. The user, 2026-11-01: fetching goes on only while the app, or a command, is in use."""
     log = log or Logger(settings.db_path.parent / "logs" / "liminal.log")
     if settings.offline:
-        log("sync: offline (LIMINAL_OFFLINE): no feed started")
+        log("sync: offline (LIMINAL_OFFLINE): nothing asked of the fetcher")
         return 0
-    busy = proc.run_holders(settings.db_path)
-    if None in busy:
-        log("sync: the whole database is locked (its data is being moved, or a run from before the feeds ran "
-            "apart is going on); no feed started")
+    held = attach_fetcher(settings.db_path, log)
+    if held is None:
+        log("sync: no fetcher answered (and none could be started); nothing fetched")
         return 0
-    profiles = feed_profiles(settings)
-    started, unset, held = [], [], []
-    for name in providers():
-        if not (profiles.get(name) and profiles[name].assets):
-            unset.append(name)  # not set up here (its key): nothing it could fetch
-        elif name not in busy and not _feed_closed(settings, name):  # not fetching already, nor a filled archive
-            held.append(start_feed(name, settings.db_path))
-            started.append(name)
-    going = sorted(n for n in busy if n)
-    log(f"sync: started {', '.join(started) or 'no feed'}, each in a process of its own"
-        + (f"; fetching already: {', '.join(going)}" if going else "")
-        + (f"; not set up here: {', '.join(unset)}" if unset else ""))
-    # the publishers' due feeds: the recorder reads them as they fall due; this pass catches any it
-    # missed (no recorder, or one from before it read them). One reader at a time (their lock), and a
-    # feed read lately is not due, so nothing is read twice.
-    _fetch_gov(settings, log)
-    held.append(_stores_pass(settings, log))
-    wait_for_hosts([a for a in held if a is not None], log)
-    return len(started) + len(going)
+    try:
+        if tickers:
+            with Store(settings.db_path) as store:
+                ids = [store.request_put(t, by="cli")["id"] for t in sorted(tickers)]
+            held.ask(wake=True)
+            log(f"sync: {', '.join(sorted(tickers))} asked of the fetcher (its newest requests go first)")
+            wait_for_requests(settings.db_path, ids, held, log)
+        else:
+            held.ask(**{"pass": True})
+            log("sync: a pass asked of the fetcher (every feed's run held by it, the extras in a process of their own)")
+            wait_for_fetcher(held, log)
+    finally:
+        held.detach()
+    return 1
 
 
 def wait_for_hosts(held: list, log, every: float = 2.0) -> None:
@@ -437,19 +402,6 @@ def wait_for_hosts(held: list, log, every: float = 2.0) -> None:
             a.detach()
         log("sync: let go; each run stops at its next request")
         raise
-
-
-HISTORY_LOCK = "history.lock"  # beside the database: one `history run` at a time
-HISTORY_BUDGET_S = 20 * 60  # a `history run`'s seconds of copying
-
-
-def history_due(settings: Settings) -> bool:
-    """Whether a `history run` has work: feeds whose closed months go to DuckDB, and no run going."""
-    from . import proc, stores
-
-    with Store(settings.db_path) as store:
-        feeds = stores.bars_feeds(store)
-    return bool(feeds) and proc.holder(settings.db_path.with_name(HISTORY_LOCK)) is None
 
 
 def _stores_pass(settings: Settings, log, history: bool = True):
@@ -477,11 +429,11 @@ def _stores_pass(settings: Settings, log, history: bool = True):
 
 
 def start_history(db_path: Path):
-    """Attach to the `history run` of this database, the host `history` (started if none answers:
-    no window, a background priority once it runs). Returns the attachment (None: no answer)."""
+    """Attach to the `history run` of this database (host.history_run): the host `history`, started
+    if none answers (no window, a background priority once it runs). None: no answer."""
     from . import host
 
-    return host.attach_or_start("history", db_path, log=Logger(db_path.parent / "logs" / "liminal.log"))
+    return host.history_run(db_path, log=Logger(db_path.parent / "logs" / "liminal.log"))
 
 
 def _background_priority() -> None:
@@ -576,15 +528,6 @@ def cmd_mongo(args, settings: Settings) -> int:
     return 0
 
 
-def hold_until_interrupted() -> None:
-    """Wait here until Ctrl+C."""
-    try:
-        while True:
-            time.sleep(3600)
-    except KeyboardInterrupt:
-        pass
-
-
 def cmd_stores(args, settings: Settings) -> int:
     """Each plugin's stores by data type (stores.py): `list`; `pick PLUGIN TYPE ENGINE` (auto: the
     optimal); `settle`: move documents to the store wanted now (as the hourly sync does)."""
@@ -617,13 +560,12 @@ def cmd_stores(args, settings: Settings) -> int:
 
 
 def start_feed(name: str, db_path: Path):
-    """Attach to feed `name`'s run of this database, the host `feed-NAME` (started if none answers:
-    `--source NAME sync --only --fetch-only` under a host, no window). Its pass goes on while
-    something holds it; let go, it stops at its next request. Returns the attachment (None: no
-    answer)."""
+    """Attach to feed `name`'s run of this database (host.feed_run): the host `feed-NAME`, started
+    if none answers. Its pass goes on while something holds it; let go, it stops at its next
+    request. None: no answer."""
     from . import host
 
-    return host.attach_or_start(f"feed-{name}", db_path, log=Logger(db_path.parent / "logs" / "liminal.log"))
+    return host.feed_run(name, db_path, log=Logger(db_path.parent / "logs" / "liminal.log"))
 
 
 POST_LOCK = "post.lock"  # beside the database: one pass of composites and derived frames at a time
@@ -729,8 +671,8 @@ def _sync(args, settings: Settings) -> tuple[int, int]:
                 store.kv_set("built-bars:separated:v1", datetime.now().isoformat(timespec="seconds"))
         except Busy:  # a feed is fetching: done by a later sync, with every feed at rest
             pass
-    if args.all_sources and tickers is None:  # the hourly sync: each feed in a process of its own
-        return 0, dispatch(settings)
+    if args.all_sources:  # by hand: the fetcher's pass, or the symbols given on its stack (dispatch)
+        return 0, dispatch(settings, tickers=tickers)
     ran, errors = 0, []
     saved = config.saved_user_keys()
     for name in names:
@@ -755,11 +697,14 @@ def _sync(args, settings: Settings) -> tuple[int, int]:
                 if tickers is None:
                     _scan(name, source, store, log, due_days=SCAN_DAYS, settings=settings)
 
+                from .gui.world import PROXIES  # the market's proxies, from the app's exchanges table
+
                 result = collector.sync(source, store, feed.tier, log=log, refresh_hours=settings.refresh_hours,
                                         feeds=feed_profiles(settings), only=tickers, published_only=True,
                                         audits=(settings.audits_per_run, settings.audits_random_per_run),
                                         on_item=lambda t: store.set_run_current(args._run_id, t),
-                                        directory_allowance=reserve_left, futures_per_run=settings.futures_per_run)
+                                        directory_allowance=reserve_left, futures_per_run=settings.futures_per_run,
+                                        proxies=PROXIES)
                 args._rows = result.rows
                 log(f"sync {name}: {result.rows} rows saved"
                     + (f", {result.skipped} symbols refreshed within {settings.refresh_hours:g} h left for later"
@@ -783,34 +728,36 @@ def _sync(args, settings: Settings) -> tuple[int, int]:
     return 0, ran
 
 
-def cmd_fetcher(args, settings: Settings) -> int:
-    """The plugins that fetch on their own (plugin API 1.9: runner.py), each its own worker, once
-    through their queue: one pass per plugin at a time (its run lock, a feed's when it is one)."""
-    from . import proc, runner
-    from .sources.registry import plugin_fetchers
+NO_INTEGRATOR = ("the fetcher is the liminal-integrator package (github.com/pcxmac-dev/liminal-integrator): "
+                 "install it beside the app (pip install liminal-integrator, or the app's `integrator` extra)")
 
-    log = Logger(settings.db_path.parent / "logs" / "liminal.log")
-    if settings.offline:
-        log("fetcher: offline (LIMINAL_OFFLINE): nothing fetched")
-        return 0
-    mine = [p for p in plugin_fetchers() if args.plugin in (None, p)]
-    if not mine:
-        print("no plugin fetches on its own yet" if args.plugin is None else f"{args.plugin} does not fetch on its own")
-        return 0
-    held = []
-    for p in mine:
-        if proc.acquire(proc.run_lock_path(settings.db_path, p)):
-            held.append(p)
-        else:
-            log(f"fetcher: {p} is fetching already; left to that pass")
+
+def integrator():
+    """The integrator's command line (liminal_integrator.cli), or None when it is not installed."""
     try:
-        for p in held:
-            out = runner.run_all(lambda: Store(settings.db_path), settings, log, only=p).get(p, {})
-            log(f"fetcher: {p}: " + ", ".join(f"{k} {v}" for k, v in out.items() if v))
-    finally:
-        for p in held:
-            proc.release(proc.run_lock_path(settings.db_path, p))
-    return 0
+        from liminal_integrator import cli as integrator_cli
+    except ImportError:
+        return None
+    return integrator_cli
+
+
+def cmd_fetcher(args, settings: Settings) -> int:
+    """The fetcher (liminal-integrator): serve, status, request, pass, cancel; answered by the
+    integrator's own command line."""
+    found = integrator()
+    if found is None:
+        print(NO_INTEGRATOR, file=sys.stderr)
+        return 2
+    return found.cmd_fetcher(args, settings)
+
+
+def cmd_service(args, settings: Settings) -> int:
+    """The fetcher as a service (liminal-integrator): install, remove, status, or run."""
+    found = integrator()
+    if found is None:
+        print(NO_INTEGRATOR, file=sys.stderr)
+        return 2
+    return found.cmd_service(args, settings)
 
 
 def cmd_datasets(args, settings: Settings) -> int:
@@ -921,6 +868,14 @@ def cmd_host(args, settings: Settings) -> int:
     from . import host, live
 
     log = Logger(settings.db_path.parent / "logs" / "liminal.log")
+    if args.name == host.FETCHER:  # the fetcher (liminal-integrator): its requests and passes, its page and the data API
+        try:
+            from liminal_integrator import fetcher as integrator_fetcher
+        except ImportError:
+            log(f"host fetcher: {NO_INTEGRATOR}")
+            return 2
+        integrator_fetcher.run_host(settings, log)
+        return 0
     if args.name == live.HOST:
         if not (settings.live_coins or live.stock_keys(settings)) or settings.offline:
             log("host live: live recording is off (LIVE_CRYPTO=off and no stocks, or LIMINAL_OFFLINE); not run")
@@ -1132,15 +1087,6 @@ def cmd_provenance(args, settings: Settings) -> int:
 
 def _day(ms: int | None) -> str:
     return datetime.fromtimestamp(ms / 1000, ET).strftime("%Y-%m-%d") if ms is not None else "-"
-
-
-def _feed_closed(settings: Settings, name: str) -> bool:
-    """A closed feed (public archive) whose symbols are all closed, or that has none: nothing to ask."""
-    if not is_archive(name):
-        return False
-    with Store(settings.db_path) as store:
-        rows = store.watchlist(name)
-    return all(w.get("closed_at") for w in rows)
 
 
 def cmd_feeds(args, settings: Settings) -> int:
@@ -1460,11 +1406,21 @@ def cmd_deps(args, settings: Settings) -> int:
 
 
 def cmd_gui(args, settings: Settings) -> int:
-    from .gui.server import serve
+    """The chart app: its page here, its data through the fetcher (gui/front.py), which it starts
+    if none answers. `--alone`: page and data in this one process, no fetcher (nothing collected:
+    a read-only copy, a test)."""
+    if args.alone:
+        from .gui.server import serve
 
-    serve(settings.db_path, port=args.port, open_browser=not args.no_browser,
-          priority=list(settings.source_priority), settings=settings, reload_settings=load_settings,
-          rescan=not args.no_rescan)
+        serve(settings.db_path, port=args.port, open_browser=not args.no_browser,
+              priority=list(settings.source_priority), settings=settings, reload_settings=load_settings,
+              rescan=not args.no_rescan)
+        return 0
+    from .gui.front import serve_front
+
+    if args.no_rescan:
+        os.environ["LIMINAL_NO_RESCAN"] = "1"  # the fetcher this front starts rescans nothing at its start
+    serve_front(settings.db_path, port=args.port, open_browser=not args.no_browser)
     return 0
 
 
@@ -1799,11 +1755,13 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("deps", help="check every external dependency (data feeds, calendars, icons, files)")
     s.set_defaults(func=cmd_deps)
 
-    s = sub.add_parser("gui", help="open the chart app in your browser")
+    s = sub.add_parser("gui", help="open the chart app in your browser (its data through the fetcher)")
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--no-browser", action="store_true")
     s.add_argument("--no-rescan", action="store_true",
                    help="do not rescan the provider plugins' capabilities and plans at the start")
+    s.add_argument("--alone", action="store_true",
+                   help="page and data in this one process, no fetcher (nothing collected: a read-only copy, a test)")
     s.set_defaults(func=cmd_gui)
 
     s = sub.add_parser("plan", help="find which plan a feed's key has (--source, default massive): its plugin's "
@@ -1843,9 +1801,24 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("ticker")
     s.set_defaults(func=cmd_info)
 
-    s = sub.add_parser("fetcher", help="the plugins that fetch on their own: each one's queue, once through")
-    s.add_argument("--plugin", help="that plugin only")
+    # the fetcher's and the service's arguments are the integrator's (liminal-integrator), the same
+    # on its own command line; without it the commands say where it is
+    found = integrator()
+    s = sub.add_parser("fetcher", help="the fetcher (liminal-integrator): serve (hold it here, its page in the "
+                                      "browser), status, request SYMBOL..., pass, or cancel --id N")
+    if found is not None:
+        found.add_fetcher_arguments(s)
+    else:
+        s.add_argument("action", nargs="?", default="serve")
     s.set_defaults(func=cmd_fetcher)
+
+    s = sub.add_parser("service", help="the fetcher as a service (liminal-integrator; your decision: it then updates "
+                                      "what it can while you are away): install, remove, status, or run")
+    if found is not None:
+        found.add_service_arguments(s)
+    else:
+        s.add_argument("action", nargs="?", default="status")
+    s.set_defaults(func=cmd_service)
 
     s = sub.add_parser("history", help="closed months of bars in DuckDB: run (copy the due ones, as the hourly "
                                       "sync starts it) or status")
@@ -1884,8 +1857,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_live)
 
     s = sub.add_parser("host", help="run a resident host while a client is attached to it (host.py): "
-                                     "live, the recorder; mongo, the MongoDB server's keeper")
-    s.add_argument("name", help="which host: live, mongo")
+                                     "fetcher; live, the recorder; mongo, the MongoDB server's keeper; "
+                                     "feed-NAME, a feed's run; history, the closed months' copy")
+    s.add_argument("name", help="which host: fetcher, live, mongo, feed-NAME, history")
     s.set_defaults(func=cmd_host)
 
     s = sub.add_parser("kills", help="the kill policy: killed feeds and each feed's outcomes; kill or release one")

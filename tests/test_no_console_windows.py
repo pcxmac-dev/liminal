@@ -8,9 +8,17 @@ import os
 import re
 from pathlib import Path
 
+import liminal
 from liminal import datasets, proc, provenance
 
-SRC = Path(proc.__file__).parent
+# the library's package (liminal-lib), the app's own, and the integrator's when it is installed
+ROOTS = [Path(proc.__file__).parent, Path(liminal.__file__).parent]
+try:
+    import liminal_integrator
+
+    ROOTS.append(Path(liminal_integrator.__file__).parent)
+except ImportError:
+    pass
 
 
 def test_no_window_is_the_windows_flag_and_nothing_elsewhere():
@@ -44,7 +52,7 @@ def test_every_subprocess_start_in_the_app_says_how_its_window_is_kept_away():
     """Each subprocess.run or Popen in the package passes creationflags (CREATE_NO_WINDOW, or a
     host's detached flags) or proc.no_window(); the console commands run by hand (schtasks) aside."""
     missing = []
-    for path in SRC.rglob("*.py"):
+    for path in (p for root in ROOTS for p in root.rglob("*.py")):
         src = path.read_text(encoding="utf-8")
         for m in re.finditer(r"subprocess\.(run|Popen)\(", src):
             call = src[m.start():src.find(")\n", m.start()) + 1]

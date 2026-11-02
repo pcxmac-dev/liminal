@@ -23,6 +23,9 @@ import numpy as np
 import pandas as pd
 
 from ..live import PARTIAL_FEEDS
+# the sessions' masks and filters are the library's (sessions.py); the modules beside this one import them from here
+from ..sessions import REGULAR_CLOSE, REGULAR_OPEN, in_session, overnight_mask, regular_mask, regular_session  # noqa: F401
+from ..sessions import regular_close as _regular_close  # noqa: F401
 from ..storage import Store
 from ..calc.derivatives import Model, apply_model
 
@@ -63,7 +66,6 @@ INTRADAY = {"second": "s", "minute": "min", "hour": "h"}
 CALENDAR = ("day", "week", "month", "year")
 PERIOD_SECONDS = {"second": 1, "minute": 60, "hour": 3600, "day": 86400, "week": 7 * 86400,
                   "month": 30 * 86400, "year": 365 * 86400}
-REGULAR_OPEN, REGULAR_CLOSE = time(9, 30), time(16, 0)
 COLUMNS = ["open", "high", "low", "close", "volume", "turnover", "trades"]
 
 
@@ -133,64 +135,6 @@ def frame_from_bars(bars: pd.DataFrame) -> pd.DataFrame:
         # built here (from ticks, or finer bars) rather than sent by the feed at this interval
         "derived": df["derived"].astype(bool) if "derived" in df else False,
     })
-
-
-def regular_session(frame: pd.DataFrame) -> pd.DataFrame:
-    """Bars inside US regular trading hours: 09:30-16:00 ET on trading days, 13:00 on early-close
-    days (the rest of those afternoons is after-hours trading), nothing on weekends or holidays
-    (stray prints a feed sometimes has then are not part of any session)."""
-    if frame.empty:
-        return frame
-    return frame[regular_mask(frame.index)]
-
-
-def regular_mask(index: pd.DatetimeIndex) -> np.ndarray:
-    """Which times are inside US regular trading hours (see regular_session)."""
-    if len(index) == 0:
-        return np.zeros(0, dtype=bool)
-    local = index.tz_convert(ET)
-    # wall-clock time of day in microseconds (as datetime.time compares; elapsed time from midnight
-    # differs on the days the clocks change), against each day's close: one look-up a day, not a bar
-    hour, minute, second, micro = (np.asarray(f, dtype=np.int64) for f in
-                                   (local.hour, local.minute, local.second, local.microsecond))  # int32 overflows
-    tod = ((hour * 60 + minute) * 60 + second) * 1_000_000 + micro
-    days = local.normalize()
-    unique = days.unique()
-    closes = np.array([-1 if c is None else (c.hour * 60 + c.minute) * 60_000_000
-                       for c in (_regular_close(d.date()) for d in unique)], dtype=np.int64)
-    close = closes[unique.get_indexer(days)]
-    opens = (REGULAR_OPEN.hour * 60 + REGULAR_OPEN.minute) * 60_000_000
-    return (tod >= opens) & (tod < close)  # closed days: close -1
-
-
-def overnight_mask(index: pd.DatetimeIndex) -> np.ndarray:
-    """Which times are in the overnight session (20:00-04:00 ET: Blue Ocean's hours)."""
-    if len(index) == 0:
-        return np.zeros(0, dtype=bool)
-    hour = np.asarray(index.tz_convert(ET).hour, dtype=np.int64)
-    return (hour >= 20) | (hour < 4)
-
-
-def in_session(frame: pd.DataFrame, session: str, asset: str | None) -> pd.DataFrame:
-    """The bars a session shows: "regular" (09:30-16:00 ET), "extended" (a stock's 04:00-20:00: no
-    overnight bars), "all" (a stock's four sessions, overnight included). Around-the-clock markets
-    are drawn whole ("extended")."""
-    if frame.empty:
-        return frame
-    if session == "regular":
-        return regular_session(frame)
-    if session == "extended" and asset == "stock":
-        return frame[~overnight_mask(frame.index)]
-    return frame
-
-
-def _regular_close(d) -> time | None:
-    """Regular-session close of a day by the exchange calendar, None when the market is shut."""
-    from ..sessions import is_nyse_holiday, nyse_early_close
-
-    if d.weekday() >= 5 or is_nyse_holiday(d):
-        return None
-    return time(13, 0) if nyse_early_close(d) else REGULAR_CLOSE
 
 
 def _aggregate(groups) -> pd.DataFrame:

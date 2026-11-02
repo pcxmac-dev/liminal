@@ -161,9 +161,9 @@ def test_one_plugins_failure_is_its_own(installed, tmp_path):
 def test_the_fetcher_command_runs_only_plugins_that_fetch_on_their_own(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(config, "read_env_file", lambda path: {})
     monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "m.db"))
-    assert cli.main(["fetcher"]) == 0
-    assert "no plugin fetches on its own yet" in capsys.readouterr().out  # none built in does yet (step 1)
-    assert registry.plugin_fetchers() == {}
+    assert cli.main(["fetcher", "status"]) == 0
+    assert "the fetcher has never run on this database" in capsys.readouterr().out
+    assert registry.plugin_fetchers() == {}  # none built in fetches on its own yet (step 1): the fetcher's pass runs them
 
 
 # -- the app's paths not yet in plugins keep the same queue ------------------------------------------

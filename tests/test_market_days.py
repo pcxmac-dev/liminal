@@ -147,6 +147,7 @@ def test_refusals(store):
 
 def test_the_run_takes_the_file_before_the_market_moves():
     body = inspect.getsource(collector.sync)
-    assert body.index("market_days(source, store, me, feeds, store.watchlist(source.name), now, PROXIES, log)") \
-        < body.index("fetch_market_moves(source, store, now, PROXIES, log)")
+    # the market's proxies are the app's (gui/world.PROXIES), handed to the run (the library names no view)
+    assert body.index("market_days(source, store, me, feeds, store.watchlist(source.name), now, proxies or [], log)") \
+        < body.index("fetch_market_moves(source, store, now, proxies or [], log)")
     assert "if source.serves(\"stock\") and gives_days(source, me):" in body

@@ -35,7 +35,8 @@
 
   // -- rail --------------------------------------------------------------------------------
   function showPane(name, { toggle = true } = {}) {
-    if (!(name in VIEWS)) name = 'stock';
+    // the fetcher's own page has no chart views (window.FETCHER_MODE, app.js): the Fetcher instead
+    if (!(name in VIEWS) || (window.FETCHER_MODE && VIEWS[name] === 'chart')) name = window.FETCHER_MODE ? 'fetcher' : 'stock';
     const view = VIEWS[name];
     const same = document.body.dataset.pane === name && document.body.dataset.view === view;
     if (view === 'chart' && same && toggle) {

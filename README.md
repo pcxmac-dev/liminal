@@ -124,8 +124,9 @@ app refuses to open it.
 
 ```bash
 python -m liminal probe SPCX --watch   # find the finest resolution, add to watchlist
-python -m liminal sync                 # update + backfill the watchlist
-python -m liminal schedule install     # run sync every hour (Windows Task Scheduler)
+python -m liminal sync                 # a pass of the fetcher: update + backfill the watchlist (sync --tickers SPCX: a symbol)
+python -m liminal fetcher              # hold the fetcher here, its page in your browser (status, request SYMBOL, pass, cancel)
+python -m liminal service install      # the fetcher as a service, your decision: it updates what it can while you are away
 python -m liminal status               # what's stored, limits, recent runs
 python -m liminal exchanges --refresh  # exchange list
 python -m liminal analyze SPCX         # statistics + per-exchange breakdown
@@ -135,6 +136,19 @@ python -m liminal datasets [list|fetch [NAME...]|show NAME [SERIES]]  # research
 python -m liminal admin check|vacuum|backup [--ticks]|split-feeds
 python -m liminal gui                  # chart app in your browser (localhost only)
 ```
+
+## Three programs, three repositories (2026-11-01)
+
+- [liminal-lib](https://github.com/pcxmac-dev/liminal-lib): the library every program builds on (the stores, the
+  plugin contract, the collector, the scheme, the hosts). The app imports its modules under their old names
+  (`liminal.<module>`) until every import points to `liminal_lib`.
+- [liminal-integrator](https://github.com/pcxmac-dev/liminal-integrator): the fetcher. A stack of requests in
+  front (a symbol opened in the chart, or asked for), for each an assessment of the work over the plugins set up
+  here (what each gives, how far back, how fresh, at what cost) and the runs of the feeds that deliver it; a
+  standing pass once new data can exist; its own page (the data and monitoring views) and the data API on
+  http://127.0.0.1:8785. Up while someone holds it: the app, `fetcher`, or the service you install.
+- this repository, the app: the chart page, served by a front (`gui/front.py`) that funnels every request of its
+  pages to the fetcher, started if none answers; the command line; the plugins' tests run here.
 
 ## Chart app
 

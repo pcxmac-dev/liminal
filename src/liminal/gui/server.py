@@ -8,7 +8,6 @@ import sqlite3
 import traceback
 from collections import Counter, OrderedDict
 from contextlib import contextmanager
-import mimetypes
 import subprocess
 import sys
 import time
@@ -23,16 +22,16 @@ from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
 
-from .. import config, freshness, host, live, mongo, sourcing
+from .. import config, freshness, live, mongo, sourcing
 from ..config import Settings, load_settings
 from ..storage import LayoutLimit, Store
 from ..storage.markets import mic_names
-from . import activity, astro
+from ..storage.requests import KINDS as REQUEST_KINDS, OPEN as OPEN_REQUEST, read_status
+from . import activity, astro, web
 from .bars import CALENDAR, PRICE_BASED, TIME_TYPES, BarEngine, Style, _BoundedCache, resample
 from ..calc.derivatives import Model
 from .stats import details_subset, key_stats
-
-STATIC = Path(__file__).parent / "static"
+from .web import MAX_BODY, PROFILE_COOKIE, PROFILE_HEADER, STATIC, WRITE_HEADER  # noqa: F401 (shared with the front, web.py)
 
 
 def finite(data):
@@ -57,12 +56,6 @@ SYMBOL_ROWS_TTL_S = 10.0  # its symbols' rows (index seeks in every feed file) k
 OFFICIAL_TTL_S = 600.0  # the official holidays the sync fetched, read again this often (freshness.use_official)
 FEEDS_TTL_S = 60.0  # the feeds' summary (configuration and the watchlist) kept this long
 DEPS_TTL_S = 60.0  # the dependency checks' answer is kept this long
-MAX_BODY = 5 * 1024 * 1024
-WRITE_HEADER = "X-Liminal-Charts"
-PROFILE_COOKIE = "mc_profile"  # the profile this browser signed in as (no passwords: profiles keep things apart)
-# The profile a page loaded as, sent with its writes: a tab left open as one profile while another
-# tab signed in as a second (or out) wrote its lists over the second's (the cookie names the newest)
-PROFILE_HEADER = "X-Liminal-Profile"
 FIRST_PROFILE = 1  # the profile holding what came before profiles; the default without a cookie
 # Chart data built at once (bars, level 2 profiles, projections, range statistics): each holds a
 # window's frames, up to MAX_LIMIT bars; the rest wait their turn, then are answered busy.
@@ -92,8 +85,17 @@ class ChartApp:
     SETTINGS_TTL_S = 5.0  # the user's saved keys and plans are looked at this often
 
     def __init__(self, store: Store, priority: list[str] | None = None, settings: Settings | None = None,
-                 reload_settings: Callable[[], Settings] | None = None):
+                 reload_settings: Callable[[], Settings] | None = None, mode: str = "chart", fetcher=None,
+                 touch: Callable[[], None] | None = None):
         self.store = store
+        # The page served at /: the chart app's ("chart") or the fetcher's own ("fetcher": the data
+        # and monitoring views, without the chart and what is the user's); the API is the same.
+        self.mode = mode
+        # The fetcher this API runs inside (fetcher.Fetcher: serve_fetcher), asked for the symbols
+        # the pages open and for a pass; None alone (serve): the requests wait in the file.
+        self._fetcher = fetcher
+        self._touch = touch  # tells the host a page is in touch (host.Host.touch): the fetcher stays up
+        self._symbol_request: tuple[str, int] | None = None  # the last symbol a page opened, and its request
         self._settings = settings or load_settings(env={}, env_file=None)
         # With `reload_settings` (the app started from the command line), a key or plan saved after
         # it started (tools/set-key.ps1) counts within SETTINGS_TTL_S: the Fetcher shows each feed
@@ -150,14 +152,6 @@ class ChartApp:
         self._last_contact = time.monotonic()  # when a page last asked for anything
         self._woken = False  # whether a page ever came (the on_wake work runs at the first)
         self._on_wake: list[Callable[[], None]] = []
-        # Fetching while in use (sync_pass): the feeds' runs and the closed months' copy, hosts
-        # held while the app is awake; the extras' process; when the last pass was
-        self._feed_hosts: dict[str, object] = {}
-        self._history_host = None
-        self._extras = None
-        self._last_pass: float | None = None
-        self._sync_lock = threading.Lock()
-        self._sync_stop: threading.Event | None = None
         self._open_stores(store)
 
     def _open_stores(self, store: Store) -> None:
@@ -237,6 +231,8 @@ class ChartApp:
             self._last_contact = time.monotonic()
             first = not self._woken
             self._woken = True
+        if self._touch is not None:
+            self._touch()
         try:
             if first:
                 self._first_wake()
@@ -250,7 +246,6 @@ class ChartApp:
         self._open_stores(Store(self.store.path, check_same_thread=False))
         self._quiet = False
         _log_to(self.store.path)("quiet: a page is back; the stores are open again")
-        self._start_sync()
 
     def _first_wake(self) -> None:
         self.monitor.start()  # Resources: sampled in the background from now on
@@ -260,11 +255,10 @@ class ChartApp:
             except Exception as e:  # noqa: BLE001 - the start's extras never fail a request
                 _log_to(self.store.path)(f"on the first page: {type(e).__name__}: {e}")
         self._on_wake = []
-        self._start_sync()
 
     def release(self) -> bool:
-        """Quiet: every store closed, the recorder, MongoDB's keeper and the feeds' runs let go, the
-        sampler ended. Not while a request is under way (False), nor twice."""
+        """Quiet: every store closed, the recorder and MongoDB's keeper let go, the sampler ended.
+        Not while a request is under way (False), nor twice."""
         with self._use:
             if self._quiet or self._releasing or self._in_use:
                 return False
@@ -274,7 +268,6 @@ class ChartApp:
                 if self._live is not None:
                     self._live.detach()
                     self._live = None
-            self._stop_sync()
             mongo.detach()
             self._close_stores()
         finally:
@@ -305,89 +298,59 @@ class ChartApp:
         if not self._quiet:
             self.release()
 
-    # -- fetching while in use ----------------------------------------------------------------
-    # The user, 2026-11-01: fetching goes on only while the app is in use. In place of the hourly
-    # scheduled sync, a pass every SYNC_HOURS while a page is in touch: each feed's run attached as
-    # the host feed-NAME (held while the app is awake; let go when it goes quiet, each stops at its
-    # next request), the closed months' copy as the host history, and the extras (the publishers'
-    # due feeds, the stores' pass, the composites and derived frames) in a process of their own.
-    SYNC_HOURS = 1.0  # LIMINAL_SYNC_HOURS
-    SYNC_CHECK_SECONDS = 60.0
+    # -- the fetcher ---------------------------------------------------------------------------
+    # This API runs inside the fetcher (fetcher.py: the host `fetcher`, serve_fetcher), which takes
+    # the requests (a symbol a page opened, the request box) and holds the feeds' runs; the chart
+    # app's front funnels its pages' requests here (gui/front.py). Alone (serve: a copy with no
+    # fetcher in it, nothing collected) the requests wait in the file for a fetcher.
+    def _wake_fetcher(self) -> None:
+        if self._fetcher is not None:
+            self._fetcher.wake_up()
 
-    def sync_hours(self) -> float:
-        try:
-            return float(config.setting("LIMINAL_SYNC_HOURS") or self.SYNC_HOURS)
-        except ValueError:
-            return self.SYNC_HOURS
+    def ask_pass(self) -> bool | None:
+        """The fetcher's standing pass now (resuming fetching). None: no fetcher here to ask."""
+        if self._fetcher is None:
+            return None
+        self._fetcher.ask_pass()
+        return True
 
-    def sync_due(self) -> bool:
-        return self._last_pass is None or time.monotonic() - self._last_pass >= self.sync_hours() * 3600
+    def fetcher_status(self) -> dict | None:
+        """The fetcher's status: its own here, else as it last wrote it in the file."""
+        if self._fetcher is not None:
+            return self._fetcher.status()
+        with self._status_lock:
+            return read_status(self._status_store)
 
-    def sync_pass(self) -> dict:
-        """One pass of the sync for the app in use (see above). What was started."""
-        from .. import cli, collector, proc
-        from ..sources import feed_profiles, providers
+    def requests(self, q: dict[str, str]) -> dict:
+        """The fetcher's requests (storage/requests.py) as the Fetcher view shows them, with its status."""
+        limit = max(1, min(int(q.get("limit", 200)), 2000))
+        with self._status_lock:
+            rows = self._status_store.request_rows(q.get("state") or None, limit)
+            counts = self._status_store.request_counts()
+        return {"rows": rows, "counts": counts, "kinds": list(REQUEST_KINDS), "status": self.fetcher_status(),
+                "limit": limit}
 
-        s = self.settings
-        log = _log_to(self.store.path)
-        if s.offline or s.read_only:
-            return {"started": [], "why": "offline or read-only"}
+    def request_symbol(self, body: dict) -> dict:
+        """Ask the fetcher for a symbol ({"symbol": .., "kinds": [..]}): its request, taken next
+        (the newest ask first)."""
+        symbol = str(body.get("symbol") or "").strip().upper()
+        if not symbol:
+            raise ValueError("symbol is required")
+        kinds = [k for k in (body.get("kinds") or ["bars"]) if k in REQUEST_KINDS] or ["bars"]
+        by = body.get("by") if body.get("by") in ("chart", "page", "cli") else "page"
+        if self.settings.read_only:
+            raise RuntimeError("this copy of the app reads only (LIMINAL_READONLY): nothing is asked for")
         with self._lock:
-            paused = collector.pause_state(self.store)
-        if paused:
-            return {"started": [], "why": "halted" if paused.get("halt") else "paused"}
-        busy = proc.run_holders(self.store.path)
-        if None in busy:
-            return {"started": [], "why": "the whole database is locked"}
-        profiles = feed_profiles(s)
-        started = []
-        with self._sync_lock:
-            for name in providers():
-                if not (profiles.get(name) and profiles[name].assets) or name in busy or cli._feed_closed(s, name):
-                    continue
-                held = self._feed_hosts.get(name)
-                if held is not None and held.alive():
-                    continue  # its run goes on, held
-                held = host.attach_or_start(f"feed-{name}", self.store.path, log=log)
-                if held is not None:
-                    self._feed_hosts[name] = held
-                    started.append(name)
-            if cli.history_due(s) and not (self._history_host is not None and self._history_host.alive()):
-                self._history_host = host.attach_or_start("history", self.store.path, log=log)
-            exe = Path(sys.executable)
-            quiet = exe.with_name("pythonw.exe") if exe.with_name("pythonw.exe").exists() else exe
-            self._extras = self._spawn([str(quiet), "-m", "liminal", "sync", "--extras-only"])
-            self._last_pass = time.monotonic()
-        log(f"sync: started {', '.join(started) or 'no feed'} (held while the app is in use)"
-            + (f"; fetching already: {', '.join(sorted(n for n in busy if n))}" if busy else "")
-            + "; the extras in a process of their own")
-        return {"started": started}
+            row = self.store.request_put(symbol, kinds, by=by)
+        self._wake_fetcher()
+        return row
 
-    def _start_sync(self) -> None:
-        with self._sync_lock:
-            if self._sync_stop is not None and not self._sync_stop.is_set():
-                return
-            self._sync_stop = stop = threading.Event()
-
-        def loop() -> None:
-            while not stop.is_set():
-                if self.sync_due():
-                    try:
-                        self.sync_pass()
-                    except Exception as e:  # noqa: BLE001 - a failed pass is logged; the next comes
-                        _log_to(self.store.path)(f"sync: failed ({type(e).__name__}: {e})")
-                stop.wait(self.SYNC_CHECK_SECONDS)
-        threading.Thread(target=loop, name="sync-while-in-use", daemon=True).start()
-
-    def _stop_sync(self) -> None:
-        """The feeds' runs and the closed months' copy let go (each stops at its next request)."""
-        with self._sync_lock:
-            if self._sync_stop is not None:
-                self._sync_stop.set()
-            for held in list(self._feed_hosts.values()) + [self._history_host]:
-                if held is not None:
-                    held.detach()
-            self._feed_hosts, self._history_host = {}, None
+    def cancel_request(self, request_id: int) -> dict:
+        with self._lock:
+            ok = self.store.request_cancel(request_id)
+        if ok:
+            self._wake_fetcher()
+        return {"cancelled": ok, "id": request_id}
 
     @property
     def settings(self) -> Settings:
@@ -1486,9 +1449,14 @@ class ChartApp:
             out = dict(hit[2])
         out["feeds"] = self.feeds()
         out["feedLabels"] = feed_labels()
-        # The opened symbol's own run: its end is not every feed's (Massive's pass goes on beside it)
-        run = getattr(self, "_symbol_run", None)
-        out["symbolRun"] = {"ticker": run[0], "going": run[1].poll() is None} if run else None
+        # The opened symbol's own request: its end is not every feed's (Massive's pass goes on beside it)
+        req = self._symbol_request
+        if req is not None:
+            with self._status_lock:
+                row = self._status_store.request_get(req[1])
+            out["symbolRun"] = {"ticker": req[0], "going": row is not None and row["state"] in OPEN_REQUEST}
+        else:
+            out["symbolRun"] = None
         return out
 
     def queue(self, q: dict[str, str]) -> dict:
@@ -1761,8 +1729,7 @@ class ChartApp:
             p = collector.set_pause(self.store, paused, minutes=body.get("minutes"), halt=bool(body.get("halt")))
         started = None
         if not paused and not self.settings.offline and None not in activity.fetching_feeds(self.store.path):
-            threading.Thread(target=self.sync_pass, name="sync-resumed", daemon=True).start()  # a pass now (sync_pass)
-            started = True
+            started = self.ask_pass()  # the fetcher's standing pass now (None: no fetcher in this copy)
         return {"paused": p, "started": started}
 
     def set_updates_pause(self, body: dict) -> dict:
@@ -1832,19 +1799,18 @@ class ChartApp:
             return {**out, "state": "offline"}  # a test copy of the app: nothing is fetched
         if self._halted():
             return {**out, "state": "halted"}  # nothing is fetched until the user resumes
-        fetching = activity.fetching_feeds(self.store.path)
-        if None in fetching or all(name in fetching for name in need or feeds):
-            return {**out, "state": "queued"}  # each feed it needs is fetching: their runs take it next
         if asked["runs"]:
-            return {**out, "state": "recent"}  # a run for it already went
-        args = [sys.executable, "-m", "liminal", "sync", "--tickers", ticker]
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        self._scan = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                      stdin=subprocess.DEVNULL, creationflags=flags)
-        self._symbol_run = (ticker, self._scan)  # the page sees it end (activity: symbolRun)
+            return {**out, "state": "recent"}  # the fetcher was asked for it already
+        # The fetcher takes it next (the newest ask first): it assesses the work over the plugins
+        # and holds the runs of the feeds that deliver it; the page sees the request end (symbolRun).
+        req = self.request_symbol({"symbol": ticker, "kinds": ["bars"], "by": "chart"})
+        self._symbol_request = (ticker, int(req["id"]))
         with self._lock:
             collector.priority_started(self.store, ticker)
-        return {**out, "state": "started", "pid": self._scan.pid}
+        fetching = activity.fetching_feeds(self.store.path)
+        if None in fetching or all(name in fetching for name in need or feeds):
+            return {**out, "state": "queued", "request": req["id"]}  # each feed it needs is fetching: their runs take it next
+        return {**out, "state": "started", "request": req["id"]}
 
     def _watch_everywhere(self, row: dict, profiles: dict) -> bool:
         """A stock opened in the chart goes on every set-up feed that can carry it and does not yet
@@ -2003,24 +1969,12 @@ def make_handler(app: ChartApp, port_ref: list[int]):
             pass
 
         def _send(self, status: int, body: bytes, ctype: str, headers: dict | None = None) -> None:
-            self.send_response(status)
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            for name, value in (headers or {}).items():
-                self.send_header(name, value)
-            self.end_headers()
-            self.wfile.write(body)
+            web.send(self, status, body, ctype, headers)
 
         def _profile(self) -> int | None:
             """The profile this browser signed in as (its PROFILE_COOKIE), if it still exists."""
-            for part in (self.headers.get("Cookie") or "").split(";"):
-                name, _, value = part.strip().partition("=")
-                # decimal digits only, of a size SQLite holds ('²' passed isdigit and failed int)
-                if name == PROFILE_COOKIE and value.isdecimal() and len(value) <= 9 and app.profile_exists(int(value)):
-                    return int(value)
-            return None
+            found = web.profile_cookie(self)
+            return found if found is not None and app.profile_exists(found) else None
 
         def _signed_in(self, data, profile_id: int | None) -> None:
             """Answer with the profile cookie set (signed in) or cleared (None: signed out)."""
@@ -2066,28 +2020,10 @@ def make_handler(app: ChartApp, port_ref: list[int]):
             self._json({"error": f"the chart app failed: {type(err).__name__}: {err}"}, HTTPStatus.INTERNAL_SERVER_ERROR)
 
         def _local(self) -> bool:
-            # Only answer requests addressed to this machine (blocks DNS-rebinding from web pages).
-            host = (self.headers.get("Host") or "").split(":")[0]
-            if host not in ("127.0.0.1", "localhost"):
-                self._send(HTTPStatus.FORBIDDEN, b"forbidden", "text/plain")
-                return False
-            return True
+            return web.local_only(self)  # only requests addressed to this machine
 
         def _from_this_app(self) -> bool:
-            """Whether an /api/ request comes from this app's own pages (or the address bar). A
-            browser says where a request comes from (Sec-Fetch-Site) and, for most, the page's
-            origin (Origin); a GET needs no header, so another site's page could otherwise reach
-            the routes that start work or write (an <img> asking /api/inventory for one ticker
-            after another, each a thread; /api/trading filling paper orders). A request saying
-            neither (not from a browser, or one too old to say) passes: writes still need
-            WRITE_HEADER, which no other page can send."""
-            site = self.headers.get("Sec-Fetch-Site")
-            origin = self.headers.get("Origin")
-            if (site is None or site in ("same-origin", "none")) \
-                    and (origin is None or origin == f"http://{self.headers.get('Host')}"):
-                return True
-            self._send(HTTPStatus.FORBIDDEN, b"forbidden: not from this app's pages", "text/plain")
-            return False
+            return web.from_this_app(self)  # only this app's own pages reach the API
 
         def _write(self, method: str) -> None:
             """POST/PUT/DELETE for layouts. The custom header can't be sent cross-site without a
@@ -2131,6 +2067,13 @@ def make_handler(app: ChartApp, port_ref: list[int]):
                     return self._json(app.watch(ticker), HTTPStatus.CREATED)
                 if method == "POST" and parts == ["", "api", "updates-pause"]:
                     return self._json(app.set_updates_pause(body))
+                if method == "POST" and parts == ["", "api", "requests"]:
+                    try:
+                        return self._json(app.request_symbol(body), HTTPStatus.ACCEPTED)
+                    except RuntimeError as e:
+                        return self._json({"error": str(e)}, HTTPStatus.CONFLICT)
+                if method == "DELETE" and len(parts) == 4 and parts[:3] == ["", "api", "requests"]:
+                    return self._json(app.cancel_request(int(parts[3])))
                 if method == "PUT" and parts == ["", "api", "watchlists"]:
                     return self._json(app.save_watchlists(body, me))
                 if method == "POST" and parts == ["", "api", "priority"]:
@@ -2337,6 +2280,8 @@ def make_handler(app: ChartApp, port_ref: list[int]):
                     return self._json(app.audit_summary(q.get("ticker")))
                 if url.path == "/api/queue":
                     return self._json(app.queue(q))
+                if url.path == "/api/requests":
+                    return self._json(app.requests(q))
                 if url.path == "/api/plugin-fetching":
                     return self._json(app.plugin_fetching(q["name"]))
                 if url.path == "/api/plugin-stores":
@@ -2361,39 +2306,41 @@ def make_handler(app: ChartApp, port_ref: list[int]):
 
         def _static(self, path: str) -> None:
             rel = "index.html" if path in ("", "/") else path.lstrip("/")
+            if rel == "index.html" and app.mode == "fetcher":  # the fetcher's own page: nobody's, no profile
+                return self._send(HTTPStatus.OK, fetcher_page(), "text/html; charset=utf-8")
             if rel == "index.html" and self._profile() is None:
                 rel = "login.html"  # no profile chosen in this browser: pick or make one first
-            target = (STATIC / rel).resolve()
-            if STATIC.resolve() not in target.parents or not target.is_file():
-                return self._send(HTTPStatus.NOT_FOUND, b"not found", "text/plain")
-            ctype = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-            if ctype.startswith("text/") or ctype == "application/javascript":
-                ctype += "; charset=utf-8"
-            self._send(HTTPStatus.OK, target.read_bytes(), ctype)
+            web.static_file(self, rel)
 
     return Handler
 
 
 def _log_to(db_path):
     """The app's log (logs/liminal.log beside the database), as the fetcher writes it."""
-    from ..cli import Logger
+    from ..logs import log_to
 
-    return Logger(Path(db_path).parent / "logs" / "liminal.log")
+    return log_to(db_path)
 
 
 RESCAN_AFTER_START_S = 10.0  # the start's rescan waits for the first pages' requests
+_FETCHER_PAGE: list[bytes] = []
 
 
-def serve(db_path: Path, port: int = 8765, open_browser: bool = True, priority: list[str] | None = None,
-          settings: Settings | None = None, reload_settings: Callable[[], Settings] | None = None,
-          rescan: bool = False) -> None:
-    """The chart app. With `rescan` (the app started from the command line) every provider plugin
-    set up here scans its capabilities and plan again shortly after the start (ChartApp.start_rescan)."""
-    store = Store(db_path, check_same_thread=False)
-    app = ChartApp(store, priority, settings, reload_settings=reload_settings)
-    # Nothing runs for nobody (the user, 2026-11-01): the start's rescan, the world's calendars and
-    # the Resources sampler wait for the first page, and the app goes quiet (its stores closed, its
-    # hosts let go) once no page has been in touch for a while.
+def fetcher_page() -> bytes:
+    """The fetcher's own page: the chart page without the chart, the tools and what is the user's
+    (style.css and the scripts read the body's mode): the data and monitoring views, the icons."""
+    if not _FETCHER_PAGE:
+        html = (STATIC / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<body>", '<body data-mode="fetcher">', 1).replace("<title>Liminal Charts</title>",
+                                                                               "<title>Liminal Fetcher</title>", 1)
+        _FETCHER_PAGE.append(html.encode("utf-8"))
+    return _FETCHER_PAGE[0]
+
+
+def _prepare(app: ChartApp, rescan: bool) -> None:
+    """Nothing runs for nobody (the user, 2026-11-01): the start's rescan, the world's calendars
+    and the Resources sampler wait for the first page, and the app goes quiet (its stores closed,
+    its hosts let go) once no page has been in touch for a while."""
     if rescan:
         def rescan_now() -> None:
             try:
@@ -2405,13 +2352,30 @@ def serve(db_path: Path, port: int = 8765, open_browser: bool = True, priority: 
     from . import world
     app.on_wake(lambda: threading.Thread(target=world.warm, daemon=True).start())  # world calendars take a few seconds
     threading.Thread(target=app.watch_quiet, name="quiet", daemon=True).start()
+
+
+def make_server(app: ChartApp, port: int) -> ThreadingHTTPServer:
+    """The HTTP server of `app` on 127.0.0.1:`port` (a free one when it is taken)."""
     port_ref = [port]
     try:
-        httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app, port_ref))
+        return ThreadingHTTPServer(("127.0.0.1", port), make_handler(app, port_ref))
     except OSError:
-        httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(app, port_ref))  # port taken: pick a free one
+        return ThreadingHTTPServer(("127.0.0.1", 0), make_handler(app, port_ref))  # port taken: pick a free one
+
+
+def serve(db_path: Path, port: int = 8765, open_browser: bool = True, priority: list[str] | None = None,
+          settings: Settings | None = None, reload_settings: Callable[[], Settings] | None = None,
+          rescan: bool = False) -> None:
+    """The chart app alone (`gui --alone`): its page and the data API in this one process, no
+    fetcher in it (nothing is collected: a read-only copy, a test). The app proper is the front
+    (gui/front.py), with the API inside the fetcher (serve_fetcher). With `rescan` every provider
+    plugin set up here scans its capabilities and plan again shortly after the first page."""
+    store = Store(db_path, check_same_thread=False)
+    app = ChartApp(store, priority, settings, reload_settings=reload_settings)
+    _prepare(app, rescan)
+    httpd = make_server(app, port)
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
-    print(f"chart app running at {url}  (Ctrl+C to stop)", flush=True)
+    print(f"chart app running alone at {url}  (Ctrl+C to stop)", flush=True)
     if open_browser:
         threading.Timer(0.5, webbrowser.open, args=(url,)).start()
     try:
@@ -2421,3 +2385,28 @@ def serve(db_path: Path, port: int = 8765, open_browser: bool = True, priority: 
     finally:
         httpd.server_close()
         app.close()
+
+
+def serve_fetcher(settings: Settings, f, h, port: int | None, rescan: bool = True,
+                  reload_settings: Callable[[], Settings] | None = None) -> str:
+    """The fetcher's process: its page and the data API on `port` (0: a free one; None: no page)
+    in a thread, the fetcher's work (f.run) under the host `h` (host.py) here, until its clients
+    are gone: a page in touch counts as one (h.touch). Returns why the host stopped."""
+    store = Store(settings.db_path, check_same_thread=False)
+    app = ChartApp(store, list(settings.source_priority), settings, reload_settings=reload_settings, mode="fetcher",
+                   fetcher=f, touch=h.touch)
+    _prepare(app, rescan)
+    httpd = make_server(app, port) if port is not None else None
+    if httpd is not None:
+        f.page_url = f"http://127.0.0.1:{httpd.server_address[1]}/"
+        threading.Thread(target=httpd.serve_forever, name="fetcher-page", daemon=True).start()
+        _log_to(settings.db_path)(f"fetcher: its page and the data API at {f.page_url}")
+    f.host = h
+
+    def secure() -> None:
+        if httpd is not None:
+            httpd.shutdown()
+            httpd.server_close()
+        app.close()
+
+    return h.serve(f.run, secure=secure, handle=f.handle)

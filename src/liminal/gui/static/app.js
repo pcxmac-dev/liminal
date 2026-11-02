@@ -1,6 +1,11 @@
 'use strict';
 /* Liminal Charts: TradingView-style front end over the local data API. */
 
+// The fetcher's own page (gui/server.py fetcher_page): the same page without the chart, the tools and what is
+// the user's (style.css hides them; panels.js keeps to the data and monitoring views); no chart is loaded.
+const FETCHER_MODE = document.body.dataset.mode === 'fetcher';
+window.FETCHER_MODE = FETCHER_MODE;
+
 // The settings this browser saved before the rename (2026-11-01) sit under the old storage prefix:
 // moved to the new one, once.
 {
@@ -3541,7 +3546,7 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'h' && e.altKey) { e.preventDefault(); startDrawing('measure'); }
   else if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedOverlay && document.body.dataset.view === 'chart') {
     chart.removeOverlay({ id: state.selectedOverlay });  // only the chart on screen: not a hidden one's drawing
-  } else if (e.key === '/' || (e.key.length === 1 && /[a-z]/i.test(e.key) && !e.ctrlKey && !e.metaKey)) {
+  } else if (!FETCHER_MODE && (e.key === '/' || (e.key.length === 1 && /[a-z]/i.test(e.key) && !e.ctrlKey && !e.metaKey))) {
     e.preventDefault();
     openSymbolDialog();
     if (e.key !== '/') { $('symbolSearch').value = e.key; renderSymbolList(e.key); }
@@ -4027,6 +4032,10 @@ $('pHighlight').addEventListener('click', (e) => {
 
 // -- start -------------------------------------------------------------------------
 (async function start() {
+  if (FETCHER_MODE) {  // the fetcher's page: no chart, no layout, no symbol; the symbol list names the views' symbols
+    try { await loadSymbols(); } catch (err) { showError(err); }
+    return;
+  }
   renderHighlightPanel();
   renderTools();
   renderIndicatorMenu();

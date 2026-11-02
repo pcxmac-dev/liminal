@@ -172,6 +172,91 @@ PLUGIN TYPE ENGINE|auto`); left to the app, the optimal one installed here.
   An agency's items are all kept (until this change only the newest 200 of a source).
 - `history status`, `mongo start|stop|status` and `stores list|pick|settle` show and manage them.
 
+## Three programs: the library, the integrator, the app (2026-11-01)
+
+The user, 2026-11-01: plugins should run as services "so that in they update what they can"; "the
+fetcher takes a symbol and uses the plugins 'to best effect (efficiency) price / performance'
+retrieve all info about the symbol"; "the fetcher uses the plugins that it knows about to assess
+the work, and then begin collecting data"; "the fetcher can take a queue/stack of requests"; "the
+concept is to be able to use the app, which connects to the fetcher for database access"; "so the
+app needs to funnel requests through the fetcher to the databases"; "i can look at the fetcher to
+see what the data looks like, i can use the 'app' to see what i want to do"; "make sure that the
+library calls contribute to code reuse"; "lets move the fetcher in to it's own repo called
+liminal-integrator"; "all lib calls will point to liminal-lib".
+
+- **liminal-lib** (`liminal_lib`, [its repository](https://github.com/pcxmac-dev/liminal-lib)): every
+  module of the app but its own (`gui/`, `cli.py`, `deps.py`, `trading/`): the stores, the plugin
+  contract and registry, the collector and the scheme, the calendars, the hosts, the live recorder,
+  the composites and derived frames, the datasets, the publishers, the settings, the log
+  (`logs.py`). The two places the library reached into the GUI were turned around: the regular
+  session's mask and close are the library's (`sessions.regular_mask`, `regular_close`), the market
+  proxies are a parameter of `collector.sync` (`proxies`, the app's `gui/world.PROXIES`). The app's
+  package maps `liminal.<module>` to `liminal_lib.<module>` with a meta path finder (`liminal/__init__.py`:
+  the one module object under both names, first in `sys.meta_path` so the path finder never makes a
+  second), so the app, its tests and the plugins keep their imports until each points to
+  `liminal_lib`; the GitHub-hosted datasets' submodules stay in the app's repository (`LIMINAL_DATA_REPOS`).
+  The suite proper still runs here, with the library installed; it moves there module by module.
+- **liminal-integrator** (`liminal_integrator`, [its repository](https://github.com/pcxmac-dev/liminal-integrator)):
+  the fetcher, the resident host `fetcher` (one per database, `host.FETCHER`), up while someone holds
+  it and gone once nobody does. `lib.py` is the one place naming the library (what it uses of
+  `liminal_lib`, by name; a piece it needs is added to the library, never written twice), and the
+  app's page is its one dependency outside it (`lib.page`: `gui/server.serve_fetcher`).
+  - *The requests* (`storage/requests.py`, the table `fetch_requests`): one row per ask (who asked:
+    a chart page that opened the symbol, the request box on a page, the command line, the fetcher's
+    standing work; which symbol; what about it: bars, live; when). Asked interactively, the newest
+    goes first (a stack); the standing work goes in order (a queue); a symbol asked again while its
+    request is open is one request, asked anew. Taken: assessing, collecting; ended: done, failed,
+    cancelled. The Fetcher view shows the stack above the plugins' queue, with a request box.
+  - *The assessment* (`fetcher.assess`): a symbol nobody watches goes on the watchlist of every feed
+    that can collect it; then each holding feed's offers for its asset class (resolution, since,
+    latency, requests it would take, its capacity) from the standing scheme (sourcing.py), and the
+    plan: each era of each resolution to the first holding feed in the scheme's order, in the user's
+    order of jobs (days, minutes, seconds); live: what can serve the current session, freshest first.
+  - *Collecting*: every feed of the plan is asked for the symbol first (`collector.request_priority`)
+    and its run held (the host `feed-NAME`, `host.feed_run`) until it has served the symbol (synced
+    since the ask) or its run ended; the request is done once one has served it and none is still
+    pending, failed when none did (SERVE_TIMEOUT_S). A run held for nobody is let go.
+  - *The standing pass*: every PASS_HOURS (LIMINAL_SYNC_HOURS) while the fetcher is up, and only once
+    new data can exist (`next_due`: the earliest `freshness.expected` next due over the feeds set
+    up here and their asset classes) or a run stopped short (its caps: `last_runs` says "stopped"),
+    or when asked (resuming fetching, `sync` by hand, the page): every feed's run held (a closed
+    archive left alone, a feed fetching elsewhere left to that run, the feeds not set up here named),
+    the closed months' copy (`history_due`, the host `history`), the extras in a process of their own
+    (`sync --extras-only`: the publishers' due feeds, the stores' pass, the composites and derived
+    frames), the plugins that fetch on their own through their queue (runner.py).
+  - *Its status* in the main file (`STATUS_KEY`, `read_status`/`write_status`), for every page; over
+    its pipe it answers `status`, `pass` and `wake` (`Fetcher.handle`).
+  - *Its page*: the chart app's page in fetcher mode (`gui/server.fetcher_page`: the body marked
+    `data-mode="fetcher"`; style.css hides the top bar, the drawing tools, the chart and its side panel,
+    the upper rail group and the profile; app.js loads no chart; panels.js keeps to the data and
+    monitoring views) and the data API, on LIMINAL_FETCHER_PORT (8785; 0 a free one; none: no page).
+    A page in touch holds the host (`Host.touch`) as a client does.
+  - *The service* (`service.py`, by the user's decision: "Only while I use it" stays the default):
+    a client that holds the fetcher for good and starts it again when it ends (`service run`);
+    installed as a Task Scheduler task at logon as the user on Windows (`LiminalFetcher`: pythonw, no
+    window; as the user it sees the keys in the user environment variables) or a systemd user unit
+    on Linux (`liminal-fetcher`; lingering for no-login runs; the keys need a home the unit can read
+    at boot: the keyring or systemd's credentials, never a file the program writes: the user's
+    decision, open). `liminal-integrator serve|status|request|pass|cancel|host` and `service
+    install|remove|status|run`; the app's `fetcher` and `service` commands and `host fetcher` answer
+    through it (`cli.integrator()`), and say where it is when it is not installed.
+- **The app** (this repository): the chart front (`gui/front.py`, `liminal gui`): serves the chart page
+  and its scripts, attaches to the fetcher at the first page (`host.attach_fetcher`, started if none
+  answers; its port learnt from its status over the pipe) and passes every `/api/` request of its
+  pages to it, the profile cookie and the app's own headers with it, where it came from checked here
+  and not passed on; an event stream as it comes. No database is opened here; with no page in touch
+  for LIMINAL_QUIET_SECONDS it lets the fetcher go and attaches again at the next request. `gui
+  --alone` keeps the old one-process app (page and data API, no fetcher: a read-only copy, a test).
+  The data API (`ChartApp`) runs inside the fetcher: a symbol a page opens is a request on the
+  fetcher's stack (`priority`: no `sync --tickers` process of the app's own any more); resuming
+  fetching asks the fetcher for a pass; `activity.symbolRun` is that request's state. `sync` by hand
+  holds the fetcher and asks it for a pass, or puts the symbols given on its stack, and waits
+  (`dispatch`, `wait_for_fetcher`, `wait_for_requests`).
+- Tests: `tests/test_fetch_requests.py`, `test_front.py`, `test_fetcher_page.py`, `test_fetch_in_use.py`
+  here; the integrator's `tests/test_fetcher.py`, `test_service.py` in its repository (its conftest
+  copies the guards: no process, no host, no key); the library's import smoke test in its. The
+  boundary and console-window audits read both packages.
+
 ## Providers are plugins (2026-10-27)
 
 Every data provider the fetcher uses is a plugin: one `Provider` record (`sources/registry.py`)

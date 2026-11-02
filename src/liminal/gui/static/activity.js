@@ -403,8 +403,91 @@
     el('actStatus').innerHTML = statusLine();
     if (data) el('scanBtn').disabled = !!data.running;
     el('scanNote').innerHTML = scanNote ? esc(scanNote) : '';
+    loadRequests();
     loadQueue();
   }
+
+  // -- the fetcher's requests: the stack of asks in front of its standing queue -------------
+  // (the user, 2026-11-01: "the fetcher can take a queue/stack of requests"; the fetcher assesses
+  // the work for each symbol over the plugins and collects: fetcher.py, storage/requests.py)
+  const RQ_EVERY_MS = 3000;
+  const RQ_OPEN = new Set(['waiting', 'assessing', 'collecting']);
+  const RQ_CLASS = { collecting: 'fetching', assessing: 'fetching', waiting: 'queued', done: 'current', failed: 'run-error', cancelled: 'run-abandoned' };
+  let requests = null, requestsAt = 0, requestsLoading = null;
+
+  function loadRequests(force = false) {
+    if (requestsLoading || (!force && Date.now() - requestsAt < RQ_EVERY_MS)) return;
+    requestsLoading = fetch('/api/requests?limit=60').then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j) { requests = j; requestsAt = Date.now(); renderRequests(); } })
+      .catch(() => {}).finally(() => { requestsLoading = null; });
+  }
+
+  function planText(p) {
+    if (!p) return '';
+    if (!p.jobs?.length) return p.note ? esc(p.note) : '';
+    const by = {};
+    for (const j of p.jobs) (by[j.plugin] ||= []).push(`${j.resolution} ${j.start.slice(0, 4)}${j.end ? `–${j.end.slice(0, 4)}` : '→'}`);
+    return Object.entries(by).map(([k, v]) => `<div><b>${esc(label(k))}</b> ${esc(v.join(', '))}</div>`).join('')
+      + (p.live?.length ? `<div class="sub">live: ${esc(p.live.map((l) => label(l[0])).join(', '))}</div>` : '');
+  }
+
+  function rqWhen(r) {
+    if (r.state === 'collecting' || r.state === 'assessing') return r.started_at ? `for ${dur((Date.now() - Date.parse(r.started_at)) / 1000)}` : '';
+    if (r.state === 'waiting') return `asked ${ago(r.asked_at)}`;
+    return r.finished_at ? ago(r.finished_at) : '';
+  }
+
+  function renderRequests() {
+    if (!requests) return;
+    const c = requests.counts || {};
+    el('rqCounts').textContent = Object.keys(c).length ? Object.entries(c).map(([k, n]) => `${num(n)} ${k}`).join(' · ') : '';
+    const st = requests.status;
+    el('rqStatus').innerHTML = st
+      ? `The fetcher is ${st.busy ? 'busy' : 'idle'}${st.feeds?.length ? `, holding ${esc(st.feeds.map(label).join(', '))}` : ''}`
+        + `${st.lastPass ? `; last pass ${ago(st.lastPass)}` : '; no pass yet'}${st.nextDue ? `; nothing new before ${when(st.nextDue)}` : ''}`
+        + `${st.clients?.length ? `; ${num(st.clients.length)} client${st.clients.length === 1 ? '' : 's'} attached` : ''}.`
+      : 'No fetcher has run on this database yet.';
+    const rows = requests.rows || [];
+    el('rqRows').innerHTML = rows.length ? rows.map((r) => `<tr>
+        <td><span class="sym-cell">${symbolIcon({ ticker: r.symbol, asset: r.plan?.asset, icon: symbolInfo(r.symbol).icon }, 20)}<span><b>${esc(r.symbol)}</b>
+          <div class="sub">${esc((r.kinds || []).join(', '))}</div></span></span></td>
+        <td>${esc(r.by)}</td>
+        <td><span class="state ${RQ_CLASS[r.state] || ''}">${esc(r.state)}</span>${RQ_OPEN.has(r.state)
+          ? ` <button type="button" class="small-btn" data-cancel="${r.id}" title="Take the request back">cancel</button>` : ''}</td>
+        <td class="sub">${planText(r.plan)}</td>
+        <td class="sub">${esc(r.detail || '')}</td>
+        <td>${rqWhen(r)}</td></tr>`).join('')
+      : '<tr><td colspan="6" class="empty">No requests yet: a symbol opened in the chart, or asked for here, goes on the stack.</td></tr>';
+  }
+
+  async function submitRequest(e) {
+    e.preventDefault();
+    const symbol = el('rqSymbol').value.trim().toUpperCase();
+    if (!symbol) return;
+    const kinds = el('rqLive').checked ? ['bars', 'live'] : ['bars'];
+    let note = '';
+    try {
+      const res = await fetch('/api/requests', { method: 'POST', headers: WRITE_HEADERS, body: JSON.stringify({ symbol, kinds, by: 'page' }) });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || res.statusText);
+      note = `#${body.id} ${body.symbol}: ${body.state}`;
+      el('rqSymbol').value = '';
+    } catch (err) {
+      note = String(err.message || err);
+    }
+    el('rqNote').textContent = note;
+    loadRequests(true);
+  }
+
+  async function cancelRequest(id) {
+    try { await fetch(`/api/requests/${encodeURIComponent(id)}`, { method: 'DELETE', headers: WRITE_HEADERS }); } catch { /* the next poll shows it */ }
+    loadRequests(true);
+  }
+  el('rqForm').addEventListener('submit', submitRequest);
+  el('rqRows').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cancel]');
+    if (b) cancelRequest(b.dataset.cancel);
+  });
 
   async function startScan() {
     scanNote = '';

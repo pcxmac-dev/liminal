@@ -97,14 +97,32 @@ def test_pid_alive():
     assert cli.pid_alive(os.getpid()) and not cli.pid_alive(999999) and not cli.pid_alive(0)
 
 
+class HeldFetcher:
+    """The fetcher as `sync` by hand holds it (cli.attach_fetcher): what it was asked, idle at once."""
+
+    def __init__(self):
+        self.asked, self.detached, self.host_pid = [], False, 4242
+
+    def alive(self):
+        return not self.detached
+
+    def detach(self):
+        self.detached = True
+
+    def ask(self, **what):
+        self.asked.append(what)
+        return {"busy": False} if what.get("status") else {"ok": True}
+
+
 def test_missing_key_skips_that_feed_and_says_so(env, monkeypatch, capsys):
     monkeypatch.delenv("MASSIVE_API_KEY")
     cli.main(["watch", "add", "SPCX"])
-    started = []
-    monkeypatch.setattr(cli, "start_feed", lambda name, db_path: started.append(name))
-    assert cli.main(["sync"]) == 0  # the feeds set up here start (Alpaca: crypto needs no key), Massive not
-    assert "massive" not in started and {"alpaca", "bitstamp"} <= set(started)
-    assert "not set up here: massive" in capsys.readouterr().out
+    held = HeldFetcher()
+    monkeypatch.setattr(cli, "attach_fetcher", lambda db, log: held)
+    monkeypatch.setattr(cli.time, "sleep", lambda s: None)
+    assert cli.main(["sync"]) == 0  # the fetcher's pass: the feeds set up here (Alpaca: crypto needs no key), Massive not
+    assert held.asked[0] == {"pass": True} and held.detached
+    assert "a pass asked of the fetcher" in capsys.readouterr().out
     assert cli.main(["--source", "massive", "sync", "--only"]) == 2  # only an unconfigured feed: an error
 
 
@@ -164,43 +182,36 @@ def test_each_feed_has_its_own_run_lock_and_a_move_of_the_data_waits_for_them_al
     assert not proc.run_lock_path(db, "alpaca").exists()  # taken, then given back at once
 
 
-def test_the_hourly_sync_starts_each_idle_feed_in_a_process_of_its_own_without_waiting(env, monkeypatch, capsys):
-    # one run at a time, every feed waited for Massive's pass (hours); and the hourly task starts no
-    # second sync while one goes on, so the sync no longer waits for its feeds
-    import os
-
-    from liminal import proc
-
-    db = env / "data" / "m.db"
+def test_sync_by_hand_asks_the_fetcher_for_a_pass_and_builds_the_derived_frames_after(env, monkeypatch, capsys):
+    # the feeds' runs are the fetcher's to hold (each in a process of its own, side by side); `sync`
+    # waits for its pass, then builds the composites and derived frames from what arrived
     cli.main(["watch", "add", "SPCX"])
-    proc.run_lock_path(db, "massive").write_text(str(os.getppid()))  # Massive's pass goes on from an hour ago
-    started, built = [], []
-    monkeypatch.setattr(cli, "start_feed", lambda name, db_path: started.append(name))
+    held, built = HeldFetcher(), []
+    monkeypatch.setattr(cli, "attach_fetcher", lambda db, log: held)
+    monkeypatch.setattr(cli.time, "sleep", lambda s: None)
     monkeypatch.setattr(cli, "after_sync", lambda args, s: built.append(1))
     assert cli.main(["sync"]) == 0
-    assert "massive" not in started and {"alpaca", "bitstamp", "coinbase"} <= set(started)
-    assert built == [1]  # the derived frames from what arrived: once an hour, by the hourly sync
-    assert "fetching already: massive" in capsys.readouterr().out
+    assert held.asked[0] == {"pass": True} and any(a.get("status") for a in held.asked) and held.detached
+    assert built == [1]  # the derived frames from what arrived, once the pass is over
+    monkeypatch.setattr(cli, "attach_fetcher", lambda db, log: None)
+    assert cli.main(["sync"]) == 0 and "no fetcher answered" in capsys.readouterr().out
+    assert built == [1]  # nothing arrived: nothing built
 
 
-def test_a_run_for_an_opened_symbol_leaves_the_feeds_fetching_to_their_own_runs(env, monkeypatch, capsys):
-    import os
-    from contextlib import contextmanager
-
-    from liminal import proc
-
-    db = env / "data" / "m.db"
+def test_sync_of_an_opened_symbol_puts_it_on_the_fetchers_stack_and_waits_for_it(env, monkeypatch, capsys):
     cli.main(["watch", "add", "SPCX"])
-    proc.run_lock_path(db, "massive").write_text(str(os.getppid()))  # Massive's pass, in another process
-    took = []
+    held = HeldFetcher()
+    monkeypatch.setattr(cli, "attach_fetcher", lambda db, log: held)
+    db = env / "data" / "m.db"
 
-    @contextmanager
-    def feed_run(args, settings, command, lock=True):  # api_run's lock, no requests
-        with cli.run_lock(db, args.source):
-            took.append(args.source)
-            yield None, None, None
-
-    monkeypatch.setattr(cli, "api_run", feed_run)
+    def served(s):  # the fetcher's runs serve it meanwhile
+        with Store(db) as store:
+            for r in store.requests_open():
+                store.request_update(r["id"], state="done", detail="served by alpaca, massive")
+    monkeypatch.setattr(cli.time, "sleep", served)
     assert cli.main(["sync", "--tickers", "SPCX"]) == 0
-    assert "massive" not in took and "alpaca" in took  # the idle feeds take it now
-    assert "sync massive: fetching already; its run takes SPCX next" in capsys.readouterr().out
+    with Store(db) as store:
+        (row,) = store.request_rows()
+    assert row["symbol"] == "SPCX" and row["by"] == "cli" and row["state"] == "done"
+    assert held.asked == [{"wake": True}] and held.detached
+    assert "sync: SPCX: done (served by alpaca, massive)" in capsys.readouterr().out

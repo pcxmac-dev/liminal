@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -92,17 +93,24 @@ def test_opening_a_symbol_starts_a_run_for_it_or_queues_it_behind_the_running_on
 
     monkeypatch.setattr(server.subprocess, "Popen", lambda args, **kw: started.append(args) or Proc())
     monkeypatch.setattr(server.activity, "fetching_feeds", lambda path: {})
-    app = ChartApp(store)
+    woken: list[int] = []
+    app = ChartApp(store, fetcher=SimpleNamespace(wake_up=lambda: woken.append(1), ask_pass=lambda: None, status=lambda: {}))
     first = app.priority("spcx")
-    assert first["state"] == "started" and first["feeds"] == ["alpaca", "massive"]
-    assert started[0][-3:] == ["sync", "--tickers", "SPCX"]
-    assert app.priority("SPCX")["state"] == "recent" and len(started) == 1  # opened again within minutes
+    # the fetcher is asked (a request on its stack, by the chart), no process of this app's own
+    assert first["state"] == "started" and first["feeds"] == ["alpaca", "massive"] and started == []
+    (req,) = store.request_rows()
+    assert req["symbol"] == "SPCX" and req["by"] == "chart" and req["state"] == "waiting" and woken == [1]
+    assert app._symbol_request == ("SPCX", req["id"])
+    assert app.priority("SPCX")["state"] == "recent" and len(store.request_rows()) == 1  # opened again within minutes
     monkeypatch.setattr(server.activity, "fetching_feeds", lambda path: {"massive": 99, "alpaca": 98})  # both fetching
     monkeypatch.setattr(app, "PRIORITY_COOLDOWN", 0)
-    assert app.priority("SPCX")["state"] == "queued" and len(started) == 1  # their runs take the symbol next
+    assert app.priority("SPCX")["state"] == "queued" and woken == [1, 1]  # the same open request, asked anew
+    assert len(store.request_rows()) == 1
     monkeypatch.setattr(server.activity, "fetching_feeds", lambda path: {})
+    store.request_update(req["id"], state="done")
+    assert app.priority("SPCX")["state"] == "started" and len(store.request_rows()) == 2  # ended: a new request
     monkeypatch.setattr(app, "PRIORITY_COOLDOWN", 300)
-    assert app.priority("SPCX")["state"] == "started" and len(started) == 2  # the run ended: its turn now
+    assert app.priority("SPCX")["state"] == "recent" and len(store.request_rows()) == 2  # asked within minutes: as it is
     with pytest.raises(LookupError):
         app.priority("NOPE")
     store.close()
@@ -209,16 +217,14 @@ def test_the_chart_pauses_and_resumes_fetching(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
     store = Store(tmp_path / "m.db", check_same_thread=False)
-    app = ChartApp(store)
     passes: list[int] = []
-    monkeypatch.setattr(app, "sync_pass", lambda: passes.append(1) or {"started": []})  # the app's own pass, no process
+    app = ChartApp(store, fetcher=SimpleNamespace(wake_up=lambda: None, ask_pass=lambda: passes.append(1), status=lambda: {}))
     assert app.set_fetching({"paused": True})["paused"]["until"]
     assert collector.pause_state(store) is not None
-    assert app.set_fetching({"paused": False}) == {"paused": None, "started": True}  # resuming asks for a pass at once
-    end = time.monotonic() + 5
-    while not passes and time.monotonic() < end:
-        time.sleep(0.02)
+    assert app.set_fetching({"paused": False}) == {"paused": None, "started": True}  # resuming asks the fetcher for a pass
     assert passes == [1]
+    alone = ChartApp(store)  # no fetcher in this copy: nothing to ask
+    assert alone.set_fetching({"paused": False}) == {"paused": None, "started": None}
     store.close()
 
 
@@ -274,17 +280,15 @@ def test_the_chart_halts_and_resumes_and_resuming_starts_a_sync(tmp_path, monkey
 
     monkeypatch.setattr(server.subprocess, "Popen", Proc)
     passes: list[int] = []
-    monkeypatch.setattr(app, "sync_pass", lambda: passes.append(1) or {"started": []})  # the app's own pass, no process
+    app._fetcher = SimpleNamespace(wake_up=lambda: None, ask_pass=lambda: passes.append(1), status=lambda: {})
     assert app.set_fetching({"paused": True, "halt": True})["paused"]["halt"]
     assert app.priority("SPCX")["state"] == "halted" and started == [] and passes == []  # nothing starts while halted
+    assert store.request_rows() == []  # nothing asked of the fetcher either
     with pytest.raises(RuntimeError, match="halted"):
         app.start_scan("SPCX")
     out = app.set_fetching({"paused": False})
-    assert out["paused"] is None and out["started"] is True  # resuming asks for the app's pass at once (sync_pass)
-    end = time.monotonic() + 5
-    while not passes and time.monotonic() < end:
-        time.sleep(0.02)
-    assert passes == [1] and started == []  # no `sync` process: the app holds the feeds' runs itself
+    assert out["paused"] is None and out["started"] is True  # resuming asks the fetcher for a pass at once
+    assert passes == [1] and started == []  # no `sync` process: the fetcher holds the feeds' runs
 
 
 def test_opening_an_up_to_date_symbol_asks_for_nothing(tmp_path, monkeypatch):
@@ -359,10 +363,14 @@ def test_an_opened_symbol_starts_on_the_idle_feeds_while_another_feeds_pass_goes
 
     monkeypatch.setattr(server.subprocess, "Popen", lambda args, **kw: started.append(args) or Proc())
     monkeypatch.setattr(server.activity, "fetching_feeds", lambda path: {"massive": 99})  # Massive's long pass
-    app = ChartApp(store)
-    assert app.priority("SPCX")["state"] == "started" and started[0][-3:] == ["sync", "--tickers", "SPCX"]
-    assert app._symbol_run[0] == "SPCX"  # the page sees its own run end, not every feed's
+    app = ChartApp(store, fetcher=SimpleNamespace(wake_up=lambda: None, ask_pass=lambda: None, status=lambda: {}))
+    out = app.priority("SPCX")
+    assert out["state"] == "started" and started == [] and store.request_get(out["request"])["symbol"] == "SPCX"
+    assert app._symbol_request[0] == "SPCX"  # the page sees its own request end, not every feed's
+    assert app.activity({"source": "massive"})["symbolRun"] == {"ticker": "SPCX", "going": True}
+    store.request_update(out["request"], state="done")
+    assert app.activity({"source": "massive"})["symbolRun"] == {"ticker": "SPCX", "going": False}
     monkeypatch.setattr(app, "PRIORITY_COOLDOWN", 0)
     monkeypatch.setattr(server.activity, "fetching_feeds", lambda path: {None: 99})  # the data being moved
-    assert app.priority("SPCX")["state"] == "queued" and len(started) == 1
+    assert app.priority("SPCX")["state"] == "queued" and started == []
     store.close()

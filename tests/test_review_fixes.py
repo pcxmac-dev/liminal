@@ -82,7 +82,9 @@ def test_backups_keep_the_newest_and_never_touch_other_files(tmp_path):
 
 
 def test_the_log_is_rotated_and_old_ones_are_capped(tmp_path, monkeypatch):
-    monkeypatch.setattr(cli, "LOG_MAX_BYTES", 100)
+    from liminal import logs  # the library's: every program of Liminal logs with it
+
+    monkeypatch.setattr(logs, "LOG_MAX_BYTES", 100)
     log = cli.Logger(tmp_path / "liminal.log")
     for i in range(60):
         log("x" * 40 + str(i))

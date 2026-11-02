@@ -59,11 +59,9 @@ def test_a_sync_reads_saved_keys_again_before_each_feed(tmp_path, monkeypatch):
     args = SimpleNamespace(all_sources=False, source="massive", tickers=None)
     cli._sync(args, settings)
     assert seen == ["massive"] and not reloaded  # one feed: nothing to read again
-    # a run for a symbol opened in the chart goes over the feeds one after another (the hourly sync
-    # starts each feed in a process of its own, which reads them when it starts)
+    # every feed's run is a process of its own (the host feed-NAME, held by the fetcher), which reads
+    # the saved keys when it starts: `sync` over every feed, by hand or for a symbol, asks the fetcher
+    asked = []
+    monkeypatch.setattr(cli, "dispatch", lambda s, log=None, tickers=None: asked.append(tickers) or 1)
     args = SimpleNamespace(all_sources=True, source=None, tickers=["SPCX"])
-    monkeypatch.setattr(cli, "_feed_closed", lambda s, name: name not in ("massive", "tiingo"))
-    saved[0] = {}
-    cli._sync(args, settings)
-    assert seen[1:] == ["massive", "tiingo"] and reloaded == [1]  # read again once, before tiingo
-    assert "saved keys or plans changed; read again" in (tmp_path / "logs" / "liminal.log").read_text()
+    assert cli._sync(args, settings) == (0, 1) and asked == [{"SPCX"}] and seen == ["massive"]

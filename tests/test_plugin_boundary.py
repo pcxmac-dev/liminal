@@ -6,21 +6,29 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-SRC = Path(__file__).resolve().parents[1] / "src" / "liminal"
+import liminal_lib
+
+# the app's own package, and the library's (liminal-lib): the same rules hold in both
+ROOTS = {"liminal": Path(__file__).resolve().parents[1] / "src" / "liminal",
+         "liminal_lib": Path(liminal_lib.__file__).resolve().parent}
 URL = re.compile(r"\b(?:https?|wss?)://([A-Za-z0-9.-]+)")
 
 # links shown to people in the Federal view, never fetched (gov.LINKS, gov.RULES, the FOMC calendar)
 FOR_PEOPLE = {
     ("gov.py", "www.finra.org"), ("gov.py", "www.sec.gov"), ("gov.py", "www.federalreserve.gov"),
     ("gov.py", "www.bls.gov"), ("gov.py", "www.ecfr.gov"),
-    ("gui/server.py", "127.0.0.1"),  # this app's own address
+    ("gui/server.py", "127.0.0.1"), ("gui/front.py", "127.0.0.1"),  # this app's own addresses
 }
+
+
+def sources() -> list[tuple[str, str, Path]]:
+    """Every module of the app and the library: (package, path within it, file)."""
+    return [(pkg, path.relative_to(root).as_posix(), path) for pkg, root in ROOTS.items() for path in root.rglob("*.py")]
 
 
 def hosts_named() -> set[tuple[str, str]]:
     out = set()
-    for path in SRC.rglob("*.py"):
-        rel = path.relative_to(SRC).as_posix()
+    for _, rel, path in sources():
         if rel.startswith("sources/plugins/"):
             continue
         out |= {(rel, h.lower().rstrip(".")) for h in URL.findall(path.read_text(encoding="utf-8"))}
@@ -46,7 +54,8 @@ def _imports(path: Path) -> set[str]:
     """The modules a file imports, relative imports resolved (liminal.sources.http ...)."""
     import ast
 
-    rel = path.relative_to(SRC.parent).with_suffix("")
+    root = next(r for r in ROOTS.values() if r in path.parents)
+    rel = Path(root.name) / path.relative_to(root).with_suffix("")  # the package's name, then the module's path
     parts = list(rel.parts)
     package = parts[:-1] if parts[-1] != "__init__" else parts[:-1]
     out = set()
@@ -62,15 +71,14 @@ def _imports(path: Path) -> set[str]:
 
 def _plugin_of(module: str) -> str | None:
     bits = module.split(".")
-    return bits[3] if bits[:3] == ["liminal", "sources", "plugins"] and len(bits) > 3 else None
+    return bits[3] if bits[0] in ROOTS and bits[1:3] == ["sources", "plugins"] and len(bits) > 3 else None
 
 
 def test_plugins_are_self_contained():
     """Each plugin keeps to itself (memory: plugins move to their own repositories): it imports no
     other plugin, and the app imports none by name (it reads them from the registry)."""
-    for path in SRC.rglob("*.py"):
-        rel = path.relative_to(SRC).as_posix()
-        mine = _plugin_of("liminal." + rel[:-3].replace("/", "."))
+    for pkg, rel, path in sources():
+        mine = _plugin_of(pkg + "." + rel[:-3].replace("/", "."))
         if rel.startswith("sources/plugins/") and rel != "sources/plugins/__init__.py":
             others = {_plugin_of(m) for m in _imports(path)} - {None, mine}
             assert not others, f"{rel} imports another plugin: {others}"

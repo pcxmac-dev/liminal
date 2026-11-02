@@ -165,6 +165,19 @@
       </div>
       <div id="actStatus" class="act-status"></div>
       <div id="scanNote" class="small"></div>
+      <h4>Requests <span id="rqCounts" class="p-muted small"></span></h4>
+      <div class="p-muted small">The fetcher's stack: a symbol opened in the chart, or asked for here, goes first; the fetcher assesses the work over the plugins (what each gives, at what cost) and collects. Its standing work queues behind.</div>
+      <form id="rqForm" class="rq-form" autocomplete="off">
+        <input id="rqSymbol" type="text" placeholder="Symbol: AAPL, BTCUSD, NQ1!" maxlength="32" required aria-label="Symbol to fetch">
+        <label title="Also its current session, from the plugin whose stream is freshest"><input id="rqLive" type="checkbox"> live too</label>
+        <button type="submit" class="primary" title="Ask the fetcher for everything about this symbol">Fetch</button>
+        <span id="rqNote" class="p-muted small"></span>
+      </form>
+      <div id="rqStatus" class="p-muted small"></div>
+      <div class="table-wrap"><table class="act-table requests">
+        <thead><tr><th>Symbol</th><th>By</th><th>State</th><th>Plan</th><th>Detail</th><th>When</th></tr></thead>
+        <tbody id="rqRows"></tbody>
+      </table></div>
       <h4>Queue <span id="qCounts" class="p-muted small"></span></h4>
       <div id="qFilters" class="filters q-filters"></div>
       <div class="table-wrap"><table class="act-table queue">

@@ -1089,3 +1089,18 @@ main > .view.ex-view:not([hidden]) { display: grid; }
 .pl-checks { margin: 0 0 6px; padding-left: 18px; }
 .pl-checks li { margin: 2px 0; overflow-wrap: anywhere; }
 @media (max-width: 1100px) { .ex-view { grid-template-columns: 200px minmax(0, 1fr); } .ex-side { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--border); } }
+
+/* The fetcher's own page (gui/server.py fetcher_page; the user, 2026-11-01: "without the symbol plot and
+   user info, just the monitoring, plugins, icons", "no tools at top or left side"): the chart app's page
+   without the top bar, the drawing tools, the chart and its side panel, the upper rail group and the profile */
+body[data-mode="fetcher"] #topbar, body[data-mode="fetcher"] #tools, body[data-mode="fetcher"] #sidePanel,
+body[data-mode="fetcher"] #viewChart, body[data-mode="fetcher"] #symbolDialog, body[data-mode="fetcher"] #railProfile,
+body[data-mode="fetcher"] #rail button[data-pane="stock"], body[data-mode="fetcher"] #rail button[data-pane="analysis"],
+body[data-mode="fetcher"] #rail button[data-pane="trading"], body[data-mode="fetcher"] #rail button[data-pane="watchlist"],
+body[data-mode="fetcher"] #rail button[data-pane="prefs"], body[data-mode="fetcher"] #rail > hr:first-of-type,
+body[data-mode="fetcher"] #rail > hr:last-of-type { display: none !important; }
+/* The fetcher's requests (the Fetcher view): the request box and the stack */
+.rq-form { display: flex; gap: 8px; align-items: center; margin: 0 0 8px; flex-wrap: wrap; }
+.rq-form input[type="text"] { width: 220px; }
+.rq-form label { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+.act-table.requests .small-btn { font-size: 11px; padding: 1px 6px; margin-left: 6px; }

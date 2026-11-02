@@ -1,26 +1,25 @@
 """Fetching only while the app, or a command, is in use (the user, 2026-11-01): a feed's run is the
 host feed-NAME and the closed months' copy the host history (cli.cmd_host), stopped at the next
-request once let go; `sync` by hand holds them and waits; the chart app holds them while awake
-(gui/server.py sync_pass) and lets them go when it goes quiet; nothing is scheduled any more."""
+request once let go; `sync` by hand holds the fetcher (fetcher.py) and asks it for a pass, or for
+the symbols given; nothing is scheduled any more (a service is the user's own decision: service.py)."""
 from __future__ import annotations
 
 import threading
-import time
 from argparse import Namespace
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
 from liminal import cli, host as hosting
 from liminal.config import load_settings
-from liminal.gui.server import ChartApp
 from liminal.storage import Store
 
 
 class FakeAttachment:
     def __init__(self, name, lives=1):
-        self.name, self.lives, self.detached = name, lives, False
+        self.name, self.lives, self.detached, self.host_pid = name, lives, False, 4242
+        self.asked: list[dict] = []
+        self.busy: list[bool] = []
 
     def alive(self):
         if self.detached:
@@ -30,6 +29,12 @@ class FakeAttachment:
 
     def detach(self):
         self.detached = True
+
+    def ask(self, **what):
+        self.asked.append(what)
+        if what.get("status"):
+            return {"busy": self.busy.pop(0) if self.busy else False}
+        return {"ok": True}
 
 
 class FakeHost:
@@ -100,68 +105,70 @@ def test_the_history_host_ends_after_the_month_in_hand_once_let_go(tmp_path, mon
     assert real_cmd_history(run, settings) == 0 and seen == [False, True]
 
 
-def test_sync_by_hand_holds_the_feeds_runs_and_waits_for_them(tmp_path, monkeypatch):
+def test_sync_by_hand_holds_the_fetcher_and_asks_it_for_a_pass_or_the_symbols(tmp_path, monkeypatch):
     settings = _settings(tmp_path)
     lines: list[str] = []
-    runs = {"alpaca": FakeAttachment("alpaca", lives=2), "coinbase": FakeAttachment("coinbase", lives=1)}
-    monkeypatch.setattr(cli, "start_feed", lambda name, db_path: runs.get(name))
-    monkeypatch.setattr(cli, "_fetch_gov", lambda s, log, force=False: lines.append("gov"))
-    monkeypatch.setattr(cli, "_stores_pass", lambda s, log, history=True: lines.append("stores") or FakeAttachment("history", 1))
+    att = FakeAttachment("fetcher", lives=99)
+    att.busy = [True, True, False]  # its pass goes on for two looks, then it is idle
+    monkeypatch.setattr(cli, "attach_fetcher", lambda db, log: att)
     monkeypatch.setattr(cli.time, "sleep", lambda s: lines.append("waited"))
-    profiles = {n: Namespace(assets=("crypto",)) for n in ("alpaca", "coinbase")}
-    monkeypatch.setattr(cli, "feed_profiles", lambda s: profiles)
-    monkeypatch.setattr(cli, "providers", lambda: ["alpaca", "coinbase", "massive"])
-    assert cli.dispatch(settings, lines.append) == 2
-    assert lines.count("waited") >= 1 and lines.index("gov") < lines.index("stores") < lines.index("waited")
-    assert any("waiting for 3 run(s)" in line for line in lines) and not any(a.detached for a in runs.values())
-    # Ctrl+C while waiting: every run let go, each stops at its next request
-    held = [FakeAttachment("a", lives=99), FakeAttachment("b", lives=99)]
+    assert cli.dispatch(settings, lines.append) == 1
+    assert att.asked[0] == {"pass": True} and sum(1 for a in att.asked if a.get("status")) == 3
+    assert att.detached and lines.count("waited") >= 3 and any("a pass asked of the fetcher" in m for m in lines)
+    # the symbols given: requests on the fetcher's stack, by the command line, waited for until each has ended
+    att2 = FakeAttachment("fetcher", lives=99)
+    monkeypatch.setattr(cli, "attach_fetcher", lambda db, log: att2)
+
+    def served(s):
+        lines.append("waited")
+        with Store(settings.db_path) as store:
+            for r in store.requests_open():
+                store.request_update(r["id"], state="done", detail="served by massive")
+    monkeypatch.setattr(cli.time, "sleep", served)
+    assert cli.dispatch(settings, lines.append, tickers={"spcx", "aapl"}) == 1
+    with Store(settings.db_path) as store:
+        rows = store.request_rows()
+    assert {r["symbol"] for r in rows} == {"SPCX", "AAPL"} and all(r["by"] == "cli" and r["state"] == "done" for r in rows)
+    assert att2.asked == [{"wake": True}] and att2.detached
+    assert sum(1 for m in lines if m.startswith("sync: ") and ": done (" in m) == 2
+    # no fetcher answers (and none could be started): nothing fetched
+    monkeypatch.setattr(cli, "attach_fetcher", lambda db, log: None)
+    assert cli.dispatch(settings, lines.append) == 0 and "no fetcher answered" in lines[-1]
+    # Ctrl+C while waiting: the fetcher let go (it ends unless something else holds it)
+    att3 = FakeAttachment("fetcher", lives=99)
+    att3.busy = [True] * 99
 
     def interrupted(s):
         raise KeyboardInterrupt
     monkeypatch.setattr(cli.time, "sleep", interrupted)
     with pytest.raises(KeyboardInterrupt):
-        cli.wait_for_hosts(held, lines.append)
-    assert all(a.detached for a in held) and lines[-1].startswith("sync: let go")
-    cli.wait_for_hosts([None, 1], lines.append)  # nothing to hold: nothing waited for
+        cli.wait_for_fetcher(att3, lines.append)
+    assert att3.detached and lines[-1].startswith("sync: the fetcher let go")
+    # `sync --tickers` by hand goes the same way
+    monkeypatch.setattr(cli, "dispatch", lambda s, log=None, tickers=None: lines.append(f"dispatch {sorted(tickers or [])}") or 1)
+    args = cli.build_parser().parse_args(["sync", "--tickers", "spcx"])
+    assert cli._sync(args, settings) == (0, 1) and lines[-1] == "dispatch ['SPCX']"
 
 
-def test_the_chart_app_fetches_while_in_use_and_lets_the_runs_go_when_quiet(tmp_path, monkeypatch):
+def test_the_fetcher_commands_and_its_host_are_the_integrators(tmp_path, monkeypatch):
+    """`liminal host fetcher`, `liminal fetcher ...` and `liminal service ...` answer through the
+    integrator (liminal-integrator), installed beside the app; without it they say where it is."""
+    import liminal_integrator.cli as integrator_cli
+    import liminal_integrator.fetcher as integrator_fetcher
+
     settings = _settings(tmp_path)
-    attached: list[tuple[str, Path]] = []
-    spawned: list[list[str]] = []
-
-    def attach_or_start(name, db_path, log=print):
-        attached.append((name, Path(db_path)))
-        return FakeAttachment(name, lives=99)
-    monkeypatch.setattr(hosting, "attach_or_start", attach_or_start)
-    profiles = {n: Namespace(assets=("crypto",)) for n in ("alpaca", "coinbase")}
-    monkeypatch.setattr("liminal.sources.feed_profiles", lambda s: profiles)
-    monkeypatch.setattr(cli, "history_due", lambda s: True)
-    with Store(settings.db_path, check_same_thread=False) as store:
-        app = ChartApp(store, settings=settings)
-        monkeypatch.setattr(app, "_spawn", lambda args: spawned.append(args) or Namespace(pid=1, poll=lambda: 0))
-        assert app.sync_due()
-        out = app.sync_pass()
-        assert set(out["started"]) == {"alpaca", "coinbase"} and set(app._feed_hosts) == {"alpaca", "coinbase"}
-        assert [n for n, _ in attached] == ["feed-alpaca", "feed-coinbase", "history"]
-        assert all(p == settings.db_path for _, p in attached) and app._history_host is not None
-        assert spawned[-1][1:] == ["-m", "liminal", "sync", "--extras-only"] and not app.sync_due()
-        assert app.sync_pass()["started"] == [] and len(attached) == 3  # held already: nothing more attached
-        held = list(app._feed_hosts.values()) + [app._history_host]
-        assert app.release() and all(a.detached for a in held) and app._feed_hosts == {} and app._history_host is None
-        # a page back: the loop takes up again, and a resume asks for a pass at once
-        with app.using():
-            assert app._sync_stop is not None and not app._sync_stop.is_set()
-            app._last_pass = None
-            out = app.set_fetching({"paused": False})
-            assert out["started"] is True
-            end = time.monotonic() + 5
-            while len(attached) < 6 and time.monotonic() < end:
-                time.sleep(0.02)
-            assert [n for n, _ in attached[3:]] == ["feed-alpaca", "feed-coinbase", "history"]
-        app.close()
-        assert app._sync_stop.is_set()
+    seen: list = []
+    monkeypatch.setattr(integrator_fetcher, "run_host", lambda s, log=None, port=None, rescan=None: seen.append(("host", s)) or "ended")
+    monkeypatch.setattr(integrator_cli, "cmd_fetcher", lambda args, s: seen.append(("fetcher", args.action)) or 0)
+    monkeypatch.setattr(integrator_cli, "cmd_service", lambda args, s: seen.append(("service", args.action)) or 0)
+    assert cli.cmd_host(Namespace(name="fetcher"), settings) == 0
+    assert cli.cmd_fetcher(cli.build_parser().parse_args(["fetcher", "status"]), settings) == 0
+    assert cli.cmd_service(cli.build_parser().parse_args(["service", "install"]), settings) == 0
+    assert seen == [("host", settings), ("fetcher", "status"), ("service", "install")]
+    monkeypatch.setattr(cli, "integrator", lambda: None)  # not installed
+    assert cli.cmd_fetcher(Namespace(action="serve"), settings) == 2 and cli.cmd_service(Namespace(action="run"), settings) == 2
+    monkeypatch.setitem(__import__("sys").modules, "liminal_integrator", None)  # an import of it fails
+    assert cli.cmd_host(Namespace(name="fetcher"), settings) == 2
 
 
 def test_nothing_is_scheduled_and_the_extras_run_alone(tmp_path, monkeypatch, capsys):
@@ -174,4 +181,4 @@ def test_nothing_is_scheduled_and_the_extras_run_alone(tmp_path, monkeypatch, ca
     monkeypatch.setattr(cli, "after_sync", lambda args, s: done.append("after"))
     monkeypatch.setattr(cli, "_sync", lambda args, s: done.append("feeds") or (0, 0))
     assert cli.cmd_sync(Namespace(extras_only=True, all_sources=True, tickers=None, fetch_only=False), settings) == 0
-    assert done == ["gov", "stores history=False", "after"]  # the feeds are the app's to hold, not this process's
+    assert done == ["gov", "stores history=False", "after"]  # the feeds are the fetcher's to hold, not this process's
