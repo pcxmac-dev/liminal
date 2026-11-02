@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 # the library (the stores, the plugin contract, the collector, the scheme: liminal-lib) brings the
 # data dependencies (pandas below 3.1, numpy, requests, exchange_calendars, duckdb, pymongo, plotly)
 dependencies = [
-    "liminal-lib @ git+https://github.com/pcxmac-dev/liminal-lib@v1.0.0",
+    "liminal-lib @ git+https://github.com/pcxmac-dev/liminal-lib@v1.0.1",
 ]
 
 [project.optional-dependencies]

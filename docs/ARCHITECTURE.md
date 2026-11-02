@@ -256,6 +256,18 @@ liminal-integrator"; "all lib calls will point to liminal-lib".
   here; the integrator's `tests/test_fetcher.py`, `test_service.py` in its repository (its conftest
   copies the guards: no process, no host, no key); the library's import smoke test in its. The
   boundary and console-window audits read both packages.
+- **The workspace** (the user, 2026-11-02: "common, app and store are the required folders, plugins
+  as well, make sure the app is in the app folder, make sure the integrator is in the store w/ the
+  databases, make sure plugins get loaded in to plugins, and lib is in common"): one folder holds
+  the four (`liminal_lib.layout`: `home`, LIMINAL_HOME or the folder above the library's checkout
+  when it has them): `common/` the library's checkout, `app/` the chart app's (its .venv inside),
+  `store/` the integrator's with the databases in `store/data/` (`layout.data_dir`, the default
+  main file; LIMINAL_DB still overrides), `plugins/` a checkout per plugin, each loaded from there
+  (`registry.plugin_checkouts`: its pyproject's `liminal.providers` entry points, its `src/` on
+  `sys.path`, its version from the pyproject, origin `plugins/<checkout>`; the same plugin installed
+  as a package besides is not loaded twice; LIMINAL_PLUGINS names another folder). Without the
+  workspace nothing changes: the data in ~/LiminalData, the plugins as installed packages. On the
+  user's PC: `C:\Users\ciara\source\liminal\` (the junction of old replaced by the folder).
 
 ## Providers are plugins (2026-10-27)
 

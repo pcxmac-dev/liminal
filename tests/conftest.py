@@ -45,7 +45,7 @@ def installed_plugins_seen_fakes_forgotten():
     from liminal.sources import registry
 
     if registry._providers is not None and any(
-            not p.origin.startswith(("built in", "package: liminal-plugin-"))
+            not p.origin.startswith(("built in", "package: liminal-plugin-", "plugins/liminal-plugin-"))
             for p in (*registry._providers.values(), *registry._publishers.values())):
         registry._providers = None
 

@@ -62,8 +62,11 @@ def test_the_feeds_load_in_their_order_without_errors():
     assert list(providers()) == FEEDS  # the built-ins and the packages together, in the plugins' order
     assert registry.errors() == []
     assert all(callable(p.build) for p in providers().values())
-    assert {n: p.origin for n, p in providers().items() if p.origin != "built in"} == {
-        n: f"package: liminal-plugin-{registry.plugin_of(n)} ({e})" for n, (_, _, e) in PACKAGED.items()}
+    # each from its package's entry point, or from its checkout in the workspace's plugin directory
+    assert {n for n, p in providers().items() if p.origin != "built in"} == set(PACKAGED)
+    for n, (_, _, e) in PACKAGED.items():
+        assert providers()[n].origin in {f"package: liminal-plugin-{registry.plugin_of(n)} ({e})",
+                                         f"plugins/liminal-plugin-{registry.plugin_of(n)} ({e})"}, n
     assert all(providers()[n].origin == "built in" for n in BUILT_IN)
     assert {n for n in FEEDS if is_archive(n)} == {"tiingo", "cboe"}
 
@@ -300,7 +303,7 @@ def test_every_installed_plugin_package_loads(monkeypatch):
         assert registry.errors() == []
         packaged = [p for p in (*providers().values(), *publishers().values()) if p.origin != "built in"]
         assert len(packaged) >= len(eps)  # an entry point may name a module of several
-        assert all(p.origin.startswith("package: ") and p.version for p in packaged)
+        assert all(p.origin.startswith(("package: ", "plugins/")) and p.version for p in packaged)
     finally:
         registry._providers = None
 

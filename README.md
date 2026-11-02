@@ -150,6 +150,10 @@ python -m liminal gui                  # chart app in your browser (localhost on
 - this repository, the app: the chart page, served by a front (`gui/front.py`) that funnels every request of its
   pages to the fetcher, started if none answers; the command line; the plugins' tests run here.
 
+They live in one workspace folder: `common/` the library, `app/` this repository (its `.venv` inside), `store/` the
+integrator with the databases in `store/data/`, `plugins/` a checkout per plugin, loaded from there. Without the
+workspace the data is in `~/LiminalData` and the plugins are the installed packages.
+
 ## Chart app
 
 `python -m liminal gui` serves a TradingView-style chart on http://127.0.0.1:8765 using

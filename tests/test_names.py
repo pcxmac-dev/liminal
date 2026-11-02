@@ -47,5 +47,6 @@ def test_the_apps_settings_are_read_under_their_old_names_too(tmp_path, monkeypa
 
 def test_the_data_folder_and_the_main_file_are_liminals():
     assert layout.MAIN == "liminal.db"
-    assert config.DEFAULT_DB_PATH == Path.home() / "LiminalData" / "liminal.db"
+    assert config.DEFAULT_DB_PATH == layout.data_dir() / "liminal.db"  # store/data in the workspace, else ~/LiminalData
+    assert layout.data_dir().name in ("data", "LiminalData")
     assert live.lock_path(Path("x/liminal.db")) == Path("x/liminal-live.lock")
