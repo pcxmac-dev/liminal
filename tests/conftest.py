@@ -12,6 +12,30 @@ from liminal.sources.base import DataSource
 from liminal.storage import Store
 
 
+@pytest.fixture(autouse=True, scope="session")
+def plugins_as_installed_packages():
+    """The suite sees the plugins as installed packages (their entry points), which a test's fakes
+    stand in for (test_plugins.py: `installed`), not through the workspace's plugin directory beside
+    this checkout (liminal_lib.layout.plugins_dir: the real plugins would load next to the fakes).
+    tests/test_workspace.py covers that loading on its own."""
+    import os
+    import tempfile
+    from pathlib import Path
+
+    from liminal import layout
+    from liminal.sources import registry
+
+    before = os.environ.get(layout.PLUGINS_VAR)
+    os.environ[layout.PLUGINS_VAR] = str(Path(tempfile.gettempdir()) / "liminal-tests-no-plugin-directory")
+    registry._providers = None
+    yield
+    if before is None:
+        os.environ.pop(layout.PLUGINS_VAR, None)
+    else:
+        os.environ[layout.PLUGINS_VAR] = before
+    registry._providers = None
+
+
 @pytest.fixture(autouse=True)
 def no_saved_keys(monkeypatch):
     """Tests never read the user's real API keys: neither the saved user environment variables nor
