@@ -53,6 +53,7 @@ const state = {
   meta: null,
   symbols: [],
   selectedOverlay: null,
+  hoveredOverlay: null,  // the drawing under the pointer: its anchors are marked (withAnchorMarks)
   drawingId: null,
   loadToken: 0,
   restoredFor: null,
@@ -141,6 +142,7 @@ function tint(hex, a) {
 const MID = '#f0b90b';
 const statsTimers = new Map();
 let highlightShown = '';  // what the Highlight panel was last scheduled for (the measure overlay)
+let highlightCenter = null;  // the highlight's center while it is drawn or a corner dragged: the box grows from it
 
 function signed(v, digits) { return `${v >= 0 ? '+' : ''}${v.toFixed(digits)}`; }
 
@@ -292,17 +294,69 @@ function highlightSummary(pa, pb, st) {
   };
 }
 
+// -- the drawings' anchors ---------------------------------------------------------------------
+// A drawing's points, dragged to reshape it, are marked with an X with an empty center, so the bar
+// and price under each stay in view (the user, 2026-11-01: "replace the dot with an X, with an empty
+// center"), in place of the library's filled dot. The library's dots stay, transparent: they are what
+// the pointer is tested against to drag a point (ANCHOR_DOTS, set again with each theme's styles).
+const ANCHOR = { color: '#1677ff', gap: 2.5, reach: 6.5, size: 1.5 };  // the library's blue; each arm from gap to reach
+const ANCHOR_DOTS = { overlay: { point: {
+  color: 'transparent', borderColor: 'transparent', activeColor: 'transparent', activeBorderColor: 'transparent' } } };
+
+// One figure: the four arms of an X at each of `coordinates`, none crossing the center.
+function anchorMarks(coordinates, color = ANCHOR.color) {
+  const [g, r] = [ANCHOR.gap, ANCHOR.reach].map((d) => d * Math.SQRT1_2);
+  const arms = coordinates.flatMap(({ x, y }) => [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([sx, sy]) => (
+    { coordinates: [{ x: x + sx * g, y: y + sy * g }, { x: x + sx * r, y: y + sy * r }] })));
+  return { type: 'line', ignoreEvent: true, attrs: arms, styles: { style: 'solid', color, size: ANCHOR.size } };
+}
+
+// The highlight's corners, the earlier first: its start and its end, whichever was placed first.
+function timeOrdered(points) {
+  return [...points].sort((p, q) => p.timestamp - q.timestamp);
+}
+
+// The center of the box between two corners, as mirrorPoint reads it: their times (placed on the
+// chart's bars at each move, so it holds while the chart scrolls) and the price between them.
+function boxCenter([a, b]) {
+  return a?.value != null && b?.value != null && a.timestamp != null && b.timestamp != null
+    ? { ts: [a.timestamp, b.timestamp], value: (a.value + b.value) / 2 } : null;
+}
+
+// The point across `center` from `p`: as many bars the other side, as the chart places them (beyond
+// the loaded bars too, at its own spacing), and as far the other side in price.
+function mirrorPoint(center, p) {
+  const x = (ts) => chart.convertToPixel({ timestamp: ts }, { paneId: 'candle_pane' }).x;
+  const cx = (x(center.ts[0]) + x(center.ts[1])) / 2;
+  const [q] = chart.convertFromPixel([{ x: 2 * cx - x(p.timestamp), y: 0 }], { paneId: 'candle_pane' });
+  return { dataIndex: q.dataIndex, timestamp: q.timestamp, value: 2 * center.value - p.value };
+}
+
 kc.registerOverlay({
   name: 'measure',
   totalStep: 3,
   needDefaultPointFigure: true,
   needDefaultXAxisFigure: true,
   needDefaultYAxisFigure: true,
+  // Drawn from its center: the first click is the center, the pointer a corner, and the box grows
+  // from the center both ways in time and in price (the user, 2026-11-01: "expand and contract x and
+  // y from the center"); a corner dragged afterwards grows or shrinks it about the center the same
+  // way (the box dragged moves it). The center is kept aside while it is drawn or dragged
+  // (highlightCenter): one created with its corners (restored, pasted) keeps them.
+  performEventMoveForDrawing: ({ currentStep, points }) => {
+    if (currentStep !== 2 || points.length !== 2) return;
+    highlightCenter ??= boxCenter([points[0], points[0]]);  // the first move after the first click: the click
+    if (highlightCenter) Object.assign(points[0], mirrorPoint(highlightCenter, points[1]));
+  },
+  performEventPressedMove: ({ points, performPointIndex }) => {
+    if (!highlightCenter || points.length !== 2) return;
+    Object.assign(points[1 - performPointIndex], mirrorPoint(highlightCenter, points[performPointIndex]));
+  },
   // Graphics only: every number is shown in the side panel's Highlight section.
   createPointFigures: ({ overlay, coordinates }) => {
     if (coordinates.length < 2 || overlay.points.length < 2) return [];
     const [a, b] = coordinates;
-    const [pa, pb] = overlay.points;
+    const [pa, pb] = timeOrdered(overlay.points);
     if (pa.value == null || pb.value == null || pa.timestamp == null || pb.timestamp == null) return [];
     const left = Math.min(a.x, b.x), right = Math.max(a.x, b.x);
     const top = Math.min(a.y, b.y), bottom = Math.max(a.y, b.y);
@@ -324,7 +378,7 @@ kc.registerOverlay({
         styles: { style: 'dashed', dashedValue: [5, 4], color: MID, size: 1 } },
       { type: 'line', ignoreEvent: true, attrs: { coordinates: [{ x: cx, y: top }, { x: cx, y: bottom }] },
         styles: { style: 'dashed', dashedValue: [2, 4], color: MID, size: 1 } },
-      { type: 'circle', ignoreEvent: true, attrs: { x: cx, y: cy, r: 3.5 }, styles: { style: 'fill', color: MID } },
+      anchorMarks([{ x: cx, y: cy }], MID),  // the center, the bar and price under it in view
     ];
   },
 });
@@ -1575,6 +1629,7 @@ function applyChartType() {
   if (THEMES[state.theme].chart) chart.setStyles(THEMES[state.theme].chart);
   chart.setStyles({ yAxis: { size: Y_AXIS_WIDTH } });
   chart.setStyles(CANDLE_TOOLTIP);  // the theme's styles above put back the library's legend
+  chart.setStyles(ANCHOR_DOTS);  // and the library's filled anchor dots (the drawings' anchors are X marks)
   candleStyles();  // the theme's styles above put back the library's green and red
   applyPaneSpacing();
   chart.setStyles({ candle: { type: NATIVE[state.chartType] || 'candle_solid', ...DEFAULT_CANDLE } });
@@ -2894,7 +2949,7 @@ const ICON = {
   priceChannelLine: '<path d="M2 12L18 4M2 17L18 9"/><path d="M2 14.5L18 6.5" stroke-dasharray="2 2"/>',
   fibonacciLine: '<path d="M2 4h16M2 8h16M2 12h16M2 16h16"/>',
   measure: '<rect x="2.5" y="4.5" width="15" height="11" fill="currentColor" fill-opacity=".25"/>'
-    + '<path d="M2.5 10h15" stroke-dasharray="2 1.5"/><circle cx="10" cy="10" r="1.3" fill="currentColor"/>',
+    + '<path d="M2.5 10h15" stroke-dasharray="2 1.5"/><path d="M8.3 8.3l3.4 3.4M11.7 8.3l-3.4 3.4"/>',
   simpleAnnotation: '<path d="M4 4h12v9H9l-3 3v-3H4z"/>',
   magnet: '<path d="M5 3v7a5 5 0 0010 0V3h-3v7a2 2 0 01-4 0V3z"/>',
   lock: '<rect x="4" y="9" width="12" height="9" rx="1"/><path d="M7 9V6a3 3 0 016 0v3"/>',
@@ -2903,7 +2958,7 @@ const ICON = {
 };
 const TOOLS = [
   ['cursor', 'Cursor (Esc)'],
-  ['measure', 'Highlight (Alt+H): box with center line and start / center / end statistics'], null,
+  ['measure', 'Highlight (Alt+H): box grown from its center, with start / center / end statistics'], null,
   ['segment', 'Trend line'], ['rayLine', 'Ray'], ['straightLine', 'Extended line'],
   ['horizontalStraightLine', 'Horizontal line'], ['horizontalRayLine', 'Horizontal ray'],
   ['verticalStraightLine', 'Vertical line'], ['priceLine', 'Price line'], null,
@@ -2912,14 +2967,41 @@ const TOOLS = [
   ['simpleAnnotation', 'Note'], null,
 ];
 
+// The tools' templates (the library's, and the app's measure) registered again with their anchors
+// marked (anchorMarks), for the tools that have points to drag.
+const TEMPLATE_KEYS = ['totalStep', 'drawingMode', 'needDefaultPointFigure', 'needDefaultXAxisFigure',
+  'needDefaultYAxisFigure', 'styles', 'createPointFigures', 'createXAxisFigures', 'createYAxisFigures',
+  'performEventPressedMove', 'performEventMoveForDrawing'];
+
+function withAnchorMarks(base) {  // an instance of the tool's class: the template's fields are on it
+  const template = Object.fromEntries(TEMPLATE_KEYS.filter((k) => base[k] != null).map((k) => [k, base[k]]));
+  const figures = template.createPointFigures;
+  template.createPointFigures = (params) => {
+    const own = figures?.(params) ?? [];
+    const { overlay, coordinates } = params;
+    // while drawn, the points placed (the last follows the pointer); then while pointed at or selected
+    const marked = overlay.isDrawing() ? coordinates.slice(0, -1)
+      : overlay.id === state.selectedOverlay || overlay.id === state.hoveredOverlay ? coordinates : [];
+    return marked.length ? [...own, anchorMarks(marked)] : own;
+  };
+  return { ...template, name: base.name };
+}
+
+for (const cls of TOOLS.filter(Boolean).map(([name]) => kc.getOverlayClass(name)).filter(Boolean)) {
+  const base = new cls();
+  if (base.needDefaultPointFigure) kc.registerOverlay(withAnchorMarks(base));
+}
+
 function svg(name) {
   return `<svg viewBox="0 0 20 20" aria-hidden="true">${ICON[name]}</svg>`;
 }
 
 function overlayEvents() {
   return {
-    onDrawEnd: () => { state.drawingId = null; setActiveTool('cursor'); saveDrawings(); },
-    onPressedMoveEnd: saveDrawings,
+    onDrawEnd: () => { highlightCenter = null; state.drawingId = null; setActiveTool('cursor'); saveDrawings(); },
+    // a highlight's corner dragged grows the box about its center (its performEventPressedMove)
+    onPressedMoveStart: (e) => { highlightCenter = e.overlay.name === 'measure' ? boxCenter(e.overlay.points) : null; },
+    onPressedMoveEnd: () => { highlightCenter = null; saveDrawings(); },
     onRemoved: (e) => {
       state.selectedOverlay = null;
       if (e?.overlay?.name === 'measure') scheduleHighlightPanel();
@@ -2927,6 +3009,8 @@ function overlayEvents() {
     },
     onSelected: (e) => { state.selectedOverlay = e.overlay.id; },
     onDeselected: () => { state.selectedOverlay = null; },
+    onMouseEnter: (e) => { state.hoveredOverlay = e.overlay.id; },
+    onMouseLeave: (e) => { if (state.hoveredOverlay === e.overlay.id) state.hoveredOverlay = null; },
     // a right-click opens the drawing's menu (copy, cut, paste, duplicate, delete: drawclip.js); the
     // library would otherwise delete it
     onRightClick: (e) => { e.preventDefault?.(); window.DrawingClipboard?.rightClick(e.overlay); },
@@ -2935,6 +3019,7 @@ function overlayEvents() {
 
 function startDrawing(name) {
   cancelDrawing();
+  highlightCenter = null;
   if (name === 'cursor') { setActiveTool('cursor'); return; }
   // One highlight at a time: a new one replaces the previous one.
   if (name === 'measure') chart.removeOverlay({ groupId: 'user', name: 'measure' });
@@ -2950,6 +3035,7 @@ function startDrawing(name) {
 
 function cancelDrawing() {
   if (state.drawingId) { chart.removeOverlay({ id: state.drawingId }); state.drawingId = null; }
+  highlightCenter = null;
 }
 
 function setActiveTool(name) {
@@ -3837,7 +3923,7 @@ function scheduleHighlightPanel() {
 function currentHighlight() {
   const o = chart.getOverlays({ groupId: 'user', name: 'measure' }).find((x) => x.points?.length >= 2);
   if (!o) return null;
-  const [pa, pb] = o.points;
+  const [pa, pb] = timeOrdered(o.points);
   if (pa.value == null || pb.value == null || pa.timestamp == null || pb.timestamp == null) return null;
   const key = statsKey(pa, pb);
   const ext = o.extendData || {};
