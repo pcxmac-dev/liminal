@@ -69,6 +69,15 @@
   }
 
   async function pollOnce() {
+    // A hidden tab asks for nothing: the app is not in use through it (the user, 2026-11-01: no
+    // processes or open databases when the app is not in use), so the recorder is let go once no
+    // visible chart has its symbol, and the app goes quiet with no visible page at all. Asked
+    // again the moment the tab is visible (the visibilitychange listener below).
+    if (document.hidden) {
+      clearTimeout(timer);
+      timer = setTimeout(poll, POLL_SLOW_MS);
+      return;
+    }
     try {
       // `open`: the chart's symbol, so the live recorder streams it (stocks, from IEX).
       const open = openTicker ? `&open=${encodeURIComponent(openTicker)}` : '';
@@ -300,6 +309,7 @@
   }
 
   window.addEventListener('liminal:symbol', (e) => { openTicker = e.detail; checkSymbol(e.detail); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });  // back in view: asked at once
 
   // Pause: the running background fetch stops before its next request, the hourly one does not
   // start; the open symbol is then fetched at once (priority), with the feeds to itself.

@@ -99,7 +99,7 @@ def no_recorders(monkeypatch, tmp_path):
     monkeypatch.setenv("LIVE_CRYPTO", "off")
     monkeypatch.setenv("LIVE_STOCKS", "off")
     monkeypatch.setenv("LIMINAL_LIVE_LOCK", str(tmp_path / "machine-live.lock"))  # never the real machine's
-    monkeypatch.setattr(live, "start_detached", lambda db_path: False)
+    monkeypatch.setattr(live, "attach", lambda db_path, log=print: None)  # nor attach to (and so start) one
     # Nor see or end the machine's processes: a test recorder holding its locks reaps "other"
     # recorders (live.reap_strays), and once ended the user's real one.
     from liminal import proc
@@ -128,8 +128,8 @@ def no_recorders(monkeypatch, tmp_path):
     # user's keys. A test that wants to see which would start replaces start_feed.
     from liminal import cli
 
-    monkeypatch.setattr(cli, "start_feed", lambda name: no_spawn(["--source", name, "sync", "--only"]))
-    monkeypatch.setattr(cli, "start_history", lambda: no_spawn(["history", "run"]))
+    monkeypatch.setattr(cli, "start_feed", lambda name, db_path: no_spawn(["host", f"feed-{name}"]))
+    monkeypatch.setattr(cli, "start_history", lambda db_path: no_spawn(["host", "history"]))
     # Nor start, see or write to a MongoDB server: one may run on this machine with the user's
     # documents. Mongo is "not installed" unless a test installs its stand-in (tests/test_stores.py).
     from liminal import mongo
@@ -144,6 +144,13 @@ def no_recorders(monkeypatch, tmp_path):
 
     monkeypatch.setattr(mongo, "client", no_server)
     monkeypatch.setattr(mongo, "database", no_server)
+    # Nor start a resident host (host.py: the recorder, Mongo's keeper, a feed's run as its own
+    # process), nor attach to the user's: the pipes' key and sockets live in the test's own folder.
+    from liminal import host
+
+    monkeypatch.setenv("LIMINAL_IPC_DIR", str(tmp_path / "ipc"))
+    monkeypatch.setattr(host, "start_host", lambda name, db_path: no_spawn(["host", name]))
+    monkeypatch.setattr(host, "attach_or_start", lambda name, db_path, log=print: None)  # no host answers a test
 
 
 class FakeResponse:

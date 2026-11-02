@@ -172,8 +172,10 @@ def api_run(args, settings: Settings, command: str, lock: bool = True) -> Iterat
                 store.count_request(args.source)  # on the day it is made (the daily cap)
             client.on_request = on_request
             _share_limits(client, store, args.source, log)
-            # background syncs stop when paused; every run (the open symbol's, a scan) when halted
-            client.should_stop = _pause_check(store, halt_only=command != "sync" or bool(getattr(args, "tickers", None)))
+            # background syncs stop when paused; every run (the open symbol's, a scan) when halted;
+            # a run under a host (`host feed-NAME`) when its clients are gone (the app no longer in use)
+            client.should_stop = _pause_check(store, halt_only=command != "sync" or bool(getattr(args, "tickers", None)),
+                                              stop=getattr(args, "_stop", None))
         log(f"{command}: source={args.source} tier={settings.tier.name} "
             f"rate={settings.tier.requests_per_minute or 'unlimited'}/min cap={budget} requests")
         status, message = "ok", ""
@@ -202,12 +204,18 @@ def api_run(args, settings: Settings, command: str, lock: bool = True) -> Iterat
             log(f"{command}: {source.requests_made} requests used")
 
 
-def _pause_check(store: Store, every: float = 2.0, halt_only: bool = False):
+HOST_STOPPED = "the app is no longer in use: this run stops here (resumed at the next)"
+
+
+def _pause_check(store: Store, every: float = 2.0, halt_only: bool = False, stop=None):
     """A client's should_stop: the user's pause or halt (collector.pause_state), read at most every
-    `every` s. With `halt_only` (a run for the open symbol, a scan) a pause lets it go on."""
+    `every` s. With `halt_only` (a run for the open symbol, a scan) a pause lets it go on. With
+    `stop` (a host's event, host.py) the run stops once the host's clients are gone."""
     seen = [0.0, None]
 
     def check() -> str | None:
+        if stop is not None and stop.is_set():
+            return HOST_STOPPED
         if time.monotonic() - seen[0] >= every:
             seen[0] = time.monotonic()
             p = collector.pause_state(store)
@@ -364,6 +372,12 @@ def cmd_sync(args, settings: Settings) -> int:
     that is fetching takes them next in its own run. Then, outside the run locks, the composites
     and derived frames from what arrived (after_sync): they fetch nothing; once an hour for the
     hourly sync, not after each feed's run (--fetch-only, as dispatch starts them)."""
+    if getattr(args, "extras_only", False):  # the chart app's pass: its feeds are attached by the app itself
+        log = Logger(settings.db_path.parent / "logs" / "liminal.log")
+        _fetch_gov(settings, log)
+        _stores_pass(settings, log, history=False)
+        after_sync(args, settings)
+        return 0
     code, ran = _sync(args, settings)
     if ran and not getattr(args, "fetch_only", False):
         after_sync(args, settings)
@@ -371,9 +385,11 @@ def cmd_sync(args, settings: Settings) -> int:
 
 
 def dispatch(settings: Settings, log=None) -> int:
-    """The hourly sync's feeds: a run of each feed set up here that is not fetching already, each in
-    a process of its own (start_feed), not waited for; a closed archive is not started. Returns how
-    many feeds are fetching after it (started now, or going on from before)."""
+    """`sync` run by hand: a run of each feed set up here that is not fetching already, each the
+    host `feed-NAME` (start_feed), held while this command runs and waited for (Ctrl+C lets them
+    go: each stops at its next request); a closed archive is not started. Then the publishers' due
+    feeds and the stores' pass. Returns how many feeds were fetching (started now, or going on from
+    before). The user, 2026-11-01: fetching goes on only while the app, or a command, is in use."""
     from . import proc
 
     log = log or Logger(settings.db_path.parent / "logs" / "liminal.log")
@@ -386,12 +402,12 @@ def dispatch(settings: Settings, log=None) -> int:
             "apart is going on); no feed started")
         return 0
     profiles = feed_profiles(settings)
-    started, unset = [], []
+    started, unset, held = [], [], []
     for name in providers():
         if not (profiles.get(name) and profiles[name].assets):
             unset.append(name)  # not set up here (its key): nothing it could fetch
         elif name not in busy and not _feed_closed(settings, name):  # not fetching already, nor a filled archive
-            start_feed(name)
+            held.append(start_feed(name, settings.db_path))
             started.append(name)
     going = sorted(n for n in busy if n)
     log(f"sync: started {', '.join(started) or 'no feed'}, each in a process of its own"
@@ -401,18 +417,47 @@ def dispatch(settings: Settings, log=None) -> int:
     # missed (no recorder, or one from before it read them). One reader at a time (their lock), and a
     # feed read lately is not due, so nothing is read twice.
     _fetch_gov(settings, log)
-    _stores_pass(settings, log)
+    held.append(_stores_pass(settings, log))
+    wait_for_hosts([a for a in held if a is not None], log)
     return len(started) + len(going)
 
 
+def wait_for_hosts(held: list, log, every: float = 2.0) -> None:
+    """Wait here while any of `held` (attachments to hosts, host.py) is still up: the hosts run
+    while held. Ctrl+C lets them all go, and each stops at its next request."""
+    alive = [a for a in held if callable(getattr(a, "alive", None))]
+    if not alive:
+        return
+    log(f"sync: waiting for {len(alive)} run(s) (Ctrl+C lets them go: each stops at its next request)")
+    try:
+        while any(a.alive() for a in alive):
+            time.sleep(every)
+    except KeyboardInterrupt:
+        for a in alive:
+            a.detach()
+        log("sync: let go; each run stops at its next request")
+        raise
+
+
 HISTORY_LOCK = "history.lock"  # beside the database: one `history run` at a time
+HISTORY_BUDGET_S = 20 * 60  # a `history run`'s seconds of copying
 
 
-def _stores_pass(settings: Settings, log) -> None:
-    """The hourly sync's part in the stores (stores.py): each plugin's documents moved to the store
-    wanted (MongoDB started if it is the one), and a `history run` started for the feeds whose
-    closed months go to DuckDB, unless one is going on. A failure is logged, never the sync's."""
-    from . import gov, proc, stores
+def history_due(settings: Settings) -> bool:
+    """Whether a `history run` has work: feeds whose closed months go to DuckDB, and no run going."""
+    from . import proc, stores
+
+    with Store(settings.db_path) as store:
+        feeds = stores.bars_feeds(store)
+    return bool(feeds) and proc.holder(settings.db_path.with_name(HISTORY_LOCK)) is None
+
+
+def _stores_pass(settings: Settings, log, history: bool = True):
+    """The sync's part in the stores (stores.py): each plugin's documents moved to the store wanted
+    (MongoDB under its keeper if it is the one), and with `history` a `history run` attached for
+    the feeds whose closed months go to DuckDB, unless one is going on (returned, to be held; the
+    chart app holds its own). A failure is logged, never the sync's."""
+    from . import gov, stores
 
     try:
         with Store(settings.db_path) as store:
@@ -421,22 +466,22 @@ def _stores_pass(settings: Settings, log) -> None:
                 stores.settle(store, gdb.conn, settings.db_path.parent, log)
             finally:
                 gdb.close()
-            feeds = stores.bars_feeds(store)
-        if feeds and proc.holder(settings.db_path.with_name(HISTORY_LOCK)) is None:
-            start_history()
+        if history and history_due(settings):
+            with Store(settings.db_path) as store:
+                feeds = stores.bars_feeds(store)
             log(f"history: started copying the closed months of {', '.join(feeds)} to DuckDB, in a process of its own")
+            return start_history(settings.db_path)
     except Exception as e:  # noqa: BLE001 - the stores are the sync's extras: its data is in
         log(f"stores: failed ({type(e).__name__}: {e})")
+    return None
 
 
-def start_history() -> int:
-    """Start `history run` in a process of its own, without a window, at a background priority
-    (below normal, and Windows' low I/O priority once it runs: the machine stays responsive)."""
-    exe = Path(sys.executable)
-    quiet = exe.with_name("pythonw.exe") if os.name == "nt" and exe.with_name("pythonw.exe").exists() else exe
-    flags = 0x00000008 | 0x00000200 | 0x00004000 if os.name == "nt" else 0  # DETACHED | NEW_GROUP | BELOW_NORMAL
-    return subprocess.Popen([str(quiet), "-m", "liminal", "history", "run"], creationflags=flags, close_fds=True,
-                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).pid
+def start_history(db_path: Path):
+    """Attach to the `history run` of this database, the host `history` (started if none answers:
+    no window, a background priority once it runs). Returns the attachment (None: no answer)."""
+    from . import host
+
+    return host.attach_or_start("history", db_path, log=Logger(db_path.parent / "logs" / "liminal.log"))
 
 
 def _background_priority() -> None:
@@ -485,7 +530,11 @@ def cmd_history(args, settings: Settings) -> int:
                      if f in store.feed_names() and f != COMPOSITE]
             conns = {f: store._bars(f) for f in feeds}
 
+            stop = getattr(args, "_stop", None)  # under a host (`host history`): its clients gone, it ends
+
             def halted() -> bool:
+                if stop is not None and stop.is_set():
+                    return True
                 p = collector.pause_state(store)
                 return bool(p and p.get("halt"))
             done = history.run({f: c for f, c in conns.items() if c is not None}, store.history_dir, log,
@@ -504,8 +553,19 @@ def cmd_mongo(args, settings: Settings) -> int:
 
     data = settings.db_path.parent
     if args.action == "start":
-        pid = mongo.start(data)
-        print(f"MongoDB started (process {pid}) on {mongo.HOST}:{mongo.port()}" if pid else "MongoDB is running")
+        # under its keeper (mongo.attach): held up while this command runs, as the app holds it
+        # while it uses the documents; let go at the end, the keeper shuts it down after the idle time
+        try:
+            up = mongo.attach(data)
+        except RuntimeError as e:
+            print(e)
+            return 1
+        print(f"MongoDB {'is running' if up else 'did not answer'} on {mongo.HOST}:{mongo.port()}; "
+              "it stays up while this command runs (Ctrl+C to let it go)")
+        try:
+            hold_until_interrupted()
+        finally:
+            mongo.detach()
     elif args.action == "stop":
         print("MongoDB stopped" if mongo.stop() else "MongoDB was not running")
     s = mongo.status(data)
@@ -514,6 +574,15 @@ def cmd_mongo(args, settings: Settings) -> int:
         f"the app's data {((s['storageBytes'] or 0) / 1e6):,.1f} MB" if s["running"] else "not running")
         + (f"; {s['binary']}" if s["binary"] else ""))
     return 0
+
+
+def hold_until_interrupted() -> None:
+    """Wait here until Ctrl+C."""
+    try:
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        pass
 
 
 def cmd_stores(args, settings: Settings) -> int:
@@ -547,15 +616,14 @@ def cmd_stores(args, settings: Settings) -> int:
     return 0
 
 
-def start_feed(name: str) -> int:
-    """Start feed `name`'s run (`--source NAME sync --only --fetch-only`) in a process of its own,
-    without a window, outliving this one. Returns its process id."""
-    exe = Path(sys.executable)
-    quiet = exe.with_name("pythonw.exe") if os.name == "nt" and exe.with_name("pythonw.exe").exists() else exe
-    flags = 0x00000008 | 0x00000200 if os.name == "nt" else 0  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-    return subprocess.Popen([str(quiet), "-m", "liminal", "--source", name, "sync", "--only", "--fetch-only"],
-                            creationflags=flags, close_fds=True, stdin=subprocess.DEVNULL,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).pid
+def start_feed(name: str, db_path: Path):
+    """Attach to feed `name`'s run of this database, the host `feed-NAME` (started if none answers:
+    `--source NAME sync --only --fetch-only` under a host, no window). Its pass goes on while
+    something holds it; let go, it stops at its next request. Returns the attachment (None: no
+    answer)."""
+    from . import host
+
+    return host.attach_or_start(f"feed-{name}", db_path, log=Logger(db_path.parent / "logs" / "liminal.log"))
 
 
 POST_LOCK = "post.lock"  # beside the database: one pass of composites and derived frames at a time
@@ -647,12 +715,8 @@ def _sync(args, settings: Settings) -> tuple[int, int]:
         paused = collector.pause_state(store)
         if paused and tickers and not paused.get("halt"):
             paused = None  # a pause leaves the open symbol's fetches; a halt stops them too
-    from . import live
-
-    if args.all_sources and (settings.live_coins or live.stock_keys(settings)) and not settings.offline:
-        # keep the live recorder running (crypto, and stocks with Alpaca keys)
-        if live.start_detached(settings.db_path):
-            Logger(settings.db_path.parent / "logs" / "liminal.log")("live: recorder started")
+    # The live recorder is not started from here: it runs while a chart has a symbol open (the chart
+    # app attaches it, live.attach), and ends once nothing has (host.py).
     if paused:
         Logger(settings.db_path.parent / "logs" / "liminal.log")(
             "sync: fetching halted by you; not run" if paused.get("halt")
@@ -820,19 +884,15 @@ def cmd_live(args, settings: Settings) -> int:
               "or LIMINAL_OFFLINE)")
         return 0
     if args.action == "start":
-        print("recorder started in the background" if live.start_detached(settings.db_path)
-              else "a recorder is already running")
+        print("the recorder runs by itself while a chart has a symbol open (the chart app attaches it) and "
+              "ends once none has; `liminal live` runs one here until Ctrl+C")
         return 0
     locks = live.take_locks(settings.db_path)
     if locks is None:
         print("a recorder is already running (one per database, and one per machine: the exchanges "
               "count every connection from this address)")
         return 0
-    # a night no stream has, polled by its plugin on its key's limits (Tiingo's Blue Ocean nights)
-    boats = live.night_poller(settings)
-    recorder = live.Recorder(settings.db_path, coins=settings.live_coins, stock_keys=live.stock_keys(settings),
-                             locks=locks, log=Logger(settings.db_path.parent / "logs" / "liminal.log"),
-                             selected_only=settings.live_selected_only, boats=boats, publications=settings)
+    recorder = make_recorder(settings, locks)
     try:
         recorder.run()
     except KeyboardInterrupt:
@@ -840,6 +900,67 @@ def cmd_live(args, settings: Settings) -> int:
     finally:
         live.release_locks(locks)
     return 0
+
+
+def make_recorder(settings: Settings, locks: list, stop=None):
+    """The recorder of this database's live trades, holding `locks` (live.take_locks), stopping on
+    `stop` (a host's, or its own)."""
+    from . import live
+
+    # a night no stream has, polled by its plugin on its key's limits (Tiingo's Blue Ocean nights)
+    boats = live.night_poller(settings)
+    extra = {"stop": stop} if stop is not None else {}
+    return live.Recorder(settings.db_path, coins=settings.live_coins, stock_keys=live.stock_keys(settings),
+                         locks=locks, log=Logger(settings.db_path.parent / "logs" / "liminal.log"),
+                         selected_only=settings.live_selected_only, boats=boats, publications=settings, **extra)
+
+
+def cmd_host(args, settings: Settings) -> int:
+    """A resident host (host.py): a process that runs only while a client is attached to it, and
+    ends, its data secured, once the last one has gone. `live`: the recorder (live.HOST)."""
+    from . import host, live
+
+    log = Logger(settings.db_path.parent / "logs" / "liminal.log")
+    if args.name == live.HOST:
+        if not (settings.live_coins or live.stock_keys(settings)) or settings.offline:
+            log("host live: live recording is off (LIVE_CRYPTO=off and no stocks, or LIMINAL_OFFLINE); not run")
+            return 0
+        locks = live.take_locks(settings.db_path)
+        if locks is None:
+            log("host live: a recorder is already running (one per database, one per machine); not run")
+            return 0
+        h = host.Host(live.HOST, settings.db_path, log=log)
+        recorder = make_recorder(settings, locks, stop=h.stop)
+        h.serve(lambda stop: recorder.run(), secure=lambda: live.release_locks(locks))  # run flushes on stop
+        return 0
+    from . import mongo
+
+    if args.name == mongo.KEEPER:  # the server's keeper: started for the first client, shut down after the last
+        data = settings.db_path.parent
+        try:
+            mongo.startable()
+        except RuntimeError as e:
+            log(f"host mongo: {e}; not run")
+            return 0
+        h = host.Host(mongo.KEEPER, settings.db_path, log=log)
+        h.serve(lambda stop: mongo.keep(data, stop, log), secure=lambda: mongo.stop() and log("host mongo: server shut down"))
+        return 0
+    if args.name.startswith("feed-"):  # a feed's run: its pass, stopped at its next request once let go
+        feed = args.name[len("feed-"):]
+        if feed not in providers():
+            print(f"no feed named {feed!r}")
+            return 2
+        h = host.Host(args.name, settings.db_path, log=log)
+        run = argparse.Namespace(source=feed, all_sources=False, tickers=None, fetch_only=True, _stop=h.stop)
+        h.serve(lambda stop: _sync(run, settings))  # its run is recorded, its data in, before it returns
+        return 0
+    if args.name == "history":  # the closed months' copy to DuckDB, within its budget; ended after the month in hand once let go
+        h = host.Host("history", settings.db_path, log=log)
+        run = argparse.Namespace(action="run", feed=None, budget=HISTORY_BUDGET_S, _stop=h.stop)
+        h.serve(lambda stop: cmd_history(run, settings))
+        return 0
+    print(f"no host named {args.name!r} (the hosts: {live.HOST}, {mongo.KEEPER}, feed-NAME, history)")
+    return 2
 
 
 SUPERSEDED_KEY = "derive:superseded:v1"
@@ -1570,11 +1691,18 @@ def cmd_export(args, settings: Settings) -> int:
     return 0
 
 
+NOT_SCHEDULED = ("nothing is scheduled: the app fetches while it is in use (a chart open), and `sync` by hand "
+                 "fetches while it runs (the user, 2026-11-01: no processes when the app is not in use); "
+                 "`schedule remove` takes an old scheduled sync away")
+
+
 def cmd_schedule(args, settings: Settings) -> int:
-    """Windows Task Scheduler entry that runs `sync` every hour."""
+    """The scheduled sync of old (Windows Task Scheduler): shown or removed; none is installed any more."""
+    if args.action == "install":
+        print(NOT_SCHEDULED)
+        return 2
     if sys.platform != "win32":
-        print("On Linux/macOS add this line to `crontab -e`:")
-        print(f"0 * * * * cd {Path.cwd()} && {sys.executable} -m liminal sync")
+        print("nothing is scheduled on Linux/macOS; a crontab line of old can go")
         return 0
     if args.action == "show":
         return subprocess.call(["schtasks", "/Query", "/TN", TASK_NAME, "/V", "/FO", "LIST"])
@@ -1613,6 +1741,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="only these watched symbols, on every feed holding them, before anything else")
     s.add_argument("--fetch-only", action="store_true",
                    help="download only: no composites or derived frames after (the hourly sync builds them)")
+    s.add_argument("--extras-only", action="store_true",
+                   help="no feed: the publishers' due feeds, the stores' pass and the derived frames (the chart app's pass)")
     s.set_defaults(func=cmd_sync, all_sources=True)
 
     s = sub.add_parser("scan", help="check which symbols should have new data (free); --probe asks the source")
@@ -1721,7 +1851,7 @@ def build_parser() -> argparse.ArgumentParser:
                                       "sync starts it) or status")
     s.add_argument("action", nargs="?", default="status", choices=["run", "status"])
     s.add_argument("--feed", action="append", help="run: this feed only (repeatable)")
-    s.add_argument("--budget", type=float, default=20 * 60, help="run: seconds of copying (default: 1200)")
+    s.add_argument("--budget", type=float, default=HISTORY_BUDGET_S, help="run: seconds of copying (default: 1200)")
     s.set_defaults(func=cmd_history)
 
     s = sub.add_parser("mongo", help="the MongoDB server here (127.0.0.1 only): start, stop or status")
@@ -1752,6 +1882,11 @@ def build_parser() -> argparse.ArgumentParser:
                                      "run, start (background), status, or stop (every recorder on this machine)")
     s.add_argument("action", nargs="?", choices=["run", "start", "status", "stop"], default="run")
     s.set_defaults(func=cmd_live)
+
+    s = sub.add_parser("host", help="run a resident host while a client is attached to it (host.py): "
+                                     "live, the recorder; mongo, the MongoDB server's keeper")
+    s.add_argument("name", help="which host: live, mongo")
+    s.set_defaults(func=cmd_host)
 
     s = sub.add_parser("kills", help="the kill policy: killed feeds and each feed's outcomes; kill or release one")
     s.add_argument("action", choices=["list", "kill", "release"], nargs="?", default="list")

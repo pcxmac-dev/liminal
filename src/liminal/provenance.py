@@ -23,11 +23,13 @@ ROOT = Path(__file__).resolve().parents[2]
 def code_version() -> str:
     """The code that computes: the repository's commit, "+dirty" if src/ has uncommitted changes;
     the package version where there is no repository."""
+    from .proc import no_window
+
     try:
         sha = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
-                             timeout=20, check=True).stdout.strip()
+                             timeout=20, check=True, **no_window()).stdout.strip()
         dirty = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=no", "--", "src"],
-                               capture_output=True, text=True, timeout=20, check=True).stdout.strip()
+                               capture_output=True, text=True, timeout=20, check=True, **no_window()).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return f"liminal {__version__}"
     return sha[:12] + ("+dirty" if dirty else "") if sha else f"liminal {__version__}"

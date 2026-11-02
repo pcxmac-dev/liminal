@@ -328,7 +328,7 @@ def test_the_hourly_sync_starts_a_history_run(tmp_path, monkeypatch):
 
     settings = load_settings(env={"LIMINAL_DB": str(tmp_path / "liminal.db")}, env_file=None)
     started, lines = [], []
-    monkeypatch.setattr(cli, "start_history", lambda: started.append(1) or 1)
+    monkeypatch.setattr(cli, "start_history", lambda db_path: started.append(1) or 1)
     cli._stores_pass(settings, lines.append)
     assert started == [1] and lines[-1].startswith("history: started copying the closed months of ")
     with Store(settings.db_path) as s:

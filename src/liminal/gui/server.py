@@ -23,7 +23,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
 
-from .. import config, freshness, live, sourcing
+from .. import config, freshness, host, live, mongo, sourcing
 from ..config import Settings, load_settings
 from ..storage import LayoutLimit, Store
 from ..storage.markets import mic_names
@@ -102,22 +102,10 @@ class ChartApp:
         self._saved_keys = config.saved_user_keys() if reload_settings else None
         self._settings_at = time.monotonic()
         self._settings_lock = threading.Lock()
-        # The engine reads bars through connections of its own, under its own lock: loading a
-        # long history (twenty years of minutes) held the one shared lock for over a minute, and
-        # the symbol list, the Fetcher's poll and the search dialog all waited behind it.
-        reader = store.reader()
-        self.engine = BarEngine(reader, priority=priority, quality=lambda feed: self._feed_quality(feed, reader),
-                                cache_bytes=self.settings.chart_cache_mb * 2**20)
+        self._priority = priority
         self._heavy = threading.BoundedSemaphore(HEAVY_REQUESTS)
         self._lock = threading.RLock()  # the app's own reads and writes through `store`
-        from .window import WindowReader
-
-        self.window = WindowReader(self.engine)  # the auto-ranging chart: any level, by window
-        # The Data panel's inventory reads through connections of its own, under its own lock, and
-        # its row counts are made in the background (counting AAPL's frames took 20 s under the
-        # shared lock, and the symbol list for the picker's map, the calendar and the side panel
-        # all waited behind it).
-        self._panel_store, self._panel_lock = store.reader(), threading.Lock()
+        self._panel_lock = threading.Lock()
         # ticker -> (counted at, row_counts) for the ROW_COUNTS_KEPT symbols counted last, and the
         # tickers being counted (at most COUNTING_AT_ONCE): under _counts_lock (_counts)
         self._row_counts: OrderedDict[str, tuple[float, dict]] = _BoundedCache(ROW_COUNTS_KEPT)
@@ -125,29 +113,281 @@ class ChartApp:
         self._counts_lock = threading.Lock()
         # ticker -> (counted at, by feed and rule) for the ROW_COUNTS_KEPT symbols counted last: under _panel_lock
         self._pruned_counts: OrderedDict[str, tuple[float, dict]] = _BoundedCache(ROW_COUNTS_KEPT)
-        self._status_store, self._status_lock = store.reader(), threading.Lock()  # the Fetcher view and status bar
+        self._status_lock = threading.Lock()  # the Fetcher view and status bar
         self._activity: dict[str, tuple[float, tuple, dict]] = {}  # feed -> (made at, (lines, open symbol), answer)
         self._official_at: float | None = None  # when the official holidays were last applied (OFFICIAL_TTL_S)
         self._activity_rows: dict = {}  # activity.activity's symbol rows (SYMBOL_ROWS_TTL_S)
         self._feeds_summary: tuple[float, list] | None = None
         self._plugins_cache: tuple[float, dict, bool] | None = None  # the Plugins view (PLUGINS_TTL_S)
         self._rescan: tuple = (None, None)  # the capability rescan's process and {name, since, pid}
-        self._deps_store, self._deps_lock = store.reader(), threading.Lock()  # dependency checks
+        self._deps_lock = threading.Lock()  # dependency checks
         self._deps: tuple[float, dict] | None = None
-        self._datasets_store, self._datasets_lock = store.reader(), threading.Lock()  # the datasets list
-        self._symbols_store, self._symbols_lock = store.reader(), threading.RLock()  # the symbol list
+        self._datasets_lock = threading.Lock()  # the datasets list
+        self._symbols_lock = threading.RLock()  # the symbol list
         # The profiles there are, for the cookie every request carries: checked under the shared
         # lock, every chart and status request waited behind whatever held it (profile_exists)
-        self._profiles_store, self._profiles_lock = store.reader(), threading.Lock()
+        self._profiles_lock = threading.Lock()
         self._profile_ids: set[int] = set()
         self._profile_ids_at = float("-inf")
         self._open_noted: dict[str, int] = {}  # ticker -> ms it was last noted open (note_open)
+        # The live recorder's host (host.py), attached while a chart has a symbol open: it records
+        # the open symbols' trades and ends once nothing has been open for live.OPEN_FRESH_MS
+        # (attach_live, settle_live; the user, 2026-11-01: no processes when the app is not in use).
+        self._live, self._live_lock, self._live_watch = None, threading.Lock(), None
         self._derive_proc: subprocess.Popen | None = None  # a build started by start_derive
-        self._gov_db, self._gov_lock = None, threading.Lock()  # gov/gov.db, opened on first use
+        self._gov_lock = threading.Lock()  # gov/gov.db, opened on first use
         self._recheck: tuple | None = None  # a publisher's limits recheck: (thread, {name, since})
         self._recheck_lock = threading.Lock()
-        self._paper, self._paper_lock = None, threading.RLock()  # the paper account (paper), opened on first use
-        self._monitor, self._monitor_lock = None, threading.Lock()  # the Resources view's sampler, made on first use
+        self._paper_lock = threading.RLock()  # the paper account (paper), opened on first use
+        self._monitor_lock = threading.Lock()  # the Resources view's sampler, made on first use
+        # Quiet: with no page in touch for QUIET_SECONDS every store is closed and every host let
+        # go (release); the next request opens them again (using). The user, 2026-11-01: no open
+        # databases or processes when the app is not in use.
+        self._use = threading.Condition()
+        self._in_use = 0  # requests under way (using)
+        self._quiet = False  # the stores closed, the hosts let go
+        self._releasing = False
+        self._last_contact = time.monotonic()  # when a page last asked for anything
+        self._woken = False  # whether a page ever came (the on_wake work runs at the first)
+        self._on_wake: list[Callable[[], None]] = []
+        # Fetching while in use (sync_pass): the feeds' runs and the closed months' copy, hosts
+        # held while the app is awake; the extras' process; when the last pass was
+        self._feed_hosts: dict[str, object] = {}
+        self._history_host = None
+        self._extras = None
+        self._last_pass: float | None = None
+        self._sync_lock = threading.Lock()
+        self._sync_stop: threading.Event | None = None
+        self._open_stores(store)
+
+    def _open_stores(self, store: Store) -> None:
+        """The app's stores: the one given and, on connections of their own, each a lock of its
+        own, the readers of the parts that waited behind each other under one shared lock."""
+        self.store = store
+        # The engine reads bars through connections of its own, under its own lock: loading a
+        # long history (twenty years of minutes) held the one shared lock for over a minute, and
+        # the symbol list, the Fetcher's poll and the search dialog all waited behind it.
+        reader = store.reader()
+        self.engine = BarEngine(reader, priority=self._priority, quality=lambda feed: self._feed_quality(feed, reader),
+                                cache_bytes=self.settings.chart_cache_mb * 2**20)
+        from .window import WindowReader
+
+        self.window = WindowReader(self.engine)  # the auto-ranging chart: any level, by window
+        # The Data panel's inventory reads through connections of its own, under its own lock, and
+        # its row counts are made in the background (counting AAPL's frames took 20 s under the
+        # shared lock, and the symbol list for the picker's map, the calendar and the side panel
+        # all waited behind it).
+        self._panel_store = store.reader()
+        self._status_store = store.reader()  # the Fetcher view and status bar
+        self._deps_store = store.reader()  # dependency checks
+        self._datasets_store = store.reader()  # the datasets list
+        self._symbols_store = store.reader()  # the symbol list
+        self._profiles_store = store.reader()  # the profiles there are (profile_exists)
+        self._gov_db = None  # gov/gov.db, opened on first use
+        self._paper, self._paper_store = None, None  # the paper account (paper), opened on first use
+        self._monitor = None  # the Resources view's sampler, made on first use
+
+    def _close_stores(self) -> None:
+        """Every store closed (release): the readers', the engine's, the main one's connections,
+        gov.db, the paper account's, and the sampler ended."""
+        for lock, name in ((self._panel_lock, "_panel_store"), (self._status_lock, "_status_store"),
+                           (self._deps_lock, "_deps_store"), (self._datasets_lock, "_datasets_store"),
+                           (self._symbols_lock, "_symbols_store"), (self._profiles_lock, "_profiles_store")):
+            with lock:
+                getattr(self, name).close()
+        with self._gov_lock:
+            if self._gov_db is not None:
+                self._gov_db.close()
+                self._gov_db = None
+        with self._paper_lock:
+            if self._paper_store is not None:
+                self._paper_store.close()
+            self._paper, self._paper_store = None, None
+        with self._monitor_lock:
+            if self._monitor is not None:
+                self._monitor.stop()
+                self._monitor = None
+        with self.engine.lock:
+            self.engine.store.close()
+        with self._lock:
+            self.store.close()
+
+    QUIET_SECONDS = 120.0  # no page in touch for this long: released (LIMINAL_QUIET_SECONDS)
+    QUIET_CHECK_SECONDS = 15.0
+
+    @property
+    def quiet(self) -> bool:
+        return self._quiet
+
+    def on_wake(self, work: Callable[[], None]) -> None:
+        """Work for the first page's coming (serve: the start's rescan, the world's calendars),
+        not the app's start: nothing runs for nobody."""
+        self._on_wake.append(work)
+
+    @contextmanager
+    def using(self):
+        """A request under way: the stores open (opened again if the app was quiet), and the app
+        not released meanwhile."""
+        with self._use:
+            while self._releasing:
+                self._use.wait()
+            if self._quiet:
+                self._wake_locked()
+            self._in_use += 1
+            self._last_contact = time.monotonic()
+            first = not self._woken
+            self._woken = True
+        try:
+            if first:
+                self._first_wake()
+            yield
+        finally:
+            with self._use:
+                self._in_use -= 1
+                self._use.notify_all()
+
+    def _wake_locked(self) -> None:
+        self._open_stores(Store(self.store.path, check_same_thread=False))
+        self._quiet = False
+        _log_to(self.store.path)("quiet: a page is back; the stores are open again")
+        self._start_sync()
+
+    def _first_wake(self) -> None:
+        self.monitor.start()  # Resources: sampled in the background from now on
+        for work in self._on_wake:
+            try:
+                work()
+            except Exception as e:  # noqa: BLE001 - the start's extras never fail a request
+                _log_to(self.store.path)(f"on the first page: {type(e).__name__}: {e}")
+        self._on_wake = []
+        self._start_sync()
+
+    def release(self) -> bool:
+        """Quiet: every store closed, the recorder, MongoDB's keeper and the feeds' runs let go, the
+        sampler ended. Not while a request is under way (False), nor twice."""
+        with self._use:
+            if self._quiet or self._releasing or self._in_use:
+                return False
+            self._releasing = True
+        try:
+            with self._live_lock:
+                if self._live is not None:
+                    self._live.detach()
+                    self._live = None
+            self._stop_sync()
+            mongo.detach()
+            self._close_stores()
+        finally:
+            with self._use:
+                self._quiet, self._releasing = True, False
+                self._use.notify_all()
+        _log_to(self.store.path)(f"quiet: no page in touch for {self.quiet_seconds():g} s; the stores are closed, "
+                                 "the recorder and MongoDB's keeper let go")
+        return True
+
+    def quiet_seconds(self) -> float:
+        try:
+            return float(config.setting("LIMINAL_QUIET_SECONDS") or self.QUIET_SECONDS)
+        except ValueError:
+            return self.QUIET_SECONDS
+
+    def watch_quiet(self, stop: threading.Event | None = None) -> None:
+        """Releases the app once no page has been in touch for quiet_seconds (serve: a thread)."""
+        stop = stop or threading.Event()
+        while not stop.wait(self.QUIET_CHECK_SECONDS):
+            with self._use:
+                due = not self._quiet and self._woken and time.monotonic() - self._last_contact >= self.quiet_seconds()
+            if due:
+                self.release()
+
+    def close(self) -> None:
+        """The app ending (serve): the stores closed, the hosts let go."""
+        if not self._quiet:
+            self.release()
+
+    # -- fetching while in use ----------------------------------------------------------------
+    # The user, 2026-11-01: fetching goes on only while the app is in use. In place of the hourly
+    # scheduled sync, a pass every SYNC_HOURS while a page is in touch: each feed's run attached as
+    # the host feed-NAME (held while the app is awake; let go when it goes quiet, each stops at its
+    # next request), the closed months' copy as the host history, and the extras (the publishers'
+    # due feeds, the stores' pass, the composites and derived frames) in a process of their own.
+    SYNC_HOURS = 1.0  # LIMINAL_SYNC_HOURS
+    SYNC_CHECK_SECONDS = 60.0
+
+    def sync_hours(self) -> float:
+        try:
+            return float(config.setting("LIMINAL_SYNC_HOURS") or self.SYNC_HOURS)
+        except ValueError:
+            return self.SYNC_HOURS
+
+    def sync_due(self) -> bool:
+        return self._last_pass is None or time.monotonic() - self._last_pass >= self.sync_hours() * 3600
+
+    def sync_pass(self) -> dict:
+        """One pass of the sync for the app in use (see above). What was started."""
+        from .. import cli, collector, proc
+        from ..sources import feed_profiles, providers
+
+        s = self.settings
+        log = _log_to(self.store.path)
+        if s.offline or s.read_only:
+            return {"started": [], "why": "offline or read-only"}
+        with self._lock:
+            paused = collector.pause_state(self.store)
+        if paused:
+            return {"started": [], "why": "halted" if paused.get("halt") else "paused"}
+        busy = proc.run_holders(self.store.path)
+        if None in busy:
+            return {"started": [], "why": "the whole database is locked"}
+        profiles = feed_profiles(s)
+        started = []
+        with self._sync_lock:
+            for name in providers():
+                if not (profiles.get(name) and profiles[name].assets) or name in busy or cli._feed_closed(s, name):
+                    continue
+                held = self._feed_hosts.get(name)
+                if held is not None and held.alive():
+                    continue  # its run goes on, held
+                held = host.attach_or_start(f"feed-{name}", self.store.path, log=log)
+                if held is not None:
+                    self._feed_hosts[name] = held
+                    started.append(name)
+            if cli.history_due(s) and not (self._history_host is not None and self._history_host.alive()):
+                self._history_host = host.attach_or_start("history", self.store.path, log=log)
+            exe = Path(sys.executable)
+            quiet = exe.with_name("pythonw.exe") if exe.with_name("pythonw.exe").exists() else exe
+            self._extras = self._spawn([str(quiet), "-m", "liminal", "sync", "--extras-only"])
+            self._last_pass = time.monotonic()
+        log(f"sync: started {', '.join(started) or 'no feed'} (held while the app is in use)"
+            + (f"; fetching already: {', '.join(sorted(n for n in busy if n))}" if busy else "")
+            + "; the extras in a process of their own")
+        return {"started": started}
+
+    def _start_sync(self) -> None:
+        with self._sync_lock:
+            if self._sync_stop is not None and not self._sync_stop.is_set():
+                return
+            self._sync_stop = stop = threading.Event()
+
+        def loop() -> None:
+            while not stop.is_set():
+                if self.sync_due():
+                    try:
+                        self.sync_pass()
+                    except Exception as e:  # noqa: BLE001 - a failed pass is logged; the next comes
+                        _log_to(self.store.path)(f"sync: failed ({type(e).__name__}: {e})")
+                stop.wait(self.SYNC_CHECK_SECONDS)
+        threading.Thread(target=loop, name="sync-while-in-use", daemon=True).start()
+
+    def _stop_sync(self) -> None:
+        """The feeds' runs and the closed months' copy let go (each stops at its next request)."""
+        with self._sync_lock:
+            if self._sync_stop is not None:
+                self._sync_stop.set()
+            for held in list(self._feed_hosts.values()) + [self._history_host]:
+                if held is not None:
+                    held.detach()
+            self._feed_hosts, self._history_host = {}, None
 
     @property
     def settings(self) -> Settings:
@@ -1172,6 +1412,49 @@ class ChartApp:
 
         with self._lock:
             self.store.kv_update(live.OPEN_KEY, add, {})
+        if self.live_wanted():
+            threading.Thread(target=self.attach_live, name="live-attach", daemon=True).start()  # a start takes seconds
+
+    def live_wanted(self) -> bool:
+        """Whether this app records live trades at all (crypto, or stocks with Alpaca's keys)."""
+        s = self.settings
+        return bool(s.live_coins or live.stock_keys(s)) and not s.offline and not s.read_only
+
+    def attach_live(self) -> bool:
+        """Attach to the recorder, starting it if it is not running, and watch for the moment
+        nothing is open any more (settle_live). Whether it is attached now."""
+        with self._live_lock:
+            if self._live is not None and self._live.alive():
+                return True
+            self._live = live.attach(self.store.path, log=_log_to(self.store.path))
+            if self._live is not None and (self._live_watch is None or not self._live_watch.is_alive()):
+                self._live_watch = threading.Thread(target=self._watch_live, name="live-watch", daemon=True)
+                self._live_watch.start()
+            return self._live is not None
+
+    def settle_live(self, now_ms: int | None = None) -> bool:
+        """Detach from the recorder once no chart has noted a symbol open for live.OPEN_FRESH_MS
+        (it then flushes and ends by itself). Whether it was detached here."""
+        now_ms = now_ms or int(time.time() * 1000)
+        with self._live_lock:
+            if self._live is None:
+                return False
+            if any(now_ms - at <= live.OPEN_FRESH_MS for at in self._open_noted.values()):
+                return False
+            self._live.detach()
+            self._live = None
+            _log_to(self.store.path)("live: nothing open on a chart any more; the recorder is let go")
+            return True
+
+    LIVE_SETTLE_SECONDS = 15.0
+
+    def _watch_live(self) -> None:
+        while True:
+            time.sleep(self.LIVE_SETTLE_SECONDS)
+            with self._live_lock:
+                if self._live is None:
+                    return
+            self.settle_live()
 
     def activity(self, q: dict[str, str]) -> dict:
         if q.get("open"):
@@ -1478,12 +1761,8 @@ class ChartApp:
             p = collector.set_pause(self.store, paused, minutes=body.get("minutes"), halt=bool(body.get("halt")))
         started = None
         if not paused and not self.settings.offline and None not in activity.fetching_feeds(self.store.path):
-            exe = Path(sys.executable)
-            quiet = exe.with_name("pythonw.exe") if exe.with_name("pythonw.exe").exists() else exe
-            proc = subprocess.Popen([str(quiet), "-m", "liminal", "sync"], stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
-                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            self._scan, started = proc, proc.pid
+            threading.Thread(target=self.sync_pass, name="sync-resumed", daemon=True).start()  # a pass now (sync_pass)
+            started = True
         return {"paused": p, "started": started}
 
     def set_updates_pause(self, body: dict) -> dict:
@@ -1950,15 +2229,22 @@ def make_handler(app: ChartApp, port_ref: list[int]):
                 return self._failed(e)
 
         def do_POST(self) -> None:
-            self._write("POST")
+            with app.using():
+                self._write("POST")
 
         def do_PUT(self) -> None:
-            self._write("PUT")
+            with app.using():
+                self._write("PUT")
 
         def do_DELETE(self) -> None:
-            self._write("DELETE")
+            with app.using():
+                self._write("DELETE")
 
         def do_GET(self) -> None:
+            with app.using():  # the app awake (its stores open) for this request, and not released during it
+                self._get()
+
+        def _get(self) -> None:
             if not self._local():
                 return
             url = urlparse(self.path)
@@ -2105,6 +2391,9 @@ def serve(db_path: Path, port: int = 8765, open_browser: bool = True, priority: 
     set up here scans its capabilities and plan again shortly after the start (ChartApp.start_rescan)."""
     store = Store(db_path, check_same_thread=False)
     app = ChartApp(store, priority, settings, reload_settings=reload_settings)
+    # Nothing runs for nobody (the user, 2026-11-01): the start's rescan, the world's calendars and
+    # the Resources sampler wait for the first page, and the app goes quiet (its stores closed, its
+    # hosts let go) once no page has been in touch for a while.
     if rescan:
         def rescan_now() -> None:
             try:
@@ -2112,10 +2401,10 @@ def serve(db_path: Path, port: int = 8765, open_browser: bool = True, priority: 
             except (RuntimeError, LookupError) as e:  # offline, halted, one running: not this start
                 print(f"plugins not rescanned at the start: {e}", flush=True)
 
-        threading.Timer(RESCAN_AFTER_START_S, rescan_now).start()
+        app.on_wake(lambda: threading.Timer(RESCAN_AFTER_START_S, rescan_now).start())
     from . import world
-    threading.Thread(target=world.warm, daemon=True).start()  # world calendars take a few seconds
-    app.monitor.start()  # Resources: sampled in the background from now on
+    app.on_wake(lambda: threading.Thread(target=world.warm, daemon=True).start())  # world calendars take a few seconds
+    threading.Thread(target=app.watch_quiet, name="quiet", daemon=True).start()
     port_ref = [port]
     try:
         httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app, port_ref))
@@ -2131,4 +2420,4 @@ def serve(db_path: Path, port: int = 8765, open_browser: bool = True, priority: 
         pass
     finally:
         httpd.server_close()
-        store.close()
+        app.close()

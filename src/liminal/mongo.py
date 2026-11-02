@@ -131,14 +131,10 @@ def start(data_dir: Path, wait_s: float = START_WAIT_S) -> int | None:
     """Start the server unless one answers (a start lock keeps two processes from starting it at
     once). Returns the new process's id, or None if it was running. Raises if it cannot start."""
     from . import proc
-    from .storage.common import read_only
 
     if running():
         return None
-    if read_only():
-        raise RuntimeError("read-only (LIMINAL_READONLY): MongoDB is not started from here")
-    if binary() is None:
-        raise RuntimeError("MongoDB is not installed here (mongod.exe under %LOCALAPPDATA%\\Programs\\MongoDB)")
+    startable()
     lock = data_dir / "mongo-start.lock"
     if not proc.acquire(lock):  # another process is starting it: wait for it to answer
         return None if _answers(wait_s) else _fail(data_dir)
@@ -151,6 +147,16 @@ def start(data_dir: Path, wait_s: float = START_WAIT_S) -> int | None:
         return pid if _answers(wait_s) else _fail(data_dir)
     finally:
         proc.release(lock)
+
+
+def startable() -> None:
+    """Raises when the server cannot be started from here: a reading copy, or not installed."""
+    from .storage.common import read_only
+
+    if read_only():
+        raise RuntimeError("read-only (LIMINAL_READONLY): MongoDB is not started from here")
+    if binary() is None:
+        raise RuntimeError("MongoDB is not installed here (mongod.exe under %LOCALAPPDATA%\\Programs\\MongoDB)")
 
 
 def _answers(wait_s: float) -> bool:
@@ -167,14 +173,75 @@ def _fail(data_dir: Path):
     raise RuntimeError(f"MongoDB did not answer on {HOST}:{port()} after starting: see {data_dir / 'logs' / 'mongod.log'}")
 
 
+# -- the keeper: a resident host (host.py) -----------------------------------------------------
+# The server runs under a keeper, `python -m liminal host mongo`: a process whose documents live
+# in MongoDB attaches to the keeper (attach, once for the process's life, or until detach), the
+# keeper starts the server for its first client, and shuts it down cleanly once its last client
+# has been gone for the idle time (the user, 2026-11-01: "attached software like duckdb or what
+# ever should be controlled by the plugin"; no processes when the app is not in use). The keeper
+# is this data folder's: named for its main database, liminal.db by convention.
+KEEPER = "mongo"  # the host's name (host.py)
+KEEP_SECONDS = 5.0  # how often the keeper makes sure the server still answers
+_attachment = None  # this process's hold on the keeper
+_attach_lock = threading.Lock()
+
+
+def keeper_key(data_dir: Path) -> Path:
+    return Path(data_dir) / "liminal.db"
+
+
+def attach(data_dir: Path, log=print) -> bool:
+    """Attach this process to the keeper of this data folder's server, the keeper (and so the
+    server) started if none answers. Whether the server answers now. Raises when it cannot be
+    started from here (not installed, a reading copy)."""
+    global _attachment
+    from . import host
+    from .storage.common import read_only
+
+    with _attach_lock:
+        if _attachment is None or not _attachment.alive():
+            if read_only():
+                raise RuntimeError("read-only (LIMINAL_READONLY): MongoDB is not started from here")
+            if binary() is None:
+                if running():
+                    return True  # a server somebody else runs: used, not kept
+                raise RuntimeError("MongoDB is not installed here (mongod.exe under %LOCALAPPDATA%\\Programs\\MongoDB)")
+            _attachment = host.attach_or_start(KEEPER, keeper_key(data_dir), log=log)
+            if _attachment is None:
+                if running():
+                    return True  # the keeper did not come up, the server answers all the same: used
+                raise RuntimeError("MongoDB's keeper did not answer (python -m liminal host mongo)")
+    return _answers(START_WAIT_S)
+
+
+def detach() -> None:
+    """Let the keeper go (the chart app going quiet): the server stops once every client has."""
+    global _attachment
+    with _attach_lock:
+        held, _attachment = _attachment, None
+    if held is not None:
+        held.detach()
+    _alive[:] = [0.0, False]  # asked again next time
+
+
 def ensure(data_dir: Path) -> bool:
-    """The server answering, started if it is not (stores.py, before documents are read or written
-    there). Returns whether it answers."""
+    """The server answering, this process attached to its keeper (stores.py, before documents are
+    read or written there). Returns whether it answers."""
     try:
-        start(data_dir)
+        return attach(data_dir)
     except RuntimeError:
         return False
-    return running()
+
+
+def keep(data_dir: Path, stop: threading.Event, log=print) -> None:
+    """The keeper's work: the server started (or the one running adopted), kept until the clients
+    are gone (`stop`) or it stops answering (`mongo stop` by hand)."""
+    pid = start(data_dir)
+    log(f"host mongo: server {'started' if pid else 'running already'} on {HOST}:{port()}")
+    while not stop.wait(KEEP_SECONDS):
+        if not running():
+            log("host mongo: the server is gone; the keeper ends")
+            return
 
 
 def stop() -> bool:

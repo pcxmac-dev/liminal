@@ -3,6 +3,7 @@ runs (each run is a new process with a new limiter) and are shown with any wait.
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -209,10 +210,15 @@ def test_the_chart_pauses_and_resumes_fetching(tmp_path, monkeypatch):
 
     store = Store(tmp_path / "m.db", check_same_thread=False)
     app = ChartApp(store)
-    monkeypatch.setattr(server.subprocess, "Popen", lambda args, **kw: SimpleNamespace(pid=7))  # no real sync
+    passes: list[int] = []
+    monkeypatch.setattr(app, "sync_pass", lambda: passes.append(1) or {"started": []})  # the app's own pass, no process
     assert app.set_fetching({"paused": True})["paused"]["until"]
     assert collector.pause_state(store) is not None
-    assert app.set_fetching({"paused": False}) == {"paused": None, "started": 7}  # resuming starts a sync
+    assert app.set_fetching({"paused": False}) == {"paused": None, "started": True}  # resuming asks for a pass at once
+    end = time.monotonic() + 5
+    while not passes and time.monotonic() < end:
+        time.sleep(0.02)
+    assert passes == [1]
     store.close()
 
 
@@ -267,12 +273,18 @@ def test_the_chart_halts_and_resumes_and_resuming_starts_a_sync(tmp_path, monkey
             started.append(args)
 
     monkeypatch.setattr(server.subprocess, "Popen", Proc)
+    passes: list[int] = []
+    monkeypatch.setattr(app, "sync_pass", lambda: passes.append(1) or {"started": []})  # the app's own pass, no process
     assert app.set_fetching({"paused": True, "halt": True})["paused"]["halt"]
-    assert app.priority("SPCX")["state"] == "halted" and started == []  # nothing starts while halted
+    assert app.priority("SPCX")["state"] == "halted" and started == [] and passes == []  # nothing starts while halted
     with pytest.raises(RuntimeError, match="halted"):
         app.start_scan("SPCX")
     out = app.set_fetching({"paused": False})
-    assert out["paused"] is None and out["started"] == 4343 and started[-1][-2:] == ["liminal", "sync"]
+    assert out["paused"] is None and out["started"] is True  # resuming asks for the app's pass at once (sync_pass)
+    end = time.monotonic() + 5
+    while not passes and time.monotonic() < end:
+        time.sleep(0.02)
+    assert passes == [1] and started == []  # no `sync` process: the app holds the feeds' runs itself
 
 
 def test_opening_an_up_to_date_symbol_asks_for_nothing(tmp_path, monkeypatch):

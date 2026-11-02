@@ -349,7 +349,9 @@ def _repo(ds: Dataset) -> Path | None:
 
 
 def _git(repo: Path, *args: str, binary: bool = False):
-    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, timeout=600)
+    from .proc import no_window
+
+    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, timeout=600, **no_window())
     if r.returncode != 0:
         raise GitError(r.stderr.decode(errors="replace").strip() or f"git {args[0]} failed")
     return r.stdout if binary else r.stdout.decode()

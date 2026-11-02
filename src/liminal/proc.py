@@ -211,6 +211,14 @@ def processes() -> list[tuple[int, int, str]]:
     return rows
 
 
+def no_window() -> dict:
+    """Keyword arguments for subprocess.run or Popen so a console child opens no window: on this
+    PC Windows Terminal is the default terminal, and a console child of a process without a console
+    (the chart app, a host) gets a Terminal window of its own that stays open when it exits with an
+    error (28 of them on the desktop, from the datasets' git calls, the user, 2026-11-01)."""
+    return {"creationflags": 0x08000000} if os.name == "nt" else {}  # CREATE_NO_WINDOW
+
+
 def terminate(pid: int) -> bool:
     """End a process (TerminateProcess on Windows, SIGTERM elsewhere). Whether it was told to."""
     import signal

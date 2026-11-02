@@ -962,16 +962,17 @@ def reap_strays(log=print, others=None, terminate=None) -> int:
     return ended
 
 
-def start_detached(db_path: Path) -> bool:
-    """Start a recorder in the background (no window) unless one is running. Returns whether started."""
-    import subprocess
-    import sys
+# -- a resident host (host.py) ----------------------------------------------------------------------
+# The recorder runs as the host `live`: started by the first client to attach (the chart app, while
+# a chart has a symbol open: gui/server.py note_open), gone once the last client has detached for
+# the idle time, its trades flushed first (the user, 2026-11-01: no processes or open databases when
+# the app is not in use). `python -m liminal host live` runs it; `python -m liminal live` runs one
+# in the foreground, a client of nobody, until Ctrl+C.
+HOST = "live"
 
-    if running(db_path):
-        return False
-    exe = Path(sys.executable)
-    pythonw = exe.with_name("pythonw.exe") if os.name == "nt" and exe.with_name("pythonw.exe").exists() else exe
-    flags = 0x00000008 | 0x00000200 if os.name == "nt" else 0  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-    subprocess.Popen([str(pythonw), "-m", "liminal", "live"], creationflags=flags, close_fds=True,
-                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return True
+
+def attach(db_path: Path, log=print):
+    """Attach to this database's recorder, started if none answers (None: it did not come up)."""
+    from . import host
+
+    return host.attach_or_start(HOST, db_path, log=log)

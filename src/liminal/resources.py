@@ -441,6 +441,7 @@ class Monitor:
         self._files_at = float("-inf")
         self._file_sizes: deque = deque(maxlen=FILE_HISTORY)  # (when, {path: size}, {folder: size})
         self._thread: threading.Thread | None = None
+        self._stop = threading.Event()  # set by stop(): the sampling thread ends
 
     # cadence
     def viewing(self) -> bool:
@@ -451,12 +452,17 @@ class Monitor:
         return max(base, self._last_cost / CPU_BUDGET)  # a slow sample waits longer: the budget holds
 
     def start(self) -> None:
-        if self._thread is None:
+        if self._thread is None and not self._stop.is_set():
             self._thread = threading.Thread(target=self._run, daemon=True, name="resources")
             self._thread.start()
 
+    def stop(self) -> None:
+        """End the sampling (the chart app going quiet): a new Monitor samples the next time."""
+        self._stop.set()
+        self._wake.set()
+
     def _run(self) -> None:
-        while True:
+        while not self._stop.is_set():
             try:
                 self.sample()
             except Exception as e:  # a failed sample is shown, and the next one tried

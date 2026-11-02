@@ -101,7 +101,7 @@ def test_missing_key_skips_that_feed_and_says_so(env, monkeypatch, capsys):
     monkeypatch.delenv("MASSIVE_API_KEY")
     cli.main(["watch", "add", "SPCX"])
     started = []
-    monkeypatch.setattr(cli, "start_feed", started.append)
+    monkeypatch.setattr(cli, "start_feed", lambda name, db_path: started.append(name))
     assert cli.main(["sync"]) == 0  # the feeds set up here start (Alpaca: crypto needs no key), Massive not
     assert "massive" not in started and {"alpaca", "bitstamp"} <= set(started)
     assert "not set up here: massive" in capsys.readouterr().out
@@ -175,7 +175,7 @@ def test_the_hourly_sync_starts_each_idle_feed_in_a_process_of_its_own_without_w
     cli.main(["watch", "add", "SPCX"])
     proc.run_lock_path(db, "massive").write_text(str(os.getppid()))  # Massive's pass goes on from an hour ago
     started, built = [], []
-    monkeypatch.setattr(cli, "start_feed", started.append)
+    monkeypatch.setattr(cli, "start_feed", lambda name, db_path: started.append(name))
     monkeypatch.setattr(cli, "after_sync", lambda args, s: built.append(1))
     assert cli.main(["sync"]) == 0
     assert "massive" not in started and {"alpaca", "bitstamp", "coinbase"} <= set(started)
