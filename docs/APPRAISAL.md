@@ -4,7 +4,7 @@ A read-only review of the whole codebase (494 tests passing at the time), spot-c
 the duplicated `clear_denied`, the change check that reads whole series (`bars_changed_since`),
 the unbounded series cache in `BarEngine`, the Fetcher's state order disagreeing between page and
 server, and the missing SQLite busy-timeout and sync settings were all confirmed. ★ marks the
-five to do first in each part. Paths are relative to `src/liminal/`.
+five to do first in each part. Paths are relative to `src/liminal_app/`.
 
 **Done since (2026-10-24, evening):** 1.★5's first step (the series cache is bounded); 1.8's
 `proc.py`; 1.9's busy wait (30 s, `storage/common.py` `BUSY_TIMEOUT_S`; Python's sqlite3 already

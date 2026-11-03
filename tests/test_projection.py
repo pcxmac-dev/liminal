@@ -5,10 +5,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from liminal.gui import projection as pj
-from liminal.gui.bars import (COLUMNS, Series, calendar_key, lod_aggregate, regular_session, resample,
+from liminal_app.gui import projection as pj
+from liminal_app.gui.bars import (COLUMNS, Series, calendar_key, lod_aggregate, regular_session, resample,
                                       wall_clock_bins)
-from liminal.sessions import ET, MarketCalendar
+from liminal_lib.sessions import ET, MarketCalendar
 
 CAL = MarketCalendar()
 PRODUCT = {"future": "NQ", "stock": None, "index": None, "fx": None}
@@ -129,8 +129,8 @@ def test_wall_clock_bins_keep_their_times_across_clock_changes():
 
 
 def test_engine_future_endpoint(tmp_path):
-    from liminal.gui.server import ChartApp
-    from liminal.storage import Store
+    from liminal_app.gui.server import ChartApp
+    from liminal_lib.storage import Store
 
     with Store(tmp_path / "m.db", check_same_thread=False) as store:
         mins = CAL.open_minutes("stock", datetime(2026, 11, 23, tzinfo=ET), datetime(2026, 11, 26, tzinfo=ET))
@@ -146,7 +146,7 @@ def test_engine_future_endpoint(tmp_path):
 
 def _regular_session_bar_by_bar(frame: pd.DataFrame) -> pd.DataFrame:
     """The filter as it was (a Python call a bar): what the vectorised one must equal."""
-    from liminal.gui.bars import REGULAR_OPEN, _regular_close
+    from liminal_app.gui.bars import REGULAR_OPEN, _regular_close
 
     local = frame.index.tz_convert(ET)
     t = local.time

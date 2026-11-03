@@ -15,11 +15,12 @@ from datetime import date
 import pandas as pd
 import pytest
 
-from liminal import baddata, cli, composite, config, derive
-from liminal.storage import Store
-from liminal.storage import admin as admin_mod
-from liminal.storage import feeds as feeds_mod
-from liminal.storage.common import add_column
+from liminal_app import cli
+from liminal_lib import baddata, composite, config, derive
+from liminal_lib.storage import Store
+from liminal_lib.storage import admin as admin_mod
+from liminal_lib.storage import feeds as feeds_mod
+from liminal_lib.storage.common import add_column
 
 ET = "America/New_York"
 
@@ -412,9 +413,9 @@ def test_an_export_takes_whole_days_in_the_series_day_zone(store, tmp_path, monk
 def test_a_composite_bar_no_longer_made_is_removed_from_the_rebuilt_span(store):
     from datetime import datetime, timezone
 
-    from liminal.coverage import FeedProfile
+    from liminal_lib.coverage import FeedProfile
     from liminal_plugin_massive import TIERS
-    from liminal.symbols import resolve
+    from liminal_lib.symbols import resolve
 
     t0 = int(datetime(2026, 10, 1, 15, tzinfo=timezone.utc).timestamp() * 1000)
     feeds = {n: FeedProfile(n, TIERS["free"], frozenset({"crypto"}), venues={"crypto": v})

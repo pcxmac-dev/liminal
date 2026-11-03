@@ -7,8 +7,8 @@ from dataclasses import replace
 
 import pytest
 
-from liminal.config import ConfigError, load_settings
-from liminal.sources import providers, registry
+from liminal_lib.config import ConfigError, load_settings
+from liminal_lib.sources import providers, registry
 
 from .test_plugin_databases import installed  # noqa: F401 - the fixture: these plugins, installed
 from .test_plugins import ACME

@@ -6,8 +6,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from liminal.storage import Store
-from liminal.storage.requests import STANDING
+from liminal_lib.storage import Store
+from liminal_lib.storage.requests import STANDING
 
 T0 = datetime(2026, 11, 1, 15, 0, tzinfo=timezone.utc)
 

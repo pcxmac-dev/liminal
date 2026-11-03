@@ -271,7 +271,7 @@ def fx_windows(e: Exchange, start: datetime, days: int = 14) -> list[tuple[datet
     """When a dealing centre is active from `start` on: its business hours (FX_HOURS local, on its
     local exchange's business days) inside the FX week as the data source quotes it (Sunday 17:00
     to Friday 17:00 New York; holiday early stops included). Adjacent pieces are merged."""
-    from ..sessions import ET, MarketCalendar
+    from liminal_lib.sessions import ET, MarketCalendar
 
     from zoneinfo import ZoneInfo
 

@@ -2,7 +2,7 @@
 of MCD shown as "Consolidated Tape Association": "is this the right corp name ?")."""
 import pandas as pd
 
-from liminal.storage.markets import mic_names
+from liminal_lib.storage.markets import mic_names
 
 
 def test_an_exchange_names_its_mic_before_a_tape_of_it():

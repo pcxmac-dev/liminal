@@ -11,13 +11,14 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 import requests
 
-from liminal import cli, killswitch, live
-from liminal.errors import NotEntitled, Paused, RateLimited, SourceError, Unauthorized
+from liminal_app import cli
+from liminal_lib import killswitch, live
+from liminal_lib.errors import NotEntitled, Paused, RateLimited, SourceError, Unauthorized
 from liminal_plugin_alpaca.client import AlpacaClient  # Alpaca's client, on the app's HttpClient
-from liminal.sources.http import RETRY_WAIT_MAX, SameHostSession, retry_delay as _retry_delay
+from liminal_lib.sources.http import RETRY_WAIT_MAX, SameHostSession, retry_delay as _retry_delay
 from liminal_plugin_massive.client import MassiveClient, MassiveSource
-from liminal.storage import Store
-from liminal.sources import stream
+from liminal_lib.storage import Store
+from liminal_lib.sources import stream
 
 from .conftest import FakeResponse, FakeSession
 
@@ -115,8 +116,8 @@ def test_a_redirect_is_followed_on_the_same_host_only():
 
 
 def test_each_asset_classs_window_keeps_the_margin_of_a_few_a_minute():
-    from liminal.config import load_settings
-    from liminal.sources import build_source
+    from liminal_lib.config import load_settings
+    from liminal_lib.sources import build_source
 
     free = build_source("massive", load_settings(env={"MASSIVE_API_KEY": "FAKE"}, env_file=None)).client
     assert free._limiter.period == 62.0
@@ -142,8 +143,8 @@ class _Clock:
 
 
 def _built(env: dict, clock: _Clock):
-    from liminal.config import load_settings
-    from liminal.sources import build_source
+    from liminal_lib.config import load_settings
+    from liminal_lib.sources import build_source
 
     client = build_source("massive", load_settings(env={"MASSIVE_API_KEY": "FAKE", **env}, env_file=None)).client
     client._limiter._clock, client._limiter._sleep = clock, clock.sleep
@@ -166,7 +167,7 @@ def test_two_databases_on_one_key_share_one_window_on_the_machine():
 def test_the_window_is_taken_in_one_transaction_whoever_asks_at_once(tmp_path):
     import threading
 
-    from liminal.ratelimit import MachineLedger, RateLimiter
+    from liminal_lib.ratelimit import MachineLedger, RateLimiter
 
     class Full(Exception):
         pass
@@ -197,7 +198,7 @@ def test_the_window_is_taken_in_one_transaction_whoever_asks_at_once(tmp_path):
 
 
 def test_the_daily_cap_holds_for_the_machine_not_each_database():
-    from liminal.errors import BudgetExhausted
+    from liminal_lib.errors import BudgetExhausted
 
     clock = _Clock()
     first, copy = (_built({"MASSIVE_MAX_REQUESTS_PER_DAY": "3"}, clock) for _ in range(2))
@@ -212,7 +213,7 @@ def test_the_daily_cap_holds_for_the_machine_not_each_database():
 
 
 def test_the_databases_window_is_kept_atomically_too(tmp_path):
-    from liminal.ratelimit import KvLedger, RateLimiter, load_times
+    from liminal_lib.ratelimit import KvLedger, RateLimiter, load_times
 
     clock = _Clock()
     with Store(tmp_path / "m.db") as a, Store(tmp_path / "m.db") as b:  # two processes on one database
@@ -394,7 +395,7 @@ def test_a_lock_is_never_seen_empty_and_one_being_written_is_held(tmp_path):
     import os
     import time
 
-    from liminal import proc
+    from liminal_lib import proc
 
     lock = tmp_path / "run.lock"
     assert proc.acquire(lock) and lock.read_text().split()[0] == str(os.getpid())
@@ -411,9 +412,9 @@ def test_a_lock_is_never_seen_empty_and_one_being_written_is_held(tmp_path):
 # -- closed archives and the continuous futures roll (findings 22-24) -------------------------------
 
 def test_a_years_cot_file_closes_only_once_its_last_report_can_be_out(tmp_path, monkeypatch):
-    from liminal import datasets
+    from liminal_lib import datasets
     import liminal_plugin_federal.cftc as cftc
-    from liminal.storage import datasets as stored
+    from liminal_lib.storage import datasets as stored
 
     from .test_datasets import _Resp, _Session, _cot, _zip
 
@@ -436,7 +437,7 @@ def test_a_years_cot_file_closes_only_once_its_last_report_can_be_out(tmp_path, 
 
 
 def test_the_roll_holds_a_contract_not_fetched_yet_for_the_newest_session():
-    from liminal.futures import roll_schedule
+    from liminal_lib.futures import roll_schedule
 
     d = [date(2026, 9, n) for n in (14, 15, 16)]
     far = {"NQU6": date(2026, 11, 1), "NQZ6": date(2027, 2, 1)}

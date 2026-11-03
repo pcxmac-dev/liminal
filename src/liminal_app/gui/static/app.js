@@ -2485,7 +2485,7 @@ function renderMapList(query) {
     </div>`;
   if (!dir && !source.length && !everyOther.length) {
     list.innerHTML = named ? `${mapBar([], { key: 'mapExchange', sizes: true, lists: true })}<div class="empty">“${e(named.name)}” is empty: open a symbol and press + in the Watchlist panel to add it.</div>`
-      : '<div class="empty">No symbols yet. Add one with: python -m liminal watch add TICKER::EXCHANGE</div>';
+      : '<div class="empty">No symbols yet. Add one with: liminal watch add TICKER::EXCHANGE</div>';
     return;
   }
   const opts = { current: state.ticker, isWatched: dir ? (s) => s.watched : null, levels, label,
@@ -2535,7 +2535,7 @@ function renderFuturesMap(query) {
   const { shown, levels, label } = mapLevels(base, 'futuresExchange', [(s) => s.sector, (s) => s.industry]);
   const mapped = shown.filter(match);
   if (!all.length) {
-    list.innerHTML = '<div class="empty">No futures watched yet: add one with python -m liminal watch add ES1!</div>';
+    list.innerHTML = '<div class="empty">No futures watched yet: add one with liminal watch add ES1!</div>';
     return;
   }
   list.innerHTML = `${mapBar(base, { key: 'futuresExchange', priced: priced.length })}
@@ -2593,7 +2593,7 @@ function renderSymbolList(query) {
   const matches = state.symbols.filter((s) =>
     !q || [s.ticker, s.name, s.exchange, s.exchangeName].some((v) => v && v.toLowerCase().includes(q)));
   if (!matches.length) {
-    list.innerHTML = '<div class="empty">No symbols match. Add one with: python -m liminal watch add TICKER::EXCHANGE</div>';
+    list.innerHTML = '<div class="empty">No symbols match. Add one with: liminal watch add TICKER::EXCHANGE</div>';
     return;
   }
   const groups = [
@@ -4062,7 +4062,7 @@ $('pHighlight').addEventListener('click', (e) => {
     // chart waited for it first: three seconds and more on every page load.
     const symbols = loadSymbols().then(() => {
       if (!state.symbols.length) {
-        $('statusText').textContent = 'No data stored yet. Add a ticker with: python -m liminal watch add TICKER::EXCHANGE, then sync.';
+        $('statusText').textContent = 'No data stored yet. Add a ticker with: liminal watch add TICKER::EXCHANGE, then sync.';
         return;
       }
       if (state.ticker) {

@@ -9,16 +9,16 @@ import importlib.util
 from datetime import datetime, timezone
 from pathlib import Path
 
-from liminal import publications
-from liminal.config import load_settings
-from liminal.gov import GovDB
-from liminal.sources import publishers, registry
-from liminal.sources.publisher import Feed, Policy, Publisher
+from liminal_lib import publications
+from liminal_lib.config import load_settings
+from liminal_lib.gov import GovDB
+from liminal_lib.sources import publishers, registry
+from liminal_lib.sources.publisher import Feed, Policy, Publisher
 
 from .test_publications import Site, pub, reader
 
 AGENCIES = ["fed", "nyfed", "sec", "bls", "fedreg", "cftc"]
-STATIC = Path(__file__).resolve().parents[1] / "src" / "liminal" / "gui" / "static"
+STATIC = Path(__file__).resolve().parents[1] / "src" / "liminal_app" / "gui" / "static"
 
 
 def test_the_federal_agencies_are_parts_of_one_plugin():
@@ -29,7 +29,7 @@ def test_the_federal_agencies_are_parts_of_one_plugin():
         assert importlib.util.find_spec(f"liminal_plugin_{gone}") is None, gone  # no package of their own either
     pubs = publishers()
     assert list(pubs)[:7] == ["federal", *AGENCIES]  # the plugin's record first, its agencies after it
-    assert all(pubs[n].part_of == "federal" and (pubs[n].version, pubs[n].api) == ("1.4.0", "1.7") for n in AGENCIES)
+    assert all(pubs[n].part_of == "federal" and (pubs[n].version, pubs[n].api) == ("1.4.1", "1.7") for n in AGENCIES)
     assert pubs["federal"].feeds == () and pubs["federal"].part_of == ""
     assert registry.publisher_parts("federal") == AGENCIES and registry.publisher_of("sec") == "federal"
     assert registry.publisher_of("massive-news") == "massive" and registry.publisher_parts("massive-news") == []
@@ -41,7 +41,7 @@ def test_the_federal_agencies_are_parts_of_one_plugin():
     assert pubs["fed"].calendar is not None and pubs["nyfed"].moments is not None
     # the CFTC: its Commitments of Traders, a dataset; nothing of its own to read (its feeds are off)
     assert pubs["cftc"].feeds == () and pubs["cftc"].dataset_names == ("cftc-cot-legacy",)
-    from liminal import datasets
+    from liminal_lib import datasets
 
     assert datasets.DATASETS["cftc-cot-legacy"].publisher == "cftc"  # declared by it (API 1.4)
 
@@ -93,8 +93,8 @@ def test_a_publisher_with_no_feed_of_its_own_is_never_read_or_rechecked(store):
 
 
 def test_the_plugins_view_lists_federal_once_with_its_agencies_and_the_cftcs_dataset(tmp_path):
-    from liminal.gui.server import ChartApp
-    from liminal.storage import Store
+    from liminal_app.gui.server import ChartApp
+    from liminal_lib.storage import Store
 
     with Store(tmp_path / "m.db", check_same_thread=False) as store:
         out = ChartApp(store, settings=load_settings(env={"LIMINAL_DB": str(tmp_path / "m.db")}, env_file=None)).publishers()

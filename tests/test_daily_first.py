@@ -6,12 +6,12 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, timedelta, timezone
 
-from liminal import collector
-from liminal.audit import daily_history
-from liminal.collector import ET, sync
+from liminal_lib import collector
+from liminal_lib.audit import daily_history
+from liminal_lib.collector import ET, sync
 from liminal_plugin_massive import TIERS
-from liminal.coverage import FeedProfile
-from liminal.initializer import ORDER_KEY
+from liminal_lib.coverage import FeedProfile
+from liminal_lib.initializer import ORDER_KEY
 
 from .conftest import FakeSource
 
@@ -121,7 +121,7 @@ def test_a_stock_whose_details_were_never_read_is_not_marked_logo_less(store):
 
 
 def test_the_daily_sweep_brings_each_stocks_logo_with_its_details(store):
-    from liminal.models import Instrument
+    from liminal_lib.models import Instrument
 
     class WithLogos(FakeSource):
         def icon(self, url):
@@ -137,8 +137,8 @@ def test_the_daily_sweep_brings_each_stocks_logo_with_its_details(store):
 
 
 def test_the_daily_sweep_stops_on_an_outage_instead_of_retrying_every_stock(store, monkeypatch):
-    from liminal import killswitch
-    from liminal.errors import SourceError
+    from liminal_lib import killswitch
+    from liminal_lib.errors import SourceError
 
     class Down(FakeSource):
         def bar_pages(self, ticker, *a, **k):

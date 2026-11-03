@@ -19,17 +19,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from liminal import baddata, derive
-from liminal.gui import charttypes
-from liminal.gui import server as server_module
-from liminal.gui import window as window_module
-from liminal.gui.bars import BarEngine
-from liminal.gui.server import WRITE_HEADER, ChartApp, make_handler
-from liminal.gui.stats import key_stats
-from liminal.gui.window import WindowReader
-from liminal.storage import Store
-from liminal.trading import paper
-from liminal.trading.paper import PaperBook
+from liminal_lib import baddata, derive
+from liminal_app.gui import charttypes
+from liminal_app.gui import server as server_module
+from liminal_app.gui import window as window_module
+from liminal_app.gui.bars import BarEngine
+from liminal_app.gui.server import WRITE_HEADER, ChartApp, make_handler
+from liminal_app.gui.stats import key_stats
+from liminal_app.gui.window import WindowReader
+from liminal_lib.storage import Store
+from liminal_app.trading import paper
+from liminal_app.trading.paper import PaperBook
 
 ET = "America/New_York"
 MIN = 60_000
@@ -179,7 +179,7 @@ def test_requests_from_other_sites_are_refused_and_the_apps_own_pass(served):
 
 
 def test_row_counts_are_made_a_few_at_a_time_and_a_bounded_number_kept(store, monkeypatch):
-    from liminal import inventory
+    from liminal_lib import inventory
 
     monkeypatch.setattr(server_module, "ROW_COUNTS_KEPT", 3)
     release, started = threading.Event(), []
@@ -314,7 +314,7 @@ def test_a_day_order_waits_for_the_whole_markets_session_before_it_expires(tmp_p
 
 # -- 35: slow work off the shared lock -------------------------------------------------------------
 def test_paper_and_the_markets_do_their_slow_work_off_the_shared_lock(store, monkeypatch):
-    from liminal.gui import world
+    from liminal_app.gui import world
 
     app = ChartApp(store)
 
@@ -507,8 +507,8 @@ def test_an_unexpected_error_is_answered_not_dropped(served, monkeypatch, capsys
 
 
 def test_the_fetcher_view_applies_the_official_holidays_and_counts_audits_cheaply(store, monkeypatch):
-    from liminal import freshness
-    from liminal.gui import server as srv
+    from liminal_lib import freshness
+    from liminal_app.gui import server as srv
 
     applied = []
     monkeypatch.setattr(freshness, "use_official", lambda s, source="massive": applied.append(s) or False)

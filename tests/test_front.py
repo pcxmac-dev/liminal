@@ -12,9 +12,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from liminal import host as hosting
-from liminal.gui import front as front_mod, web
-from liminal.gui.front import Front, make_front_handler
+from liminal_lib import host as hosting
+from liminal_app.gui import front as front_mod, web
+from liminal_app.gui.front import Front, make_front_handler
 
 
 class FakeAttachment:
@@ -194,8 +194,8 @@ def test_the_front_in_fetcher_mode_is_the_integrators_page(tmp_path, monkeypatch
 
 
 def test_the_gui_command_runs_the_front_unless_alone(tmp_path, monkeypatch):
-    from liminal import cli
-    from liminal.gui import front, server
+    from liminal_app import cli
+    from liminal_app.gui import front, server
 
     ran: list = []
     monkeypatch.setattr(front, "serve_front", lambda db_path, port=8765, open_browser=True, log=None: ran.append(("front", port, open_browser)))

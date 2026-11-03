@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
 
-from ..sessions import ET, ENERGY_FUTURES, EQUITY_FUTURES, MarketCalendar, nyse_holidays
+from liminal_lib.sessions import ET, ENERGY_FUTURES, EQUITY_FUTURES, MarketCalendar, nyse_holidays
 
 US_VENUE_TYPES = ("exchange",)
 

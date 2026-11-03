@@ -5,9 +5,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from liminal import config, layout
-from liminal.sources import provider, providers
-from liminal.sources import registry
+from liminal_lib import config, layout
+from liminal_lib.sources import provider, providers
+from liminal_lib.sources import registry
 
 from .test_plugins import installed  # noqa: F401  (a test's fake entry points)
 
@@ -43,7 +43,7 @@ def _checkout(folder: Path, name: str, module: str, version: str = "9.9.9") -> N
         f'[project]\nname = "{name}"\nversion = "{version}"\n\n[project.entry-points."liminal.providers"]\n'
         f'{module.removeprefix("liminal_plugin_")} = "{module}:PLUGIN"\n', encoding="utf-8")
     (sub / "src" / module / "__init__.py").write_text(
-        "from liminal.sources.registry import PLUGIN_API, Provider\n\n"
+        "from liminal_lib.sources.registry import PLUGIN_API, Provider\n\n"
         f"PLUGIN = Provider(name={module.removeprefix('liminal_plugin_')!r}, title='A test plugin', "
         "build=lambda settings, budget: None, assets=frozenset({'crypto'}), api=PLUGIN_API)\n", encoding="utf-8")
 
@@ -59,7 +59,7 @@ def test_the_plugins_in_the_plugin_directory_are_loaded_from_there(tmp_path, mon
     assert registry.plugin_checkouts(tmp_path / "nowhere") == []
     monkeypatch.setenv(layout.PLUGINS_VAR, str(folder))
     # loaded from its folder, with its version; a package of the same plugin installed besides is not loaded twice
-    import liminal.sources.registry as reg
+    import liminal_lib.sources.registry as reg
 
     installed(("acmetest", "liminal_plugin_acmetest:PLUGIN", lambda: __import__("liminal_plugin_acmetest").PLUGIN))
     assert "acmetest" in providers()

@@ -8,9 +8,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-from liminal import gov, mongo
-from liminal.config import load_settings
-from liminal.storage import Store, set_read_only
+from liminal_lib import gov, mongo
+from liminal_lib.config import load_settings
+from liminal_lib.storage import Store, set_read_only
 
 
 def test_the_setting_reads_only_and_is_offline(tmp_path):
@@ -50,7 +50,7 @@ def test_mongodb_is_not_started_from_a_reading_copy(tmp_path, monkeypatch):
 
 
 def test_no_history_run(tmp_path, monkeypatch, capsys):
-    from liminal import cli
+    from liminal_app import cli
 
     monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "liminal.db"))
     monkeypatch.setenv("LIMINAL_READONLY", "1")

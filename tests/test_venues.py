@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-from liminal.config import load_settings
-from liminal.gui import venues
-from liminal.sessions import ET, MarketCalendar
-from liminal.sources import feed_profiles
-from liminal.storage import Store
-from liminal.symbols import resolve
+from liminal_lib.config import load_settings
+from liminal_app.gui import venues
+from liminal_lib.sessions import ET, MarketCalendar
+from liminal_lib.sources import feed_profiles
+from liminal_lib.storage import Store
+from liminal_lib.symbols import resolve
 
 KEYS = {"MASSIVE_API_KEY": "k", "ALPACA_API_KEY_ID": "i", "ALPACA_API_SECRET_KEY": "s"}
 NOW = datetime(2026, 10, 27, 11, 0, tzinfo=ET)  # a Tuesday, the regular session
@@ -60,7 +60,7 @@ def test_every_tracked_venue_with_its_state_products_and_insight(tmp_path):
 
 
 def test_the_delivery_scheme_behind_each_venue(tmp_path):
-    from liminal import sourcing
+    from liminal_lib import sourcing
 
     feeds = feed_profiles(load_settings(env=KEYS, env_file=None))
     with _store(tmp_path) as s:
@@ -83,7 +83,7 @@ def test_a_venues_products_for_the_middle_column(tmp_path):
 
 
 def test_the_chart_app_answers_for_the_exchanges_view(tmp_path):
-    from liminal.gui.server import ChartApp
+    from liminal_app.gui.server import ChartApp
 
     with _store(tmp_path) as s:
         app = ChartApp(s, settings=load_settings(env=KEYS, env_file=None))
@@ -96,7 +96,7 @@ def test_the_chart_app_answers_for_the_exchanges_view(tmp_path):
 def test_the_page_has_its_rail_icon_and_view():
     from pathlib import Path
 
-    static = Path(__file__).resolve().parents[1] / "src" / "liminal" / "gui" / "static"
+    static = Path(__file__).resolve().parents[1] / "src" / "liminal_app" / "gui" / "static"
     html = (static / "index.html").read_text(encoding="utf-8")
     assert 'id="railExchanges"' in html and 'id="viewExchanges"' in html and 'src="venues.js"' in html
     assert "scales:" in (static / "icons.js").read_text(encoding="utf-8")

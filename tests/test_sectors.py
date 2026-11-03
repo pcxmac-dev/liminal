@@ -1,8 +1,8 @@
 """Market map: sectors from SIC codes, overrides, industry names, share-class sizing, day changes."""
 from datetime import date
 
-from liminal.gui.sectors import SECTORS, classify, industry_name
-from liminal.gui.server import _sector
+from liminal_app.gui.sectors import SECTORS, classify, industry_name
+from liminal_app.gui.server import _sector
 
 
 def test_sic_ranges_place_companies_in_market_sectors():

@@ -10,10 +10,11 @@ from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
-from liminal import cli, host as hosting, live
-from liminal.config import load_settings
-from liminal.gui.server import ChartApp
-from liminal.storage import Store
+from liminal_app import cli
+from liminal_lib import host as hosting, live
+from liminal_lib.config import load_settings
+from liminal_app.gui.server import ChartApp
+from liminal_lib.storage import Store
 
 
 def until(cond, within=5.0) -> bool:

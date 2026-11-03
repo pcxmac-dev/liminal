@@ -7,11 +7,11 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, timedelta
 
-from liminal import collector
-from liminal.collector import ET, sync
+from liminal_lib import collector
+from liminal_lib.collector import ET, sync
 from liminal_plugin_massive import TIERS
-from liminal.initializer import ORDER_KEY
-from liminal.live import WATCHLISTS_KEY
+from liminal_lib.initializer import ORDER_KEY
+from liminal_lib.live import WATCHLISTS_KEY
 
 from .conftest import FakeSource
 

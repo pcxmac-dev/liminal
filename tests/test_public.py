@@ -3,11 +3,11 @@ and closing (filled once, then never asked again)."""
 from datetime import date, datetime, timedelta, timezone
 
 
-from liminal.collector import ET, sync
+from liminal_lib.collector import ET, sync
 from liminal_plugin_alpaca import ALPACA_TIERS  # the plugin's plans
-from liminal.coverage import FeedProfile, ms, plan
-from liminal.sources import provider, supports
-from liminal.symbols import resolve
+from liminal_lib.coverage import FeedProfile, ms, plan
+from liminal_lib.sources import provider, supports
+from liminal_lib.symbols import resolve
 
 from .conftest import FakeSource
 
@@ -66,8 +66,8 @@ def test_a_feeds_empty_history_head_is_left_to_others_and_the_archive_closes(sto
 
 
 def test_closed_feeds_are_not_started_and_can_be_reopened(tmp_path, monkeypatch, capsys):
-    from liminal import cli
-    from liminal.storage import Store
+    from liminal_app import cli
+    from liminal_lib.storage import Store
 
     db = tmp_path / "m.db"
     monkeypatch.setenv("LIMINAL_DB", str(db))

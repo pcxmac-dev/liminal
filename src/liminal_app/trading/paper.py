@@ -76,7 +76,7 @@ def day_end(placed_ms: int, asset: str = "stock") -> int:
     if asset not in ("stock", "index", "etf"):
         d = datetime.fromtimestamp(placed_ms / 1000, timezone.utc).date() + timedelta(days=1)
         return int(datetime(d.year, d.month, d.day, tzinfo=timezone.utc).timestamp() * 1000)
-    from ..sessions import is_nyse_holiday, nyse_early_close
+    from liminal_lib.sessions import is_nyse_holiday, nyse_early_close
 
     at = datetime.fromtimestamp(placed_ms / 1000, ET)
     d: date = at.date()

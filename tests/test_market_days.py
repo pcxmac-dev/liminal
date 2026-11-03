@@ -9,12 +9,12 @@ from datetime import date, datetime
 
 import pytest
 
-from liminal import collector
-from liminal.collector import ET, MARKET_DAYS_BACK, fetch_market_moves, market_days, sync_bars
+from liminal_lib import collector
+from liminal_lib.collector import ET, MARKET_DAYS_BACK, fetch_market_moves, market_days, sync_bars
 from liminal_plugin_massive import TIERS
-from liminal.coverage import FeedProfile, day_start_ms
-from liminal.errors import NotEntitled
-from liminal.storage import Store
+from liminal_lib.coverage import FeedProfile, day_start_ms
+from liminal_lib.errors import NotEntitled
+from liminal_lib.storage import Store
 
 NOW = datetime(2026, 10, 28, 21, 0, tzinfo=ET)  # a Wednesday, the session over
 # the ten trading days back from it (no market holiday among them)

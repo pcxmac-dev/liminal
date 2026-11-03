@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from datetime import datetime, time, timedelta, timezone
 
-from ..sessions import ET, MarketCalendar
+from liminal_lib.sessions import ET, MarketCalendar
 from .markets import _around_the_clock, _iso, us_equities
 
 # id -> (name, group, asset, timezone, hours)

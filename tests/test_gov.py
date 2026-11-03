@@ -5,10 +5,10 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-from liminal import gov, publications
-from liminal.gov import GovDB, Source
-from liminal.sources import publishers
-from liminal.sources.publisher import parse_rss
+from liminal_lib import gov, publications
+from liminal_lib.gov import GovDB, Source
+from liminal_lib.sources import publishers
+from liminal_lib.sources.publisher import parse_rss
 
 NOW = datetime(2026, 10, 26, 6, 0, tzinfo=timezone.utc)  # Monday, 2:00 a.m. ET: no release moment near
 OFFICIAL = {n: p for n, p in publishers().items() if p.kind == "official"}
@@ -154,7 +154,7 @@ def test_the_parameters_have_their_source_and_date_and_the_newest_rule_document(
 
 
 def test_the_gov_view_says_which_sources_wait_and_why(store):
-    from liminal.gui.server import ChartApp
+    from liminal_app.gui.server import ChartApp
 
     app = ChartApp(store)
     out = app.gov()
@@ -173,7 +173,7 @@ def test_the_gov_view_shows_the_next_fomc_decision_and_the_releases_scheduled():
 
 
 def test_the_gov_command_lists_each_sources_state(tmp_path, monkeypatch, capsys):
-    from liminal import cli
+    from liminal_app import cli
 
     monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "m.db"))
     monkeypatch.setenv("MASSIVE_API_KEY", "k")

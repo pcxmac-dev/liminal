@@ -985,7 +985,7 @@
     if (!usable.length) {
       renderControls();
       $('dsEmpty').hidden = false;
-      $('dsEmpty').textContent = 'No datasets fetched yet: run python -m liminal datasets fetch';
+      $('dsEmpty').textContent = 'No datasets fetched yet: run liminal datasets fetch';
       return;
     }
     if (st.catalog?.name !== st.name) await selectDataset(st.name);

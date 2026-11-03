@@ -29,8 +29,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from .. import config, host
-from ..logs import log_to
+from liminal_lib import config, host
+from liminal_lib.logs import log_to
 from . import web
 from .web import MAX_BODY, PROFILE_HEADER, WRITE_HEADER
 

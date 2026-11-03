@@ -10,15 +10,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from liminal import cli, collector, config, killswitch, publications, runner
-from liminal.collector import StopRun, sync
-from liminal.config import load_settings
+from liminal_app import cli
+from liminal_lib import collector, config, killswitch, publications, runner
+from liminal_lib.collector import StopRun, sync
+from liminal_lib.config import load_settings
 from liminal_plugin_massive import TIERS
-from liminal.gov import GovDB
-from liminal.sources import registry
-from liminal.sources.fetching import Fetched, Fetcher, Job
-from liminal.sources.publisher import Policy, Publisher
-from liminal.storage import Store
+from liminal_lib.gov import GovDB
+from liminal_lib.sources import registry
+from liminal_lib.sources.fetching import Fetched, Fetcher, Job
+from liminal_lib.sources.publisher import Policy, Publisher
+from liminal_lib.storage import Store
 
 from .conftest import FakeSource
 from .test_collector import NOW as SYNC_NOW
@@ -206,7 +207,7 @@ def test_a_failed_news_read_is_failed_on_the_queue(store):
 
 # -- the views --------------------------------------------------------------------------------------
 def test_the_fetcher_and_a_plugins_page_read_the_queue(tmp_path):
-    from liminal.gui.server import ChartApp
+    from liminal_app.gui.server import ChartApp
 
     path = tmp_path / "m.db"
     with Store(path, check_same_thread=False) as store:
@@ -242,8 +243,8 @@ def test_each_symbols_row_says_how_much_of_it_its_plugin_has_downloaded(tmp_path
     of the plugin its associated with on the queue"."""
     from datetime import date
 
-    from liminal.gui import queue
-    from liminal.gui.server import ChartApp
+    from liminal_app.gui import queue
+    from liminal_app.gui.server import ChartApp
 
     path = tmp_path / "m.db"
     settings = load_settings(env={"LIMINAL_DB": str(path), "MASSIVE_API_KEY": "k"}, env_file=None)
@@ -280,7 +281,7 @@ def test_the_reader_keeps_no_queue_without_the_main_store():
 
 
 def test_a_datasets_files_are_on_the_queue_under_the_plugin_declaring_it(tmp_path):
-    from liminal import datasets
+    from liminal_lib import datasets
 
     from .test_dataset_plugins import TODAY, _cot, _Resp, _Session, _zip
 
@@ -296,7 +297,7 @@ def test_a_datasets_files_are_on_the_queue_under_the_plugin_declaring_it(tmp_pat
 def test_each_plugins_page_shows_its_fetching_first():
     from pathlib import Path
 
-    js = (Path(__file__).resolve().parents[1] / "src" / "liminal" / "gui" / "static" / "plugins.js").read_text(encoding="utf-8")
+    js = (Path(__file__).resolve().parents[1] / "src" / "liminal_app" / "gui" / "static" / "plugins.js").read_text(encoding="utf-8")
     assert "function fetchingHtml(name) {" in js and "api(`/api/plugin-fetching?name=${encodeURIComponent(name)}`)" in js
     assert "${setupHtml(p.name, p.keys)}${fetchingHtml(p.name)}${feedsHtml(p)}" in js  # a feed plugin's, after its setup
     assert "${pubSetupHtml(p)}${fetchingHtml(p.name)}${readsHtml(p)}" in js  # a publisher's

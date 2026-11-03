@@ -5,11 +5,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from liminal import collector
-from liminal.collector import ET, sync
+from liminal_lib import collector
+from liminal_lib.collector import ET, sync
 from liminal_plugin_massive import TIERS
-from liminal.coverage import ms
-from liminal.models import Exchange, Stock, country
+from liminal_lib.coverage import ms
+from liminal_lib.models import Exchange, Stock, country
 
 from .conftest import FakeSource
 
@@ -158,7 +158,7 @@ def test_a_reused_symbol_is_cleared_on_every_feed_watching_it(store):
 # -- the ledger: empty heads and the settling frontier (findings 20 and 14) --------------------------
 
 def test_a_first_fetch_whose_history_starts_later_leaves_the_head_to_another_feed(store):
-    from liminal.coverage import FeedProfile, plan
+    from liminal_lib.coverage import FeedProfile, plan
 
     feeds = {"fake": FeedProfile("fake", FREE, frozenset({"stock"}), 0),
              "other": FeedProfile("other", FREE, frozenset({"stock"}), 1)}
@@ -176,8 +176,8 @@ def test_a_first_fetch_whose_history_starts_later_leaves_the_head_to_another_fee
 
 
 def test_a_real_time_plans_newest_minutes_are_left_to_settle(store):
-    from liminal import freshness
-    from liminal.coverage import FeedProfile, frontier_ms
+    from liminal_lib import freshness
+    from liminal_lib.coverage import FeedProfile, frontier_ms
 
     now = datetime(2026, 10, 21, 12, 0, 30, tzinfo=ET)
     assert frontier_ms("stock", ADV, now, "minute") == ms(datetime(2026, 10, 21, 11, 57, tzinfo=ET))
@@ -198,8 +198,8 @@ def test_a_real_time_plans_newest_minutes_are_left_to_settle(store):
 # -- the fetch check in chunks (finding 6) -----------------------------------------------------------
 
 def test_the_fetch_check_reads_a_chunk_at_a_time_and_only_where_the_finer_frame_is_held(store, monkeypatch):
-    from liminal import baddata
-    from liminal.coverage import FeedProfile
+    from liminal_lib import baddata
+    from liminal_lib.coverage import FeedProfile
 
     first, last = datetime(2025, 10, 1, 10, tzinfo=ET), datetime(2026, 10, 20, 10, tzinfo=ET)
     store.upsert_bars("fake", "AAA", "minute", 1, [_bar(first), _bar(last)])  # a year of minutes changed
@@ -225,8 +225,8 @@ def test_the_fetch_check_reads_a_chunk_at_a_time_and_only_where_the_finer_frame_
 # -- the audit queue (finding 17) -----------------------------------------------------------------------
 
 def test_the_audit_queue_keeps_one_entry_per_series_and_expires_old_ones_at_once(store):
-    from liminal import audit
-    from liminal.coverage import FeedProfile
+    from liminal_lib import audit
+    from liminal_lib.coverage import FeedProfile
 
     for run in range(30):  # a month of runs, each queueing what it fetched
         store.queue_audit("AAA", "minute", 1000 * run, 1000 * run + 500, "fake")
@@ -246,8 +246,8 @@ def test_the_audit_queue_keeps_one_entry_per_series_and_expires_old_ones_at_once
 # -- the collector's calendar takes the official holidays (finding 18) -------------------------------
 
 def test_an_unscheduled_closure_from_the_official_calendar_is_not_asked_for(store):
-    from liminal import freshness
-    from liminal.sessions import Overrides
+    from liminal_lib import freshness
+    from liminal_lib.sessions import Overrides
 
     store.watch("fake", ["AAA"], "minute")
     store.set_backfilled("fake", "AAA", date(2003, 9, 10))
@@ -286,7 +286,7 @@ def test_the_directorys_allowance_is_reckoned_after_the_watchlist_has_spent(stor
 # -- the lows ---------------------------------------------------------------------------------------
 
 def test_a_live_futures_contract_is_up_to_date_on_a_monday_with_fridays_session(store):
-    from liminal.symbols import resolve
+    from liminal_lib.symbols import resolve
 
     monday = datetime(2026, 10, 26, 12, 0, tzinfo=ET)
     day = lambda d, v: {"t": ms(datetime(d.year, d.month, d.day, tzinfo=ET)), "o": 1, "h": 1, "l": 1, "c": 1, "v": v}  # noqa: E731
@@ -303,7 +303,7 @@ def test_a_live_futures_contract_is_up_to_date_on_a_monday_with_fridays_session(
 
 
 def test_a_contract_a_decade_older_never_keeps_this_decades_namesake_unasked(store):
-    from liminal.symbols import resolve
+    from liminal_lib.symbols import resolve
 
     monday = datetime(2026, 10, 26, 12, 0, tzinfo=ET)
     day = lambda d, v: {"t": ms(datetime(d.year, d.month, d.day, tzinfo=ET)), "o": 1, "h": 1, "l": 1, "c": 1, "v": v}  # noqa: E731
@@ -317,7 +317,7 @@ def test_a_contract_a_decade_older_never_keeps_this_decades_namesake_unasked(sto
 
 
 def test_one_symbols_refusal_leaves_the_class_entitlement_alone(store):
-    from liminal.errors import NotEntitled
+    from liminal_lib.errors import NotEntitled
 
     class OneRefused(FakeSource):
         def bar_pages(self, ticker, start, end, timespan, multiplier=1, descending=False, asset="stock"):
@@ -337,7 +337,7 @@ def test_one_symbols_refusal_leaves_the_class_entitlement_alone(store):
 def test_a_build_that_fails_keeps_the_dirty_mark(store, monkeypatch):
     import pytest
 
-    from liminal import derive
+    from liminal_lib import derive
 
     t0 = datetime(2026, 10, 20, 10, 0, tzinfo=ET)
     store.upsert_bars("fake", "AAA", "minute", 1, [_bar(t0 + timedelta(minutes=i)) for i in range(10)])
@@ -359,8 +359,8 @@ def test_a_build_that_fails_keeps_the_dirty_mark(store, monkeypatch):
 def test_a_watch_row_left_at_trades_reserves_no_window_of_ticks(store):
     import pytest
 
-    from liminal.cli import build_parser
-    from liminal.coverage import FeedProfile, plan
+    from liminal_app.cli import build_parser
+    from liminal_lib.coverage import FeedProfile, plan
 
     feeds = {"fake": FeedProfile("fake", FREE, frozenset({"stock"}), 1),
              "other": FeedProfile("other", FREE, frozenset({"stock"}), 0)}

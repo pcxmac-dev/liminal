@@ -4,7 +4,7 @@ Each check returns a row for the dependency register (docs/DEPENDENCIES.md): sta
 FAIL, what was found, and what to do. Nothing here calls the API; it reads what the fetcher
 stored and the installed packages and files.
 
-    python -m liminal deps
+    liminal deps
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from .storage import Store
+from liminal_lib.storage import Store
 
 STATIC = Path(__file__).parent / "gui" / "static"
 
@@ -114,7 +114,7 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
                      f"{len(rules)} tape condition codes with bar rules" if rules else "none stored yet",
                      "" if rules or not have_ticks else
                      "fetched weekly with the Massive sync; until then bars from ticks count every trade"))
-    from .sources import providers
+    from liminal_lib.sources import providers
 
     for name, p in sorted(providers().items()):
         if not p.archival:
@@ -128,8 +128,8 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
         out.append(Check("Public archives", name, status, found + (f"; {p.key_hint} not set" if keyless else ""),
                          f"set {p.key_hint} (from {p.signup or p.title}) for {p.about}"
                          if keyless and rows else ""))
-    from .coverage import same_market
-    from .sources import feed_profiles
+    from liminal_lib.coverage import same_market
+    from liminal_lib.sources import feed_profiles
 
     profiles = feed_profiles(settings)
     assets = {w["ticker"]: w["asset"] for w in store.watchlist()}
@@ -171,7 +171,7 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
                          "replace the fund in gui/world.py (delisted or renamed)" if missing else ""))
 
     # -- icons ----------------------------------------------------------------------
-    from .collector import COMPANY_TYPES
+    from liminal_lib.collector import COMPANY_TYPES
 
     watched = [w["ticker"] for w in store.watchlist(source) if w["asset"] == "stock" and w.get("synced_at")]
     have = store.icon_tickers()
@@ -243,7 +243,7 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
 
 def _nyse_rules_check(store: Store, source: str, now: datetime) -> Check:
     """The rule-based NYSE calendar (sessions.py) against the source's official upcoming list."""
-    from .sessions import MarketCalendar
+    from liminal_lib.sessions import MarketCalendar
 
     rules = MarketCalendar()  # rules only, no overrides
     official = store.market_holidays(source)

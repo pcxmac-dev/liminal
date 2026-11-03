@@ -22,12 +22,12 @@ from threading import Event, RLock
 import numpy as np
 import pandas as pd
 
-from ..live import PARTIAL_FEEDS
+from liminal_lib.live import PARTIAL_FEEDS
 # the sessions' masks and filters are the library's (sessions.py); the modules beside this one import them from here
-from ..sessions import REGULAR_CLOSE, REGULAR_OPEN, in_session, overnight_mask, regular_mask, regular_session  # noqa: F401
-from ..sessions import regular_close as _regular_close  # noqa: F401
-from ..storage import Store
-from ..calc.derivatives import Model, apply_model
+from liminal_lib.sessions import REGULAR_CLOSE, REGULAR_OPEN, in_session, overnight_mask, regular_mask, regular_session  # noqa: F401
+from liminal_lib.sessions import regular_close as _regular_close  # noqa: F401
+from liminal_lib.storage import Store
+from liminal_lib.calc.derivatives import Model, apply_model
 
 
 # The view a request reads (server.ChartApp._view): filtered, bad data left out (the pruned list,
@@ -404,7 +404,7 @@ def model_info(model: Model, values: pd.DataFrame, hidden: int) -> dict:
     it, the bars it leaves out (stretches too short for its window) and how it was derived."""
     from dataclasses import asdict
 
-    from ..provenance import code_version
+    from liminal_lib.provenance import code_version
 
     return {"kind": model.kind, "unit": model.unit_label(), "precision": model_precision(values["close"].to_numpy()),
             "hidden": int(hidden), "window": model.window,
@@ -549,7 +549,7 @@ class BarEngine:
         A feed of one exchange's share of a market (IEX's trades) comes after every feed of the
         whole market, so a merged chart shows it only where none of them has bars (the current
         session, until a sync downloads it)."""
-        from ..composite import reference as reference_of
+        from liminal_lib.composite import reference as reference_of
 
         with self._lock:
             stored = [(s, k) for s, t, k in self.store.stored_series() if t == ticker.upper()]
@@ -701,7 +701,7 @@ class BarEngine:
         return s
 
     def _load_future(self, source: str, item: dict, adjust: str, store: Store, filtered: bool = True) -> Series | None:
-        from ..futures import continuous
+        from liminal_lib.futures import continuous
 
         rolls = store.rolls(source, item["source_ticker"], item["rank"])
         if not rolls:
@@ -916,7 +916,7 @@ class BarEngine:
 
     def calendar(self):
         """Trading calendar with the source's official schedules (rebuilt when they change)."""
-        from ..sessions import MarketCalendar, overrides_from_store
+        from liminal_lib.sessions import MarketCalendar, overrides_from_store
 
         with self._lock:
             return self.store._cached(("calendar",), lambda: MarketCalendar(overrides_from_store(self.store)))
@@ -988,7 +988,7 @@ class BarEngine:
         bar. From ticks (a series of trades) they are exact; from finer bars they are of each
         bar's average price (derived). A bar with nothing finer inside it has none (a series of
         minute bars at a 1-minute interval)."""
-        from ..calc.profile import weighted_quartiles
+        from liminal_lib.calc.profile import weighted_quartiles
 
         bars = self._resampled(s, period, span, session)
         finer = BASE_SECONDS[s.kind] < PERIOD_SECONDS[period] * span and not self._windowed(s, period)
@@ -1025,7 +1025,7 @@ class BarEngine:
         bar's and its day's range and the last price. Not an order book: what traded, not what
         was resting. Exact prices from ticks where the feed has them; summed into price segments
         or spread from bars otherwise, which is derived and says so (calc/profile.py)."""
-        from ..calc.profile import from_bars, from_trades, nice_step
+        from liminal_lib.calc.profile import from_bars, from_trades, nice_step
 
         s = self.series(source, ticker, adjust)
         if s is None:

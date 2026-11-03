@@ -8,10 +8,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from liminal import gov, mongo, stores
-from liminal.sources.registry import publishers
-from liminal.storage import Store
-from liminal.storage.documents import GOV_ITEMS, NEWS, MongoDocuments, SqliteDocuments, copy
+from liminal_lib import gov, mongo, stores
+from liminal_lib.sources.registry import publishers
+from liminal_lib.storage import Store
+from liminal_lib.storage.documents import GOV_ITEMS, NEWS, MongoDocuments, SqliteDocuments, copy
 
 
 def _match(doc, flt):
@@ -295,8 +295,8 @@ def test_copy_twice_puts_nothing_twice(store, server):
 
 
 def test_the_plugin_page_shows_and_sets_its_stores(tmp_path):
-    from liminal.config import load_settings
-    from liminal.gui.server import ChartApp
+    from liminal_lib.config import load_settings
+    from liminal_app.gui.server import ChartApp
 
     main = tmp_path / "liminal.db"
     with Store(main, check_same_thread=False) as store:
@@ -316,15 +316,15 @@ def test_the_plugin_page_shows_and_sets_its_stores(tmp_path):
 
 
 def test_the_page_has_the_store_picker():
-    js = (Path(__file__).resolve().parents[1] / "src/liminal/gui/static/plugins.js").read_text(encoding="utf-8")
+    js = (Path(__file__).resolve().parents[1] / "src/liminal_app/gui/static/plugins.js").read_text(encoding="utf-8")
     assert "function storesHtml(name)" in js and "${storesHtml(p.name)}<h4>Databases</h4>" in js
     assert "if (e.target.matches('select.pl-store')) chooseStore(e.target);" in js
     assert "'/api/plugins/store'" in js and "/api/plugin-stores?name=" in js
 
 
 def test_the_hourly_sync_starts_a_history_run(tmp_path, monkeypatch):
-    from liminal import cli
-    from liminal.config import load_settings
+    from liminal_app import cli
+    from liminal_lib.config import load_settings
 
     settings = load_settings(env={"LIMINAL_DB": str(tmp_path / "liminal.db")}, env_file=None)
     started, lines = [], []
@@ -342,7 +342,7 @@ def test_the_hourly_sync_starts_a_history_run(tmp_path, monkeypatch):
 
 
 def test_the_commands(tmp_path, monkeypatch, capsys):
-    from liminal import cli
+    from liminal_app import cli
 
     monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "liminal.db"))
     assert cli.main(["stores"]) == 0

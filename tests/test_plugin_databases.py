@@ -12,15 +12,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from liminal import cli, config, datasets, gov, layout
-from liminal.config import load_settings
-from liminal.layout import GOV, MAIN, Database
-from liminal.sources import providers, publishers, registry
-from liminal.sources.publisher import Publisher
+from liminal_app import cli
+from liminal_lib import config, datasets, gov, layout
+from liminal_lib.config import load_settings
+from liminal_lib.layout import GOV, MAIN, Database
+from liminal_lib.sources import providers, publishers, registry
+from liminal_lib.sources.publisher import Publisher
 
 from .test_plugins import ACME
 
-STATIC = Path(__file__).resolve().parents[1] / "src" / "liminal" / "gui" / "static"
+STATIC = Path(__file__).resolve().parents[1] / "src" / "liminal_app" / "gui" / "static"
 FEDERAL_READ = ("what Federal Reserve, New York Fed, SEC, Bureau of Labor Statistics and Federal Register read, "
                 "and the reads' record: requests, robots.txt, rechecks")
 
@@ -105,8 +106,8 @@ def test_a_file_of_a_plugins_own_is_no_other_plugins_and_every_feed_and_dataset_
 
 
 def test_the_layout_is_where_the_store_gov_and_datasets_keep_them(tmp_path):
-    from liminal.storage import Store
-    from liminal.storage.feeds import _Feed
+    from liminal_lib.storage import Store
+    from liminal_lib.storage.feeds import _Feed
 
     main = tmp_path / "liminal.db"
     with Store(main) as store:
@@ -180,8 +181,8 @@ def test_a_publishers_own_databases_are_its_and_its_plugins(installed):
 
 
 def test_the_plugins_command_and_view_point_each_plugin_to_its_databases(tmp_path, monkeypatch, capsys):
-    from liminal.gui.server import ChartApp
-    from liminal.storage import Store
+    from liminal_app.gui.server import ChartApp
+    from liminal_lib.storage import Store
 
     monkeypatch.setattr(config, "read_env_file", lambda path: {})
     assert cli.main(["plugins", "--json"]) == 0

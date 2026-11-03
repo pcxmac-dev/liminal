@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from liminal.gui import server
+from liminal_app.gui import server
 
 STATIC = Path(server.__file__).parent / "static"
 

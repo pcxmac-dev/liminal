@@ -9,12 +9,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from liminal import cli, composite, config
-from liminal.config import Tier, load_settings
-from liminal.sources import (build_source, feed_profiles, is_archive, markets, provider, providers,
+from liminal_app import cli
+from liminal_lib import composite, config
+from liminal_lib.config import Tier, load_settings
+from liminal_lib.sources import (build_source, feed_profiles, is_archive, markets, provider, providers,
                                      rate_window, registry, supports)
-from liminal.sources.registry import KeyVar, Provider
-from liminal.symbols import resolve
+from liminal_lib.sources.registry import KeyVar, Provider
+from liminal_lib.symbols import resolve
 
 from .conftest import FakeSource
 
@@ -22,11 +23,11 @@ BUILT_IN: list[str] = []  # none left in sources/plugins/ (2026-11-01): every pr
 # Released on their own (pyproject.toml: the `plugins` extra) and installed beside the app: the suite
 # sees them as the user's app does (tests/conftest.py), each with its distribution's version.
 PACKAGED = {  # name: (its distribution's version, the contract it needs, its entry point's value)
-    "bitstamp": ("1.3.0", "1.6", "liminal_plugin_bitstamp:PLUGIN"), "coinbase": ("1.3.0", "1.6", "liminal_plugin_coinbase:PLUGIN"),
-    "bitfinex": ("1.2.0", "1.6", "liminal_plugin_bitfinex:PLUGIN"), "cboe": ("1.2.0", "1.6", "liminal_plugin_cboe:PLUGIN"),
-    "tiingo": ("1.4.0", "1.10", "liminal_plugin_tiingo"), "tiingofx": ("1.4.0", "1.10", "liminal_plugin_tiingo"),
-    "alpaca": ("1.4.0", "1.11", "liminal_plugin_alpaca"), "boats": ("1.4.0", "1.11", "liminal_plugin_alpaca"),
-    "massive": ("1.4.0", "1.11", "liminal_plugin_massive")}
+    "bitstamp": ("1.3.1", "1.6", "liminal_plugin_bitstamp:PLUGIN"), "coinbase": ("1.3.1", "1.6", "liminal_plugin_coinbase:PLUGIN"),
+    "bitfinex": ("1.2.1", "1.6", "liminal_plugin_bitfinex:PLUGIN"), "cboe": ("1.2.1", "1.6", "liminal_plugin_cboe:PLUGIN"),
+    "tiingo": ("1.4.1", "1.10", "liminal_plugin_tiingo"), "tiingofx": ("1.4.1", "1.10", "liminal_plugin_tiingo"),
+    "alpaca": ("1.4.1", "1.11", "liminal_plugin_alpaca"), "boats": ("1.4.1", "1.11", "liminal_plugin_alpaca"),
+    "massive": ("1.4.1", "1.11", "liminal_plugin_massive")}
 TIINGO_BOATS = "tiingoboats"  # Tiingo's Blue Ocean feed, live: its package's
 IEX_FEED = "iex"  # Alpaca's IEX stream, live: its package's
 FEEDS = ["massive", "alpaca", "boats", "bitstamp", "coinbase", "bitfinex", "cboe", "tiingo", "tiingofx"]  # all, in order
@@ -100,7 +101,7 @@ def test_what_each_built_in_serves_follows_its_keys():
 
 
 def test_composite_and_audits_read_the_plugins_facts():
-    from liminal import audit, initializer
+    from liminal_lib import audit, initializer
 
     assert composite.reference("crypto") == "coinbase" and composite.reference("stock") is None
     assert composite.feed_kind("alpaca", "stock") == "consolidated"
@@ -154,8 +155,8 @@ def test_a_plugin_that_fails_to_load_is_left_out_and_reported(installed):
 
 
 def test_of_two_plugins_of_one_name_the_first_in_order_is_kept(installed):
-    from liminal.sources import publishers
-    from liminal.sources.publisher import Policy, Publisher
+    from liminal_lib.sources import publishers
+    from liminal_lib.sources.publisher import Policy, Publisher
 
     # every plugin is a package: of two of one name, the first in order is kept, the other reported
     owner_feed = replace(ACME, name="own", title="Owner", order=-6)
@@ -176,9 +177,9 @@ def test_a_module_dropped_into_sources_plugins_still_loads_and_keeps_its_name(tm
     start with origin "built in" and, of two plugins of one name, kept over any package whatever the order."""
     import sys
 
-    from liminal.sources import plugins as dropins
+    from liminal_lib.sources import plugins as dropins
 
-    (tmp_path / "dropin.py").write_text("""from liminal.sources.registry import Provider
+    (tmp_path / "dropin.py").write_text("""from liminal_lib.sources.registry import Provider
 PLUGIN = Provider(name='dropin', title='Dropped in', build=lambda s, b: None, assets=frozenset({'stock'}), order=500)
 """, encoding="utf-8")
     monkeypatch.setattr(dropins, "__path__", [*dropins.__path__, str(tmp_path)])
@@ -189,7 +190,7 @@ PLUGIN = Provider(name='dropin', title='Dropped in', build=lambda s, b: None, as
         assert provider("dropin").origin == "built in"
         assert "a second provider named 'dropin': the first kept (built in)" in dict(registry.errors())["package: rival:PLUGIN"]
     finally:
-        sys.modules.pop("liminal.sources.plugins.dropin", None)
+        sys.modules.pop("liminal_lib.sources.plugins.dropin", None)
 
 
 def test_a_module_may_give_several_providers(installed):
@@ -211,7 +212,7 @@ def test_a_contract_version_takes_its_own_major_and_no_newer_minor():
 
 
 def test_every_plugin_is_versioned_for_this_apps_contract():
-    from liminal.sources import publishers
+    from liminal_lib.sources import publishers
 
     plugins_ = [*providers().values(), *publishers().values()]
     # the feeds; Federal with its six agencies, Massive's headlines, Ken French's and Datahub's datasets
@@ -221,10 +222,10 @@ def test_every_plugin_is_versioned_for_this_apps_contract():
     # too; Federal declares the SEC's GOV_CONTACT and the CFTC's dataset (1.4), as the dataset
     # libraries their datasets; Federal's feeds their parsers (1.7); Massive's headlines are released
     # with Massive, which declares where they are (1.8: the main file's news)
-    want = {"massive-news": ("1.4.0", "1.11"),  # Massive's headlines: released with Massive's package
+    want = {"massive-news": ("1.4.1", "1.11"),  # Massive's headlines: released with Massive's package
             **{n: (v, a) for n, (v, a, _) in PACKAGED.items()},  # the packages: their distributions' versions
-            **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("1.4.0", "1.7")),  # its package's
-            "french": ("1.1.0", "1.4"), "datahub": ("1.1.0", "1.4")}  # the dataset libraries: packages too
+            **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("1.4.1", "1.7")),  # its package's
+            "french": ("1.1.1", "1.4"), "datahub": ("1.1.1", "1.4")}  # the dataset libraries: packages too
     assert {p.name: (p.version, p.api) for p in plugins_} == want
     assert all(registry.api_refusal(p.api) is None for p in plugins_)
     assert registry.PLUGIN_API == "1.11"
@@ -235,7 +236,7 @@ def test_a_plugins_parts_are_released_with_it():
     be separate from massive same thing with federal agencies and federal"): each built-in part, a
     feed (Alpaca's Blue Ocean, Tiingo's forex) or a publisher (Massive's headlines, Federal's
     agencies), has its plugin's version and contract."""
-    from liminal.sources import publishers
+    from liminal_lib.sources import publishers
 
     feeds, pubs = providers(), publishers()
     release = {n: (p.version, p.api) for n, p in [*feeds.items(), *pubs.items()]}
@@ -247,8 +248,8 @@ def test_a_plugins_parts_are_released_with_it():
 
 
 def test_a_plugin_for_another_major_is_left_out_and_reported_and_a_matching_one_loads(installed):
-    from liminal.sources import publishers
-    from liminal.sources.publisher import Policy, Publisher
+    from liminal_lib.sources import publishers
+    from liminal_lib.sources.publisher import Policy, Publisher
 
     def acme(name, api, **kw):
         return replace(ACME, name=name, title=name, keys=(), plan_vars=(), api=api, **kw)
@@ -294,7 +295,7 @@ def test_every_installed_plugin_package_loads(monkeypatch):
     are in their repositories. None installed: nothing to load."""
     from importlib.metadata import entry_points
 
-    from liminal.sources import publishers
+    from liminal_lib.sources import publishers
 
     eps = list(entry_points(group=registry.ENTRY_POINTS))
     monkeypatch.setattr(registry, "_entry_points", lambda: eps)
@@ -336,35 +337,35 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
     # the agencies are Federal's parts; Massive's headlines are in Massive's row; the dataset libraries
     assert list(pubs) == ["federal", "french", "datahub"]
     assert [r["name"] for r in pubs["federal"]["parts"]] == ["fed", "nyfed", "sec", "bls", "fedreg", "cftc"]
-    assert (pubs["federal"]["version"], pubs["federal"]["api"]) == ("1.4.0", "1.7")
+    assert (pubs["federal"]["version"], pubs["federal"]["api"]) == ("1.4.1", "1.7")
     assert pubs["federal"]["parts"][-1]["datasets"] == ["cftc-cot-legacy"] and len(pubs["french"]["datasets"]) == 4
     assert [k["name"] for k in pubs["federal"]["keys"]] == ["GOV_CONTACT"]  # the SEC's, set for the plugin
     massive = next(r for r in out["providers"] if r["name"] == "massive")
-    assert [(r["name"], r["version"], r["account"]) for r in massive["publishers"]] == [("massive-news", "1.4.0", "massive")]
+    assert [(r["name"], r["version"], r["account"]) for r in massive["publishers"]] == [("massive-news", "1.4.1", "massive")]
     assert cli.main(["plugins"]) == 0
     text = capsys.readouterr().out
     assert text.startswith(f"Plugin API {registry.PLUGIN_API}")
-    assert "[1.2.0 for plugin API 1.6, package: liminal-plugin-bitfinex (liminal_plugin_bitfinex:PLUGIN)]" in text
-    assert any(line.startswith("federal") and "[1.4.0 for plugin API 1.7, package: liminal-plugin-federal (liminal_plugin_federal)]" in line
+    assert "[1.2.1 for plugin API 1.6, package: liminal-plugin-bitfinex (liminal_plugin_bitfinex:PLUGIN)]" in text
+    assert any(line.startswith("federal") and "[1.4.1 for plugin API 1.7, package: liminal-plugin-federal (liminal_plugin_federal)]" in line
                and "you set: GOV_CONTACT" in line
                for line in text.splitlines())
     assert any(line.strip().startswith("and Federal Reserve (fed):") for line in text.splitlines())
-    assert "[1.4.0 for plugin API 1.11, package: liminal-plugin-alpaca (liminal_plugin_alpaca)]" in text
-    assert "[1.3.0 for plugin API 1.6, package: liminal-plugin-bitstamp (liminal_plugin_bitstamp:PLUGIN)]" in text
+    assert "[1.4.1 for plugin API 1.11, package: liminal-plugin-alpaca (liminal_plugin_alpaca)]" in text
+    assert "[1.3.1 for plugin API 1.6, package: liminal-plugin-bitstamp (liminal_plugin_bitstamp:PLUGIN)]" in text
     assert any(line.strip().startswith("and Massive headlines (publisher massive-news):") for line in text.splitlines())
     assert not any(line.startswith("massive-news") for line in text.splitlines())
 
 
 def test_the_plugins_view_shows_each_plugins_version_and_origin(tmp_path):
-    from liminal.gui.server import ChartApp
-    from liminal.storage import Store
+    from liminal_app.gui.server import ChartApp
+    from liminal_lib.storage import Store
 
     with Store(tmp_path / "m.db") as store:
         out = ChartApp(store, settings=load_settings(env={}, env_file=None)).plugins()
     assert out["api"] == registry.PLUGIN_API
     assert {(p["version"], p["api"], p["origin"]) for p in out["plugins"]} == {
         *((v, a, f"package: liminal-plugin-{registry.plugin_of(n)} ({e})") for n, (v, a, e) in PACKAGED.items())}
-    assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.4.0", "1.7"), ("1.4.0", "1.11"), ("1.1.0", "1.4")}
+    assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.4.1", "1.7"), ("1.4.1", "1.11"), ("1.1.1", "1.4")}
 
 
 def test_unknown_providers_are_refused_by_name():
@@ -401,8 +402,8 @@ def test_the_providers_are_listed_even_with_a_wrong_setting(monkeypatch, capsys)
 
 
 def test_the_fetcher_tabs_carry_each_plugins_key_hints(tmp_path):
-    from liminal.gui.server import ChartApp
-    from liminal.storage import Store
+    from liminal_app.gui.server import ChartApp
+    from liminal_lib.storage import Store
 
     with Store(tmp_path / "m.db") as store:
         app = ChartApp(store, settings=load_settings(env={"MASSIVE_API_KEY": "k"}, env_file=None))
@@ -415,7 +416,7 @@ def test_the_fetcher_tabs_carry_each_plugins_key_hints(tmp_path):
 
 
 def test_plugin_tiers_keep_their_history_start():
-    from liminal.collector import history_floor
+    from liminal_lib.collector import history_floor
 
     tiingo = load_settings(env={}, env_file=None).for_source("tiingo").tier
     assert history_floor(tiingo, date(2026, 10, 27)) == date(1962, 1, 1)
@@ -487,8 +488,8 @@ def test_the_scan_verifies_the_rate_kept_against_its_servers_and_the_lower_is_us
 
 
 def test_the_limit_found_is_read_from_the_scan_kept_in_the_database(tmp_path):
-    from liminal import sourcing
-    from liminal.storage import Store
+    from liminal_lib import sourcing
+    from liminal_lib.storage import Store
 
     with Store(tmp_path / "m.db") as store:
         store.kv_set(sourcing.SCAN_KEY.format("alpaca"), json.dumps({"at": "2026-10-28T12:00:00", "results": [],
@@ -588,8 +589,8 @@ def test_tiingos_forex_is_a_feed_of_the_tiingo_plugin():
 def test_a_feed_on_a_plugins_keys_is_named_by_that_plugin_never_as_a_source_of_its_own():
     """The user, 2026-10-30: "the source isn't blue ocean its alpaca w/ blue ocean"; "house all alpaca in
     alpaca"."""
-    from liminal import live
-    from liminal.gui.server import feed_labels
+    from liminal_lib import live
+    from liminal_app.gui.server import feed_labels
 
     assert registry.label("alpaca") == "alpaca" and registry.label("boats") == "alpaca (blue ocean)"
     assert registry.label("tiingofx") == "tiingo (forex)" and registry.label("massive") == "massive"

@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from liminal.gui import server
-from liminal.gui.server import ChartApp
-from liminal.storage import Store
+from liminal_app.gui import server
+from liminal_app.gui.server import ChartApp
+from liminal_lib.storage import Store
 
 STATIC = Path(server.__file__).parent / "static"
 ET_MIDNIGHT = lambda d: int(datetime(d.year, d.month, d.day, 4).timestamp() * 1000)  # noqa: E731 (EDT)

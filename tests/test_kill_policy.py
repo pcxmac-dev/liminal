@@ -9,12 +9,13 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import requests
 
-from liminal import cli, killswitch, live, proc
-from liminal.collector import sync
+from liminal_app import cli
+from liminal_lib import killswitch, live, proc
+from liminal_lib.collector import sync
 from liminal_plugin_massive import TIERS
-from liminal.errors import NotEntitled, RateLimited, SourceError
-from liminal.gui import activity
-from liminal.storage import Store
+from liminal_lib.errors import NotEntitled, RateLimited, SourceError
+from liminal_app.gui import activity
+from liminal_lib.storage import Store
 
 from .conftest import FakeSource
 
@@ -193,7 +194,7 @@ def test_nothing_is_sent_to_a_killed_feed(tmp_path, monkeypatch, capsys):
 
 
 def test_the_fetcher_view_shows_a_killed_feed(store):
-    from liminal.config import load_settings
+    from liminal_lib.config import load_settings
 
     killswitch.strike(store, "coinbase", "fetch", "rate limited", now=NOW)
     rows = activity.health(store, load_settings(), NOW + timedelta(minutes=1), [], None)
@@ -213,12 +214,12 @@ def test_outcomes_add_up_per_feed(store):
 def test_the_recorder_ends_other_recorders_but_not_itself_or_its_launcher(monkeypatch):
     me = proc.os.getpid()
     rows = [(1, 0, "explorer.exe"),
-            (500, 1, r'"C:\venv\Scripts\pythonw.exe" -m liminal live'),  # this recorder's launcher
-            (me, 500, r"C:\Python\pythonw.exe -m liminal live"),
-            (700, 1, r"C:\venv\Scripts\pythonw.exe -m liminal live"),  # a stray, and its child
-            (701, 700, r"C:\Python\pythonw.exe -m liminal live"),
-            (800, 1, r"C:\venv\Scripts\python.exe -m liminal live status"),
-            (900, 1, r"C:\venv\Scripts\python.exe -m liminal sync")]
+            (500, 1, r'"C:\venv\Scripts\pythonw.exe" -m liminal_app live'),  # this recorder's launcher
+            (me, 500, r"C:\Python\pythonw.exe -m liminal_app live"),
+            (700, 1, r"C:\venv\Scripts\pythonw.exe -m liminal_app live"),  # a stray, and its child
+            (701, 700, r"C:\Python\pythonw.exe -m liminal_app live"),
+            (800, 1, r"C:\venv\Scripts\python.exe -m liminal_app live status"),
+            (900, 1, r"C:\venv\Scripts\python.exe -m liminal_app sync")]
     monkeypatch.setattr(proc, "processes", lambda: rows)
     assert sorted(live.recorders()) == [700, 701]
     ended, logged = [], []
@@ -233,7 +234,7 @@ def test_tests_cannot_see_or_end_this_machines_processes():
 
 
 def test_an_offline_copy_says_so_rather_than_unable_to_fetch(store, monkeypatch, tmp_path):
-    from liminal.config import load_settings
+    from liminal_lib.config import load_settings
 
     monkeypatch.setenv("LIMINAL_OFFLINE", "1")
     out = activity.activity(store, load_settings(), tmp_path / "m.db", "massive")
@@ -243,10 +244,10 @@ def test_an_offline_copy_says_so_rather_than_unable_to_fetch(store, monkeypatch,
 
 
 def test_tests_cannot_start_processes_from_the_chart_app():
-    from liminal.gui import server
+    from liminal_app.gui import server
 
     with pytest.raises(AssertionError, match="tried to start a process"):
-        server.subprocess.Popen(["python", "-m", "liminal", "sync"])  # conftest: a test once started a real sync
+        server.subprocess.Popen(["python", "-m", "liminal_app", "sync"])  # conftest: a test once started a real sync
 
 
 def test_a_feed_on_another_feeds_account_is_killed_with_it_for_as_long_as_the_server_asked(store):
@@ -264,7 +265,7 @@ def test_a_feed_on_another_feeds_account_is_killed_with_it_for_as_long_as_the_se
 
 
 def test_a_429_carries_its_wait_and_a_key_with_a_line_break_is_never_sent_or_repeated():
-    from liminal.errors import Unauthorized
+    from liminal_lib.errors import Unauthorized
     from liminal_plugin_massive.client import MassiveClient
 
     from .conftest import FakeResponse, FakeSession
@@ -295,7 +296,7 @@ def test_a_429_carries_its_wait_and_a_key_with_a_line_break_is_never_sent_or_rep
 
 
 def test_keys_are_read_without_the_spaces_and_line_breaks_around_them():
-    from liminal.config import load_settings
+    from liminal_lib.config import load_settings
 
     s = load_settings(env={"MASSIVE_API_KEY": " mk\r\n", "TIINGO_API_KEY": "tk\n", "ALPACA_API_KEY_ID": " id ",
                            "ALPACA_API_SECRET_KEY": "sk\n"}, env_file=None)

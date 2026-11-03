@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from liminal.calc.derivatives import (Model, apply_model, savgol_derivative, savgol_derivative_causal,
+from liminal_lib.calc.derivatives import (Model, apply_model, savgol_derivative, savgol_derivative_causal,
                                               segments)
 
 ET = "America/New_York"
@@ -156,7 +156,7 @@ def test_the_fourier_model_keeps_the_slow_cycles_and_removes_the_fast_ones():
     import numpy as np
     import pandas as pd
 
-    from liminal.calc.derivatives import Model, apply_model, fourier_lowpass
+    from liminal_lib.calc.derivatives import Model, apply_model, fourier_lowpass
 
     t = np.arange(600, dtype=float)
     slow = 5 * np.sin(2 * np.pi * t / 200)  # a 200-bar cycle

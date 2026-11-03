@@ -1,4 +1,4 @@
-"""Command-line interface: `python -m liminal <command>`."""
+"""Command-line interface: `liminal <command> (python -m liminal_app)`."""
 from __future__ import annotations
 
 import argparse
@@ -12,19 +12,19 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
-from . import analysis, charts, collector, config
-from .config import ConfigError, Settings, load_settings
-from .storage.feeds import TicksBlocked
-from .errors import NotEntitled, RateLimited, SourceError, Unauthorized
-from .sessions import ET
-from .symbols import resolve
-from .sources import DataSource, build_source, feed_profiles, is_archive, providers, supports
-from .storage import COMPOSITE, Store, feeds_backup_dir
-from .host import attach_fetcher, wait_for_fetcher, wait_for_requests  # noqa: F401 (the fetcher's clients' side)
-from .logs import LOG_KEEP, LOG_MAX_BYTES, Logger  # noqa: F401
-from .proc import hold_until_interrupted
-from .sources import feed_closed as _feed_closed
-from .stores import HISTORY_BUDGET_S, HISTORY_LOCK, history_due  # noqa: F401
+from liminal_lib import analysis, charts, collector, config
+from liminal_lib.config import ConfigError, Settings, load_settings
+from liminal_lib.storage.feeds import TicksBlocked
+from liminal_lib.errors import NotEntitled, RateLimited, SourceError, Unauthorized
+from liminal_lib.sessions import ET
+from liminal_lib.symbols import resolve
+from liminal_lib.sources import DataSource, build_source, feed_profiles, is_archive, providers, supports
+from liminal_lib.storage import COMPOSITE, Store, feeds_backup_dir
+from liminal_lib.host import attach_fetcher, wait_for_fetcher, wait_for_requests  # noqa: F401 (the fetcher's clients' side)
+from liminal_lib.logs import LOG_KEEP, LOG_MAX_BYTES, Logger  # noqa: F401
+from liminal_lib.proc import hold_until_interrupted
+from liminal_lib.sources import feed_closed as _feed_closed
+from liminal_lib.stores import HISTORY_BUDGET_S, HISTORY_LOCK, history_due  # noqa: F401
 
 TASK_NAME = "LiminalSync"
 
@@ -53,7 +53,7 @@ def prune_backups(folder: Path, keep: int) -> list[str]:
     return removed
 
 
-from .proc import pid_alive  # noqa: E402,F401  (kept here for callers that import it from cli)
+from liminal_lib.proc import pid_alive  # noqa: E402,F401  (kept here for callers that import it from cli)
 
 _HELD: set[str] = set()  # run locks this process holds
 
@@ -74,7 +74,7 @@ def run_lock(db_path: Path, feed: str | None = None) -> Iterator[None]:
     so the two never both go on). The locks name their owners by id and start (proc.py): a run
     that crashed, or whose id the system gave to another process since, does not hold one; one
     that is alive does, however long it has run (a laptop asleep mid-sync wakes holding it)."""
-    from . import proc
+    from liminal_lib import proc
 
     lock, whole = proc.run_lock_path(db_path, feed), proc.run_lock_path(db_path)
     if str(lock) in _HELD:  # this process holds it already
@@ -121,7 +121,7 @@ def api_run(args, settings: Settings, command: str, lock: bool = True) -> Iterat
     with Store(settings.db_path) as store, (run_lock(settings.db_path, args.source) if lock else nullcontext()):
         if lock:
             store.close_abandoned_runs(args.source)  # we hold its lock, so a run of it still "running" died
-        from . import killswitch
+        from liminal_lib import killswitch
 
         kill = killswitch.killed(store, args.source, "fetch")
         if kill:  # the kill policy: nothing is sent to a killed feed until the kill ends or the user lifts it
@@ -204,7 +204,7 @@ def _share_limits(client, store: Store, name: str, log) -> None:
     import json
     import time
 
-    from .ratelimit import KvLedger, wait_key
+    from liminal_lib.ratelimit import KvLedger, wait_key
 
     limiter = client._limiter
 
@@ -281,7 +281,7 @@ def _note_tier(store: Store, settings: Settings, log) -> None:
 def reresolve(store: Store, feed: str) -> int:
     """Set a feed's symbols back to `auto` (found again on the next sync), except futures (their
     contracts decide) and the initializer's bulk symbols (kept at minutes). Returns symbols reset."""
-    from .initializer import load_bulk
+    from liminal_lib.initializer import load_bulk
 
     bulk = set(load_bulk(store))
     reset = [w["ticker"] for w in store.watchlist(feed)
@@ -304,7 +304,7 @@ def cmd_initialize(args, settings: Settings) -> int:
     every futures product of the CME Group exchanges among them (CME for all four) as its
     continuous chart onto every futures feed, most traded first (initializer.py). Sends no
     requests; the hourly syncs then backfill them in that order, within each feed's caps."""
-    from . import initializer
+    from liminal_lib import initializer
 
     feeds = [name for name, p in providers().items() if "stock" in p.assets]
     futures_feeds = [name for name, p in providers().items() if "future" in p.assets]
@@ -409,7 +409,7 @@ def _stores_pass(settings: Settings, log, history: bool = True):
     (MongoDB under its keeper if it is the one), and with `history` a `history run` attached for
     the feeds whose closed months go to DuckDB, unless one is going on (returned, to be held; the
     chart app holds its own). A failure is logged, never the sync's."""
-    from . import gov, stores
+    from liminal_lib import gov, stores
 
     try:
         with Store(settings.db_path) as store:
@@ -431,7 +431,7 @@ def _stores_pass(settings: Settings, log, history: bool = True):
 def start_history(db_path: Path):
     """Attach to the `history run` of this database (host.history_run): the host `history`, started
     if none answers (no window, a background priority once it runs). None: no answer."""
-    from . import host
+    from liminal_lib import host
 
     return host.history_run(db_path, log=Logger(db_path.parent / "logs" / "liminal.log"))
 
@@ -448,8 +448,8 @@ def cmd_history(args, settings: Settings) -> int:
     """Closed history (storage/history.py). `run`: copy the due closed months of the feeds whose
     bars go to DuckDB (stores.py), newest first, within --budget seconds (one run at a time); a halt
     of fetching ends it after the month in hand. `status`: each feed's months in DuckDB."""
-    from . import proc, provenance, stores
-    from .storage import history
+    from liminal_lib import proc, provenance, stores
+    from liminal_lib.storage import history
 
     if args.action == "status":
         with Store(settings.db_path) as store:
@@ -501,7 +501,7 @@ def cmd_history(args, settings: Settings) -> int:
 def cmd_mongo(args, settings: Settings) -> int:
     """The MongoDB server here (mongo.py): start it (bound to 127.0.0.1, its cache capped), stop it
     cleanly, or show it."""
-    from . import mongo
+    from liminal_lib import mongo
 
     data = settings.db_path.parent
     if args.action == "start":
@@ -531,8 +531,8 @@ def cmd_mongo(args, settings: Settings) -> int:
 def cmd_stores(args, settings: Settings) -> int:
     """Each plugin's stores by data type (stores.py): `list`; `pick PLUGIN TYPE ENGINE` (auto: the
     optimal); `settle`: move documents to the store wanted now (as the hourly sync does)."""
-    from . import gov, stores
-    from .sources.registry import plugin_of, providers, publisher_of, publishers
+    from liminal_lib import gov, stores
+    from liminal_lib.sources.registry import plugin_of, providers, publisher_of, publishers
 
     with Store(settings.db_path) as store:
         if args.action == "pick":
@@ -563,7 +563,7 @@ def start_feed(name: str, db_path: Path):
     """Attach to feed `name`'s run of this database (host.feed_run): the host `feed-NAME`, started
     if none answers. Its pass goes on while something holds it; let go, it stops at its next
     request. None: no answer."""
-    from . import host
+    from liminal_lib import host
 
     return host.feed_run(name, db_path, log=Logger(db_path.parent / "logs" / "liminal.log"))
 
@@ -576,7 +576,7 @@ def after_sync(args, settings: Settings) -> bool:
     what the feeds hold (no requests), and research datasets that are due. One such pass at a
     time (POST_LOCK): another going on, this one is left to it. Each series' build is also
     leased (derive.take_lease), so a run's own per-symbol builds never overlap it."""
-    from . import composite, proc
+    from liminal_lib import composite, proc
 
     logger = Logger(settings.db_path.parent / "logs" / "liminal.log")
     lock = settings.db_path.with_name(POST_LOCK)
@@ -589,7 +589,7 @@ def after_sync(args, settings: Settings) -> bool:
             composite.refresh(store, feed_profiles(settings), collector.now_et(), log=logger)
             _derive(store, tickers, logger)  # the time frames the feeds do not send, from what just arrived
             if args.all_sources and not tickers:  # research datasets fetched before, when due (never starts one)
-                from . import datasets
+                from liminal_lib import datasets
 
                 datasets.fetch(store, log=logger, only_started=True)
     finally:
@@ -601,7 +601,7 @@ def _fetch_gov(settings: Settings, log, force: bool = False) -> None:
     """The publisher plugins' due feeds (publications.py: the agencies, a vendor's headlines), each
     on its own schedule and under its scrape checks (`force`: every feed its floor allows); a
     failure is logged and never fails the caller."""
-    from . import publications
+    from liminal_lib import publications
 
     try:
         publications.run_due(settings, log, force=force)
@@ -631,7 +631,7 @@ def cmd_gov(args, settings: Settings) -> int:
     """Read the publishers' due feeds now (publications.py; the recorder reads them on their own
     schedules, the hourly sync when no recorder runs; --all: every feed its floor allows) and list
     each agency feed's state."""
-    from . import gov
+    from liminal_lib import gov
 
     if settings.offline:
         print("this copy of the app is offline (LIMINAL_OFFLINE): nothing is fetched")
@@ -762,7 +762,7 @@ def cmd_service(args, settings: Settings) -> int:
 
 def cmd_datasets(args, settings: Settings) -> int:
     """Research datasets: list them, fetch (or refresh) them, show a dataset's series or values."""
-    from . import datasets
+    from liminal_lib import datasets
 
     with Store(settings.db_path) as store:
         if args.action == "fetch":
@@ -810,7 +810,7 @@ def cmd_live(args, settings: Settings) -> int:
     its keys): run the recorder here, start it in the background, or show what it is recording."""
     import json
 
-    from . import live
+    from liminal_lib import live
 
     if args.action == "stop":  # every recorder on this machine (the strays of old versions too)
         print(f"{live.reap_strays(log=print)} recorder process(es) ended")
@@ -852,7 +852,7 @@ def cmd_live(args, settings: Settings) -> int:
 def make_recorder(settings: Settings, locks: list, stop=None):
     """The recorder of this database's live trades, holding `locks` (live.take_locks), stopping on
     `stop` (a host's, or its own)."""
-    from . import live
+    from liminal_lib import live
 
     # a night no stream has, polled by its plugin on its key's limits (Tiingo's Blue Ocean nights)
     boats = live.night_poller(settings)
@@ -865,7 +865,7 @@ def make_recorder(settings: Settings, locks: list, stop=None):
 def cmd_host(args, settings: Settings) -> int:
     """A resident host (host.py): a process that runs only while a client is attached to it, and
     ends, its data secured, once the last one has gone. `live`: the recorder (live.HOST)."""
-    from . import host, live
+    from liminal_lib import host, live
 
     log = Logger(settings.db_path.parent / "logs" / "liminal.log")
     if args.name == host.FETCHER:  # the fetcher (liminal-integrator): its requests and passes, its page and the data API
@@ -888,7 +888,7 @@ def cmd_host(args, settings: Settings) -> int:
         recorder = make_recorder(settings, locks, stop=h.stop)
         h.serve(lambda stop: recorder.run(), secure=lambda: live.release_locks(locks))  # run flushes on stop
         return 0
-    from . import mongo
+    from liminal_lib import mongo
 
     if args.name == mongo.KEEPER:  # the server's keeper: started for the first client, shut down after the last
         data = settings.db_path.parent
@@ -924,7 +924,7 @@ SUPERSEDED_KEY = "derive:superseded:v1"
 def _derive(store: Store, tickers, log) -> int:
     """Built bars a feed has since sent its own for go (once: later the database does it as they
     arrive), then the frames above 1 minute are built where anything changed (derive.py)."""
-    from . import derive
+    from liminal_lib import derive
 
     if not store.kv_get(SUPERSEDED_KEY):
         for feed in providers():
@@ -950,7 +950,7 @@ def cmd_kills(args, settings: Settings) -> int:
     kill by hand, or lifting one (only the user lifts a kill)."""
     from datetime import timedelta, timezone
 
-    from . import killswitch
+    from liminal_lib import killswitch
 
     feeds = list(providers()) + ["iex"]
     with Store(settings.db_path) as store:
@@ -984,7 +984,7 @@ def cmd_pruned(args, settings: Settings) -> int:
     list (repair-ticks). Nothing is deleted; no feed is asked for anything."""
     from datetime import datetime, timezone
 
-    from . import baddata, derive
+    from liminal_lib import baddata, derive
 
     log = Logger(settings.db_path.parent / "logs" / "liminal.log")
     with Store(settings.db_path) as store:
@@ -1033,7 +1033,7 @@ def cmd_inventory(args, settings: Settings) -> int:
     or not built yet; with --json, everything inventory.py reports."""
     import json
 
-    from . import inventory
+    from liminal_lib import inventory
 
     with Store(settings.db_path) as store:
         inv = inventory.symbol_inventory(store, args.ticker)
@@ -1118,7 +1118,7 @@ def cmd_plugins(args, settings: Settings | None) -> int:
     menu (listed even when a setting is wrong: settings is None then)."""
     import json
 
-    from .sources import registry
+    from liminal_lib.sources import registry
 
     rows = registry.menu(settings)
     pubs = registry.publisher_menu()
@@ -1161,7 +1161,7 @@ def cmd_sourcing(args, settings: Settings) -> int:
     and capabilities), and which source delivers each job's eras, unique or common, at what cost."""
     import json
 
-    from . import sourcing
+    from liminal_lib import sourcing
 
     feeds = feed_profiles(settings)
     with Store(settings.db_path) as store:
@@ -1181,7 +1181,7 @@ def cmd_capabilities(args, settings: Settings) -> int:
     """Each provider's capability scan (its plugin's `scan`): a few requests asking what its plan
     really gives, within its caps like any run; kept and shown in its report (`sourcing`). A
     plugin's name scans each of its feeds (Alpaca: Blue Ocean's too)."""
-    from .sources.registry import plugin_feeds
+    from liminal_lib.sources.registry import plugin_feeds
 
     names = plugin_feeds(args.name) if args.name else [n for n, p in providers().items() if p.scan]
     for name in names:
@@ -1208,7 +1208,7 @@ def _scan(name: str, source, store: Store, log, due_days: float | None = None, s
     the run goes on."""
     import json
 
-    from . import sourcing
+    from liminal_lib import sourcing
 
     p = providers().get(name)
     if p is None or p.scan is None:
@@ -1235,8 +1235,8 @@ def _scan(name: str, source, store: Store, log, due_days: float | None = None, s
         log(f"{name}: {'yes' if ok else 'no '} {what}" + (f": {detail}" if detail else ""))
     client = getattr(source, "client", None)
     if settings is not None and found.limits.get("perMinute") is not None and hasattr(client, "tighten"):
-        from .ratelimit import describe
-        from .sources.registry import rate_window
+        from liminal_lib.ratelimit import describe
+        from liminal_lib.sources.registry import rate_window
 
         n, s = rate_window(p.account or name, settings)  # its limiter's (its account's), with what was just kept
         if client.tighten(n, s):
@@ -1332,7 +1332,7 @@ def daily_audit_text(a: dict, show: int = 10) -> str:
 
 def cmd_audit(args, settings: Settings) -> int:
     """Audit stored spans against another feed: the second copy is compared, never stored."""
-    from . import audit
+    from liminal_lib import audit
 
     if args.daily:
         with Store(settings.db_path) as store:
@@ -1520,20 +1520,20 @@ def _ns(ns: int) -> str:
 
 def cmd_admin(args, settings: Settings) -> int:
     if args.action == "split-feeds":
-        from .splitfeeds import split
+        from liminal_lib.splitfeeds import split
 
         with run_lock(settings.db_path):  # no sync may write while the data moves
             split(settings.db_path, log=print)
         return 0
     if args.action == "memory":  # no database needed
-        from . import memory
+        from liminal_lib import memory
 
         print(memory.report(memory.measure(max(0.0, args.seconds))))
         return 0
     if args.action == "backup" and args.ticks and _ticks_refused("backup --ticks", settings):
         return 2
     if args.action == "compact":  # by copying (storage/admin.compact_file); this store closed before any swap
-        from .storage.admin import compact_file
+        from liminal_lib.storage.admin import compact_file
 
         with Store(settings.db_path) as store:
             files = store.data_files()
@@ -1632,7 +1632,7 @@ def _ticks_refused(what: str, settings: Settings) -> bool:
 def cmd_export(args, settings: Settings) -> int:
     if args.kind == "trades" and _ticks_refused("export of trades", settings):
         return 2
-    from .derive import day_zone
+    from liminal_lib.derive import day_zone
 
     zone = day_zone(resolve(args.ticker).asset)  # whole days where the series has them: New York, or UTC (crypto, fx)
     with Store(settings.db_path) as store:
@@ -1667,7 +1667,7 @@ def cmd_schedule(args, settings: Settings) -> int:
     exe = Path(sys.executable)
     pythonw = exe.with_name("pythonw.exe")  # no console window popping up every hour
     runner = pythonw if pythonw.exists() else exe
-    command = f'"{runner}" -m liminal sync'
+    command = f'"{runner}" -m liminal_app sync'
     return subprocess.call([
         "schtasks", "/Create", "/TN", TASK_NAME, "/TR", command,
         "/SC", "HOURLY", "/MO", str(args.every_hours), "/F",
@@ -1954,10 +1954,10 @@ def main(argv: list[str] | None = None) -> int:
             if not getattr(args, "settings_optional", False):
                 raise
             return args.func(args, None)  # the providers are listed even with a wrong setting
-        from . import sourcing
-        from .storage.feeds import set_tick_access
+        from liminal_lib import sourcing
+        from liminal_lib.storage.feeds import set_tick_access
 
-        from .storage import set_read_only
+        from liminal_lib.storage import set_read_only
 
         set_read_only(settings.read_only)  # LIMINAL_READONLY: every store this command opens reads only
         settings = sourcing.apply_detected(settings)  # each plugin's plan as its scan found it, unless you set it

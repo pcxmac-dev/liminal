@@ -10,9 +10,10 @@ from dataclasses import replace
 
 import pytest
 
-from liminal import cli, host as hosting
-from liminal.config import load_settings
-from liminal.storage import Store
+from liminal_app import cli
+from liminal_lib import host as hosting
+from liminal_lib.config import load_settings
+from liminal_lib.storage import Store
 
 
 class FakeAttachment:
@@ -87,8 +88,8 @@ def test_the_history_host_ends_after_the_month_in_hand_once_let_go(tmp_path, mon
     (run,), (h,) = runs, FakeHost.made
     assert h.name == "history" and run.action == "run" and run.budget == cli.HISTORY_BUDGET_S and run._stop is h.stop
     # cmd_history's own stop check: the host's event, as well as a halt
-    from liminal import proc
-    from liminal.storage import history
+    from liminal_lib import proc
+    from liminal_lib.storage import history
 
     seen: list = []
 

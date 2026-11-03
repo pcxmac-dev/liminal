@@ -5,9 +5,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from liminal.calc.profile import from_bars, from_trades, nice_step, weighted_quartiles
-from liminal.gui.bars import BarEngine, Style, calendar_key
-from liminal.storage import Store
+from liminal_lib.calc.profile import from_bars, from_trades, nice_step, weighted_quartiles
+from liminal_app.gui.bars import BarEngine, Style, calendar_key
+from liminal_lib.storage import Store
 
 ET = "America/New_York"
 

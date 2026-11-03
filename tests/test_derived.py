@@ -7,9 +7,9 @@ from datetime import datetime, timezone
 import pandas as pd
 import pytest
 
-from liminal import derive
-from liminal.gui.bars import BarEngine
-from liminal.storage import Store, feeds
+from liminal_lib import derive
+from liminal_app.gui.bars import BarEngine
+from liminal_lib.storage import Store, feeds
 
 ET = "America/New_York"
 
@@ -125,8 +125,8 @@ def test_the_chart_marks_what_was_built(store):
 def test_exchange_candles_are_published_as_each_minute_closes():
     from datetime import datetime as dt
 
-    from liminal import freshness
-    from liminal.sources import provider
+    from liminal_lib import freshness
+    from liminal_lib.sources import provider
 
     now = dt(2026, 10, 24, 7, 30, 20, tzinfo=pd.Timestamp("2026-10-24", tz="UTC").tzinfo)
     exp = freshness.expected("crypto", provider("coinbase").tier, now)
@@ -136,8 +136,8 @@ def test_exchange_candles_are_published_as_each_minute_closes():
 def test_a_feed_fetches_its_own_minutes_where_it_only_has_built_ones(store):
     from datetime import date, datetime as dt, timezone
 
-    from liminal.sources import provider
-    from liminal.coverage import FeedProfile, plan
+    from liminal_lib.sources import provider
+    from liminal_lib.coverage import FeedProfile, plan
 
     cb = FeedProfile("coinbase", provider("coinbase").tier, frozenset({"crypto"}), 0, venues={"crypto": "coinbase"})
     feeds = {"coinbase": cb}
@@ -154,8 +154,8 @@ def test_a_feed_fetches_its_own_minutes_where_it_only_has_built_ones(store):
 def test_a_coarser_frame_is_fetched_only_as_far_as_its_bars_are_complete():
     from datetime import datetime as dt, timezone
 
-    from liminal.sources import provider
-    from liminal.coverage import frontier_ms
+    from liminal_lib.sources import provider
+    from liminal_lib.coverage import frontier_ms
 
     # 7:32:20 once the exchange's newest minutes have settled (freshness.SETTLE: 3 minutes)
     now = dt(2026, 10, 24, 7, 35, 20, tzinfo=timezone.utc)
@@ -169,7 +169,7 @@ def test_a_coarser_frame_is_fetched_only_as_far_as_its_bars_are_complete():
 def test_only_seconds_minutes_and_days_are_fetched_every_other_frame_is_built(store):
     from datetime import datetime as dt, timedelta
 
-    from liminal.collector import ET, sync
+    from liminal_lib.collector import ET, sync
     from liminal_plugin_massive import TIERS
 
     from .conftest import FakeSource
@@ -195,9 +195,9 @@ def test_only_seconds_minutes_and_days_are_fetched_every_other_frame_is_built(st
 
 
 def test_seconds_can_go_on_past_the_second_layer_interpolated_from_minutes(store, monkeypatch):
-    from liminal.gui import bars as gui_bars
-    from liminal.gui.bars import BarEngine
-    from liminal.gui.profile_gaps import uncovered
+    from liminal_app.gui import bars as gui_bars
+    from liminal_app.gui.bars import BarEngine
+    from liminal_app.gui.profile_gaps import uncovered
 
     monkeypatch.setattr(gui_bars, "INTERPOLATED", frozenset({"BTCUSD"}))  # off for every symbol now
 
@@ -270,7 +270,7 @@ def test_the_status_bar_hears_what_is_being_built_while_it_runs(store):
     import json
     from datetime import datetime, timezone
 
-    from liminal.gui.activity import derive_progress
+    from liminal_app.gui.activity import derive_progress
 
     now = datetime(2026, 10, 24, 12, tzinfo=timezone.utc)
     at = int(now.timestamp() * 1000)

@@ -8,11 +8,11 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from liminal import gov, killswitch, publications
-from liminal.gov import GovDB
-from liminal.sessions import ET
-from liminal.sources import providers, publishers
-from liminal.sources.publisher import Feed, Policy, Publisher
+from liminal_lib import gov, killswitch, publications
+from liminal_lib.gov import GovDB
+from liminal_lib.sessions import ET
+from liminal_lib.sources import providers, publishers
+from liminal_lib.sources.publisher import Feed, Policy, Publisher
 
 RSS = """<?xml version="1.0"?><rss version="2.0"><channel><item><title>FOMC statement</title>
 <link>https://www.federalreserve.gov/a.htm</link><guid>a</guid><pubDate>Wed, 28 Oct 2026 18:00:00 GMT</pubDate></item></channel></rss>"""
@@ -71,7 +71,7 @@ def test_each_agency_is_a_publisher_of_its_own_and_massives_headlines_sit_in_its
 
 
 def test_a_module_with_only_a_publisher_loads_and_a_feed_key_taken_is_left_out(monkeypatch):
-    from liminal.sources import registry
+    from liminal_lib.sources import registry
 
     from importlib.metadata import entry_points
 
@@ -247,7 +247,7 @@ class FakeNews:
 
 @pytest.fixture
 def massive_news(monkeypatch):
-    from liminal.config import load_settings
+    from liminal_lib.config import load_settings
     import liminal_plugin_massive as massive
 
     fake = FakeNews()
@@ -267,7 +267,7 @@ def test_massives_headlines_are_read_on_its_key_and_counted_on_its_day(store, ma
 
 
 def test_a_429_on_massives_headlines_kills_massives_fetching(store, massive_news):
-    from liminal.errors import RateLimited
+    from liminal_lib.errors import RateLimited
 
     fake, settings, p = massive_news
     fake.fail = RateLimited(429, "too many", 300)
@@ -433,7 +433,7 @@ def test_robots_txt_is_followed_through_its_own_redirects_and_a_move_elsewhere_r
 
 
 def test_a_recheck_sends_nothing_while_paused_killed_or_fetching_is_paused(store):
-    from liminal import collector
+    from liminal_lib import collector
 
     site = Site()
     r = reader(site, store=store)
@@ -449,7 +449,7 @@ def test_a_recheck_sends_nothing_while_paused_killed_or_fetching_is_paused(store
 
 
 def test_an_account_kill_shows_as_stopped_with_it_not_as_paused_by_you(store):
-    from liminal.gui.server import ChartApp
+    from liminal_app.gui.server import ChartApp
 
     killswitch.strike(store, "massive", "fetch", "by hand", minutes=240, shared=False)
     app = ChartApp(store)
@@ -460,7 +460,7 @@ def test_an_account_kill_shows_as_stopped_with_it_not_as_paused_by_you(store):
 def test_one_publishers_failing_calendar_never_takes_the_plugins_view_down(store, monkeypatch):
     from dataclasses import replace
 
-    from liminal.gui.server import ChartApp
+    from liminal_app.gui.server import ChartApp
 
     bad = replace(publishers()["fed"], calendar=lambda today: [{"when": "2026-11-05T08:30:00", "what": "naive"}])
     monkeypatch.setattr(publications, "_today_moments", lambda pub, now: [])
@@ -476,7 +476,7 @@ def test_one_publishers_failing_calendar_never_takes_the_plugins_view_down(store
 
 # -- the views, the recorder ------------------------------------------------------------------------------------
 def test_the_plugins_view_lists_the_publishers_with_their_checks(store):
-    from liminal.gui.server import ChartApp
+    from liminal_app.gui.server import ChartApp
 
     app = ChartApp(store)
     out = {p["name"]: p for p in app.plugins()["publishers"]}
@@ -491,7 +491,7 @@ def test_the_plugins_view_lists_the_publishers_with_their_checks(store):
 
 
 def test_the_recorder_reads_the_publications_in_a_thread_of_its_own(tmp_path, monkeypatch):
-    from liminal import live
+    from liminal_lib import live
 
     passes = []
     rec = live.Recorder(tmp_path / "m.db", coins=(), publications=object())

@@ -560,14 +560,14 @@
     loadLiveNews();
   }
 
-  // The live recorder's streams (python -m liminal live): connection, and per symbol the
+  // The live recorder's streams (liminal live): connection, and per symbol the
   // trades recorded, the last price and how long ago it traded. Every stream follows the symbols
   // open on a chart (LIVE_STREAMS=selected): with none of its symbols open it is idle, not down.
   function liveStreamsHtml(live) {
     const streams = Object.entries(live.streams || {});
     if (!streams.length) {
       return `<h4>Live streams</h4><div class="empty">No live recorder running. It starts with the hourly sync, or now with
-        <code>python -m liminal live start</code>.</div>`;
+        <code>liminal live start</code>.</div>`;
     }
     const rows = streams.flatMap(([src, s]) => {
       const pairs = Object.entries(s.pairs || {}).sort(([a], [b]) => a.localeCompare(b));

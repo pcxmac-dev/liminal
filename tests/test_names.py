@@ -6,9 +6,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from liminal import config, layout, live
+from liminal_lib import config, layout, live
 
-SRC = Path(__file__).resolve().parents[1] / "src" / "liminal"
+SRC = Path(__file__).resolve().parents[1] / "src" / "liminal_app"
 OLD = re.compile(r"massive_collate|massive-collate|MassiveCollate|Massive Charts|X-Massive-|MassiveIcons"
                  r"|MassiveData|MASSIVE_(DB|OFFLINE|READONLY|REFRESH_HOURS|LIVE_LOCK|MONGO_PORT|DATA_REPOS)\b"
                  r"|massive-live\.lock|\.massive-collate")

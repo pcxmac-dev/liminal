@@ -13,11 +13,11 @@ from pathlib import Path
 
 import pytest
 
-from liminal import mongo
-from liminal.config import load_settings
-from liminal.gui import server
-from liminal.gui.server import ChartApp
-from liminal.storage import Store
+from liminal_lib import mongo
+from liminal_lib.config import load_settings
+from liminal_app.gui import server
+from liminal_app.gui.server import ChartApp
+from liminal_lib.storage import Store
 
 from .test_frontend_guards import _function, _js
 

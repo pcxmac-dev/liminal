@@ -6,11 +6,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 
-from liminal import collector, freshness
-from liminal.config import load_settings
-from liminal.coverage import has_open_time, ms, plan
-from liminal.sessions import ET, MarketCalendar
-from liminal.sources import feed_profiles
+from liminal_lib import collector, freshness
+from liminal_lib.config import load_settings
+from liminal_lib.coverage import has_open_time, ms, plan
+from liminal_lib.sessions import ET, MarketCalendar
+from liminal_lib.sources import feed_profiles
 
 KEYS = {"MASSIVE_API_KEY": "k", "ALPACA_API_KEY_ID": "i", "ALPACA_API_SECRET_KEY": "s"}
 TUE_2300 = datetime(2026, 10, 27, 23, 0, tzinfo=ET)

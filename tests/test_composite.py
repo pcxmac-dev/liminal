@@ -5,10 +5,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from liminal import composite
-from liminal.coverage import FeedProfile
+from liminal_lib import composite
+from liminal_lib.coverage import FeedProfile
 from liminal_plugin_massive import TIERS
-from liminal.symbols import resolve
+from liminal_lib.symbols import resolve
 
 T0 = int(datetime(2026, 10, 1, 15, tzinfo=timezone.utc).timestamp() * 1000)
 
@@ -76,7 +76,7 @@ def test_refresh_builds_the_composite_and_quality_from_exchange_feeds_only(store
 
 
 def test_chart_engine_serves_the_composite_with_its_band(store):
-    from liminal.gui.bars import BarEngine
+    from liminal_app.gui.bars import BarEngine
 
     store.watch_spec("coinbase", resolve("BTCUSD"))
     store.watch_spec("alpaca", resolve("BTCUSD"))
@@ -106,14 +106,14 @@ def test_single_exchange_minutes_have_no_composite(store):
 def test_audits_pair_only_feeds_of_the_same_market(store):
     import random
 
-    from liminal.audit import random_span
+    from liminal_lib.audit import random_span
 
     feeds = _feeds()
     store.watch_spec("coinbase", resolve("BTCUSD"))
     store.watch_spec("alpaca", resolve("BTCUSD"))
     store.add_coverage("alpaca", "BTCUSD", "minute", T0 - 10 * 86_400_000, T0)
-    from liminal.config import load_settings
-    from liminal.sources import build_source
+    from liminal_lib.config import load_settings
+    from liminal_lib.sources import build_source
 
     src = build_source("coinbase", load_settings(env={}, env_file=None))  # the plugin's source, from its package
     now = datetime.fromtimestamp(T0 / 1000, timezone.utc)

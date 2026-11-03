@@ -9,15 +9,15 @@ from datetime import date, datetime, time
 import pandas as pd
 import pytest
 
-from liminal import collector
-from liminal.config import load_settings
-from liminal.coverage import FeedProfile
-from liminal.errors import NotEntitled
-from liminal.gui.bars import BarEngine, MERGED, calendar_key, in_session, session_hours
-from liminal.gui.markets import symbol_sessions
-from liminal.sessions import ET, MarketCalendar
-from liminal.sources import build_source, feed_profiles, providers, rate_window
-from liminal.storage import Store
+from liminal_lib import collector
+from liminal_lib.config import load_settings
+from liminal_lib.coverage import FeedProfile
+from liminal_lib.errors import NotEntitled
+from liminal_app.gui.bars import BarEngine, MERGED, calendar_key, in_session, session_hours
+from liminal_app.gui.markets import symbol_sessions
+from liminal_lib.sessions import ET, MarketCalendar
+from liminal_lib.sources import build_source, feed_profiles, providers, rate_window
+from liminal_lib.storage import Store
 
 KEYS = {"MASSIVE_API_KEY": "k", "ALPACA_API_KEY_ID": "i", "ALPACA_API_SECRET_KEY": "s"}
 
@@ -119,7 +119,8 @@ def test_only_feeds_with_daily_bars_are_asked_for_them():
 
 
 def test_tiingo_scans_its_plan_and_reports_the_blue_ocean_add_on(store):
-    from liminal import cli, sourcing
+    from liminal_app import cli
+    from liminal_lib import sourcing
     import liminal_plugin_tiingo as tiingo  # its scan, with a date given
 
     class Client:
@@ -155,8 +156,8 @@ def test_tiingo_scans_its_plan_and_reports_the_blue_ocean_add_on(store):
 
 
 def test_a_stock_opened_in_the_chart_goes_on_the_overnight_feed(tmp_path):
-    from liminal.gui.server import ChartApp
-    from liminal.symbols import resolve
+    from liminal_app.gui.server import ChartApp
+    from liminal_lib.symbols import resolve
 
     with Store(tmp_path / "m.db") as store:
         store.watch_spec("massive", resolve("AAPL::XNAS"))
@@ -170,7 +171,8 @@ def test_a_stock_opened_in_the_chart_goes_on_the_overnight_feed(tmp_path):
 
 
 def test_a_sync_scans_a_feed_weekly_and_only_with_something_to_collect(store):
-    from liminal import cli, sourcing
+    from liminal_app import cli
+    from liminal_lib import sourcing
 
     asked = []
     source = type("Source", (), {})()

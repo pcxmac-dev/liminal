@@ -36,7 +36,7 @@ then accuracy measured in audits, then `SOURCE_PRIORITY`. The app shows where ea
 **Audits** are the only second downloads: another feed's copy of a stored span is compared bar
 by bar (timing to the second, OHLC, high-low range, volume, VWAP, trade count, as box stats with a
 small margin of error) and only the comparison is kept. They run after new data arrives and at
-random (`AUDITS_PER_RUN`, `AUDITS_RANDOM_PER_RUN`), or with `python -m liminal audit
+random (`AUDITS_PER_RUN`, `AUDITS_RANDOM_PER_RUN`), or with `liminal audit
 [TICKER] [--day D] [--list]`; results are in the Fetcher view.
 
 ## What it collects
@@ -78,8 +78,8 @@ where the app reads keys. Without a name it shows a menu of the data providers (
 app, so a new provider appears by itself), their keys and which are set: pick one to set, replace or
 remove its keys. With a provider's name (`tiingo`) or one key's variable (`TIINGO_API_KEY`) it goes
 straight there; `-Remove` deletes, `-List` only shows. Restart running processes (the sync, the
-chart app) after setting a key. `python -m liminal plugins` lists the same providers;
-`python -m liminal sourcing` shows each one's report (plan, limits, what it provides) and
+chart app) after setting a key. `liminal plugins` lists the same providers;
+`liminal sourcing` shows each one's report (plan, limits, what it provides) and
 which source delivers what, by cost and capability (docs/ARCHITECTURE.md, "Which source delivers what").
 
 ```powershell
@@ -109,11 +109,11 @@ and replaced) and every dataset value is kept in every published version, so a s
 as it stood at any moment (`as_of`), for backtests that see only what was known then. Results
 computed here (bars built from ticks, the composite model, quality scores, audits) are kept apart
 from what the sources published and record how they were made: inputs, code version (git commit)
-and settings (`python -m liminal provenance`).
+and settings (`liminal provenance`).
 Every standard frame (1 s to 1 year) is kept for every series: the ones a feed sends as it sent
 them, the others built here, upward only, from that feed's finer bars and marked derived (a gap
 in the finer data stays a gap). The sync builds a symbol's frames as soon as its fetch is stored.
-`python -m liminal inventory TICKER` (and "Data by feed" in the chart's side panel) shows,
+`liminal inventory TICKER` (and "Data by feed" in the chart's side panel) shows,
 feed by feed and frame by frame, what was sent, what was derived and from what, and what is not
 built yet.
 A database from before this layout is moved once with `admin split-feeds` (it backs up first,
@@ -123,33 +123,34 @@ app refuses to open it.
 ## Usage
 
 ```bash
-python -m liminal probe SPCX --watch   # find the finest resolution, add to watchlist
-python -m liminal sync                 # a pass of the fetcher: update + backfill the watchlist (sync --tickers SPCX: a symbol)
-python -m liminal fetcher              # the fetcher's page in your browser, the fetcher while a page is in touch (--daemon: held for good; status, request SYMBOL, pass, cancel, host)
-python -m liminal service install      # that page from your logon (--daemon: the fetcher held for good, collecting what it can on its own)
-python -m liminal status               # what's stored, limits, recent runs
-python -m liminal exchanges --refresh  # exchange list
-python -m liminal analyze SPCX         # statistics + per-exchange breakdown
-python -m liminal chart SPCX --rule 1s --sma 20 50 --ticks
-python -m liminal export SPCX --kind trades --out spcx.csv
-python -m liminal datasets [list|fetch [NAME...]|show NAME [SERIES]]  # research datasets
-python -m liminal admin check|vacuum|backup [--ticks]|split-feeds
-python -m liminal gui                  # chart app in your browser (localhost only)
+liminal probe SPCX --watch   # find the finest resolution, add to watchlist
+liminal sync                 # a pass of the fetcher: update + backfill the watchlist (sync --tickers SPCX: a symbol)
+liminal fetcher              # the fetcher's page in your browser, the fetcher while a page is in touch (--daemon: held for good; status, request SYMBOL, pass, cancel, host)
+liminal service install      # that page from your logon (--daemon: the fetcher held for good, collecting what it can on its own)
+liminal status               # what's stored, limits, recent runs
+liminal exchanges --refresh  # exchange list
+liminal analyze SPCX         # statistics + per-exchange breakdown
+liminal chart SPCX --rule 1s --sma 20 50 --ticks
+liminal export SPCX --kind trades --out spcx.csv
+liminal datasets [list|fetch [NAME...]|show NAME [SERIES]]  # research datasets
+liminal admin check|vacuum|backup [--ticks]|split-feeds
+liminal gui                  # chart app in your browser (localhost only)
 ```
 
 ## Three programs, three repositories (2026-11-01)
 
 - [liminal-lib](https://github.com/pcxmac-dev/liminal-lib): the library every program builds on (the stores, the
-  plugin contract, the collector, the scheme, the hosts). The app imports its modules under their old names
-  (`liminal.<module>`) until every import points to `liminal_lib`.
+  plugin contract, the collector, the scheme, the hosts), imported as `liminal_lib` by the app, the integrator
+  and every plugin.
 - [liminal-integrator](https://github.com/pcxmac-dev/liminal-integrator): the fetcher. A stack of requests in
   front (a symbol opened in the chart, or asked for), for each an assessment of the work over the plugins set up
   here (what each gives, how far back, how fresh, at what cost) and the runs of the feeds that deliver it; a
   standing pass once new data can exist; its own page (the data and monitoring views) and the data API at
   http://127.0.0.1:8785, kept there by `fetcher` or the service you install at logon while the fetcher runs only
   as long as a page is in touch; with `--daemon` the fetcher is held for good and collects what it can on its own.
-- this repository, the app: the chart page, served by a front (`gui/front.py`) that funnels every request of its
-  pages to the fetcher, started if none answers; the command line; the plugins' tests run here.
+- this repository, [liminal-app](https://github.com/pcxmac-dev/liminal-app) (package `liminal_app`, command
+  `liminal`): the chart page, served by a front (`gui/front.py`) that funnels every request of its pages to the
+  fetcher, started if none answers; the command line; the suite proper runs here.
 
 They live in one workspace folder: `common/` the library, `app/` this repository (its `.venv` inside), `store/` the
 integrator with the databases in `store/data/`, `plugins/` a checkout per plugin, loaded from there. Without the
@@ -157,7 +158,7 @@ workspace the data is in `~/LiminalData` and the plugins are the installed packa
 
 ## Chart app
 
-`python -m liminal gui` serves a TradingView-style chart on http://127.0.0.1:8765 using
+`liminal gui` serves a TradingView-style chart on http://127.0.0.1:8765 using
 [KLineChart](https://github.com/klinecharts/KLineChart) 10.1.0 (Apache-2.0, bundled, works offline).
 
 - Intervals from 1s (when ticks or second bars are stored) to monthly, built exactly from the finest

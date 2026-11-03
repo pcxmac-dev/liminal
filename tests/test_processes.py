@@ -8,10 +8,11 @@ import time
 
 import pytest
 
-from liminal import cli, live, proc
-from liminal.config import ConfigError, load_settings
-from liminal.storage import Store
-from liminal.sources import stream
+from liminal_app import cli
+from liminal_lib import live, proc
+from liminal_lib.config import ConfigError, load_settings
+from liminal_lib.storage import Store
+from liminal_lib.sources import stream
 
 
 # -- locks ------------------------------------------------------------------------------------
@@ -165,7 +166,7 @@ def test_unknown_live_coins_are_refused():
 
 
 def test_two_exchanges_streaming_one_pair_are_not_a_double_download(tmp_path):
-    from liminal.deps import coverage_overlaps
+    from liminal_app.deps import coverage_overlaps
 
     with Store(tmp_path / "m.db") as store:
         store.add_coverage("coinbase", "BTCUSD", "trades", 0, 100)
@@ -191,7 +192,8 @@ def test_a_class_plan_change_finds_resolutions_again(tmp_path):
 def test_the_sync_lets_go_of_the_run_lock_before_building_derived_frames(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    from liminal import cli, proc
+    from liminal_app import cli
+    from liminal_lib import proc
 
     db = tmp_path / "m.db"
     settings = SimpleNamespace(db_path=db)
@@ -214,7 +216,8 @@ def test_the_sync_lets_go_of_the_run_lock_before_building_derived_frames(tmp_pat
 def test_one_pass_of_derived_frames_at_a_time(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    from liminal import cli, proc
+    from liminal_app import cli
+    from liminal_lib import proc
 
     db = tmp_path / "m.db"
     lock = db.with_name(cli.POST_LOCK)

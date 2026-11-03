@@ -5,11 +5,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from liminal import derive
-from liminal.gui.bars import BarEngine
-from liminal.gui.server import ChartApp
-from liminal.gui.window import WindowReader
-from liminal.storage import Store
+from liminal_lib import derive
+from liminal_app.gui.bars import BarEngine
+from liminal_app.gui.server import ChartApp
+from liminal_app.gui.window import WindowReader
+from liminal_lib.storage import Store
 
 ET = "America/New_York"
 DAYS = ("2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-19", "2026-10-20")
@@ -146,9 +146,9 @@ def test_the_highlights_statistics_from_its_window_are_the_whole_historys(store,
 
 
 # -- chart types and models on the window -------------------------------------------------------
-from liminal.calc.derivatives import Model  # noqa: E402
-from liminal.gui import window as window_module  # noqa: E402
-from liminal.gui.bars import Style  # noqa: E402
+from liminal_lib.calc.derivatives import Model  # noqa: E402
+from liminal_app.gui import window as window_module  # noqa: E402
+from liminal_app.gui.bars import Style  # noqa: E402
 
 
 def _key(b):

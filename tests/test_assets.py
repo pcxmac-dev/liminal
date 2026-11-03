@@ -3,9 +3,9 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from liminal.collector import ET, history_floor, invert_bars, sync
+from liminal_lib.collector import ET, history_floor, invert_bars, sync
 from liminal_plugin_massive import TIERS
-from liminal.symbols import resolve
+from liminal_lib.symbols import resolve
 
 from .conftest import FakeSource
 
@@ -50,7 +50,7 @@ def test_inverted_fx_pair_is_stored_inverted(store):
 
 
 def test_inverted_pair_is_named_as_the_inverse(store):
-    from liminal.models import Instrument
+    from liminal_lib.models import Instrument
 
     store.watch_spec("fake", resolve("USDEUR"))
     src = FakeSource(entitled=("minute",), listing=Instrument("C:EURUSD", name="Euro - United States dollar",
@@ -167,7 +167,7 @@ def test_symbols_are_refreshed_only_when_new_data_is_due(store):
 
 
 def test_refresh_hours_default():
-    from liminal.config import load_settings
+    from liminal_lib.config import load_settings
 
     assert load_settings(env={}, env_file=None).refresh_hours == 0
     assert load_settings(env={"LIMINAL_REFRESH_HOURS": "3"}, env_file=None).refresh_hours == 3
@@ -182,7 +182,7 @@ def test_futures_never_request_before_floor(store):
 
 
 def test_listing_check_fills_in_the_exchange_when_none_was_given(store):
-    from liminal.models import Exchange, Instrument
+    from liminal_lib.models import Exchange, Instrument
 
     store.watch_spec("fake", resolve("NVDA"))
     nasdaq = Exchange("fake", 1, "Nasdaq", None, mic="XNAS")

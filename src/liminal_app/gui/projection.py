@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 import pandas as pd
 
-from ..sessions import ET, MarketCalendar
+from liminal_lib.sessions import ET, MarketCalendar
 from .bars import (CALENDAR, COLUMNS, LOD_TYPES, PERIOD_SECONDS, REGULAR_OPEN, TIME_TYPES, Series, _aggregate,
                    _regular_close, calendar_key, regular_session, utc_days, wall_clock_bins)
 

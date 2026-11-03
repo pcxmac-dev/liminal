@@ -9,9 +9,9 @@ from datetime import datetime, timezone
 import pandas as pd
 import pytest
 
-from liminal import derive, provenance
-from liminal.storage import Store
-from liminal.ticks import build_bars
+from liminal_lib import derive, provenance
+from liminal_lib.storage import Store
+from liminal_lib.ticks import build_bars
 
 ET = "America/New_York"
 

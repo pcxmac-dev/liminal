@@ -9,13 +9,13 @@ from datetime import datetime, timezone
 
 import pytest
 
-from liminal import cli
-from liminal.config import load_settings
-from liminal.sessions import ET
-from liminal.sources import is_archive, providers
-from liminal.sources.archive import venue_view
-from liminal.sources.registry import get
-from liminal.sources.stream import session_at
+from liminal_app import cli
+from liminal_lib.config import load_settings
+from liminal_lib.sessions import ET
+from liminal_lib.sources import is_archive, providers
+from liminal_lib.sources.archive import venue_view
+from liminal_lib.sources.registry import get
+from liminal_lib.sources.stream import session_at
 
 
 def test_session_at_finds_blue_oceans_night_on_both_sides_of_midnight():

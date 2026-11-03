@@ -11,9 +11,9 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from liminal import collector, live
-from liminal.gui import server
-from liminal.gui.server import ChartApp, make_handler
+from liminal_lib import collector, live
+from liminal_app.gui import server
+from liminal_app.gui.server import ChartApp, make_handler
 
 
 def test_the_first_profile_holds_what_came_before_and_a_new_one_starts_empty(store):
@@ -73,7 +73,7 @@ def test_the_fetcher_follows_the_signed_in_profiles_watchlists(store):
 
 
 def test_the_login_page_until_a_profile_is_chosen_then_the_app(tmp_path):
-    from liminal.storage import Store
+    from liminal_lib.storage import Store
 
     store = Store(tmp_path / "m.db", check_same_thread=False)  # the server's threads share it
     app = ChartApp(store)
@@ -112,7 +112,7 @@ def test_the_login_page_until_a_profile_is_chosen_then_the_app(tmp_path):
 
 
 def test_only_a_stock_you_open_goes_in_the_register_not_one_the_page_opened(tmp_path, monkeypatch):
-    from liminal.storage import Store
+    from liminal_lib.storage import Store
 
     store = Store(tmp_path / "m.db", check_same_thread=False)  # the server's threads share it
     for t in ("SPCX", "AAPL"):
@@ -144,7 +144,7 @@ def test_only_a_stock_you_open_goes_in_the_register_not_one_the_page_opened(tmp_
 def test_a_page_of_another_profile_cannot_write_and_odd_cookies_or_lengths_are_refused(tmp_path):
     import socket
 
-    from liminal.storage import Store
+    from liminal_lib.storage import Store
 
     store = Store(tmp_path / "m.db", check_same_thread=False)  # the server's threads share it
     app = ChartApp(store)

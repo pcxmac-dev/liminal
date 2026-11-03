@@ -1,6 +1,6 @@
 import pytest
 
-from liminal.symbols import resolve
+from liminal_lib.symbols import resolve
 
 
 @pytest.mark.parametrize("text, ticker, asset, source, invert, rank, exch", [

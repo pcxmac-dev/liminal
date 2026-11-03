@@ -1,8 +1,8 @@
 """Directory of every Nasdaq/NYSE listing and futures product, with company icons on leftover budget."""
 from datetime import date, datetime
 
-from liminal import collector
-from liminal.models import Instrument
+from liminal_lib import collector
+from liminal_lib.models import Instrument
 
 from .conftest import FakeSource
 
@@ -138,7 +138,7 @@ def test_no_allowance_no_requests(store):
 
 
 def test_sync_does_directory_work_only_after_the_watchlist_and_only_when_allowed(store):
-    from liminal.collector import ET, sync
+    from liminal_lib.collector import ET, sync
     from liminal_plugin_massive import TIERS
 
     src = DirSource(entitled=("minute",))

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import liminal_lib
 
-# the app's own package, and the library's (liminal-lib): the same rules hold in both
-ROOTS = {"liminal": Path(__file__).resolve().parents[1] / "src" / "liminal",
+# the app's own package (liminal-app), and the library's (liminal-lib): the same rules hold in both
+ROOTS = {"liminal_app": Path(__file__).resolve().parents[1] / "src" / "liminal_app",
          "liminal_lib": Path(liminal_lib.__file__).resolve().parent}
 URL = re.compile(r"\b(?:https?|wss?)://([A-Za-z0-9.-]+)")
 
@@ -90,7 +90,7 @@ def test_plugins_are_self_contained():
 def test_a_plugins_own_parser_reads_its_feed_without_the_app_changing():
     """A new kind of source is its plugin's (Feed.parse, API 1.7): the reader stores what the parser
     gives, items and rates, as for the Federal Register's and the New York Fed's."""
-    from liminal.sources.publisher import Feed, Read
+    from liminal_lib.sources.publisher import Feed, Read
 
     from .test_publications import NOW, Resp, Site, _mark, pub, reader
 

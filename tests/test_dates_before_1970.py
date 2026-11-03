@@ -2,7 +2,7 @@
 up to Python 3.14 (OSError 22), and the datasets reach back to 1871 (Shiller) and 1926 (French)."""
 from datetime import date, datetime, timezone
 
-from liminal.sources import dataset
+from liminal_lib.sources import dataset
 
 
 def test_a_day_before_1970_is_dated_by_arithmetic_from_the_epoch():

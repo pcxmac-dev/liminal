@@ -1,7 +1,7 @@
 """Sun, Moon and planet positions checked against well-known events."""
 from datetime import datetime, timezone
 
-from liminal.gui import astro, world
+from liminal_app.gui import astro, world
 
 
 def _body(sky, name):

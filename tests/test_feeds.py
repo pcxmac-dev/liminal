@@ -4,15 +4,15 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from liminal import audit
-from liminal.collector import ET, sync
+from liminal_lib import audit
+from liminal_lib.collector import ET, sync
 from liminal_plugin_massive import TIERS
 
 from liminal_plugin_alpaca import ALPACA_TIERS  # the plugin's plans
-from liminal.coverage import FeedProfile, has_open_time, ms, plan, subtract
-from liminal.live import WATCHLISTS_KEY
-from liminal.models import Instrument
-from liminal.symbols import resolve
+from liminal_lib.coverage import FeedProfile, has_open_time, ms, plan, subtract
+from liminal_lib.live import WATCHLISTS_KEY
+from liminal_lib.models import Instrument
+from liminal_lib.symbols import resolve
 
 from .conftest import FakeSource
 
@@ -149,7 +149,7 @@ def test_listing_check_is_shared_between_feeds(store):
 
 
 def test_deps_flags_a_span_held_by_two_feeds(store):
-    from liminal.deps import coverage_overlaps
+    from liminal_app.deps import coverage_overlaps
 
     store.add_coverage("fake", "SPCX", "minute", 0, 100)
     store.add_coverage("other", "SPCX", "minute", 100, 200)
@@ -200,7 +200,7 @@ def test_audit_compares_without_storing_the_second_copy(store):
 
 
 def test_cross_venue_crypto_audits_say_so_and_do_not_judge_volume(store):
-    from liminal.gui import activity  # noqa: F401  (the GUI reads report["note"])
+    from liminal_app.gui import activity  # noqa: F401  (the GUI reads report["note"])
 
     class Alpaca(FakeSource):
         name = "alpaca"
@@ -239,8 +239,8 @@ def test_new_data_queues_an_audit_that_the_other_feed_runs(store):
 
 
 def test_fetcher_rows_show_what_this_feed_still_needs(store):
-    from liminal.config import load_settings
-    from liminal.gui.activity import symbol_rows
+    from liminal_lib.config import load_settings
+    from liminal_app.gui.activity import symbol_rows
 
     settings = load_settings(env={"MASSIVE_API_KEY": "x"}, env_file=None)  # Alpaca without keys
     for feed in ("massive", "alpaca"):
@@ -255,8 +255,8 @@ def test_fetcher_rows_show_what_this_feed_still_needs(store):
 
 
 def test_one_download_per_span_holds_within_a_market_not_across(store):
-    from liminal.config import load_settings
-    from liminal.sources import feed_profiles
+    from liminal_lib.config import load_settings
+    from liminal_lib.sources import feed_profiles
 
     settings = load_settings(env={"MASSIVE_API_KEY": "x", "ALPACA_API_KEY_ID": "k", "ALPACA_API_SECRET_KEY": "s"},
                              env_file=None)
@@ -279,7 +279,7 @@ def test_one_download_per_span_holds_within_a_market_not_across(store):
 def test_audits_are_one_hour_spot_checks_within_two_percent_of_a_run():
     import random
 
-    from liminal.audit import allowance, spot
+    from liminal_lib.audit import allowance, spot
 
     rng = random.Random(4)
     a, b = 0, 86_400_000
@@ -302,9 +302,9 @@ def test_audits_are_one_hour_spot_checks_within_two_percent_of_a_run():
 def test_a_capped_run_through_empty_history_resumes_past_what_it_walked(store):
     """Coinbase pages by windows of time: before a coin was listed every window is empty. A run
     stopped by its cap there must record what it walked, or every run walks it again."""
-    from liminal import collector
-    from liminal.errors import BudgetExhausted
-    from liminal.sources.base import DataSource, Page
+    from liminal_lib import collector
+    from liminal_lib.errors import BudgetExhausted
+    from liminal_lib.sources.base import DataSource, Page
 
     DAY = 86_400_000
     start = ms(datetime(2026, 1, 1, tzinfo=timezone.utc))

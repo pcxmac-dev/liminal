@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from liminal import killswitch, live
-from liminal.config import load_settings
-from liminal.sessions import ET
+from liminal_lib import killswitch, live
+from liminal_lib.config import load_settings
+from liminal_lib.sessions import ET
 TIINGO_BOATS = "tiingoboats"  # Tiingo's Blue Ocean feed (its package, liminal-plugin-tiingo)
 
 TUE_2305 = datetime(2026, 10, 27, 23, 5, 40, tzinfo=ET)
@@ -110,8 +110,8 @@ def test_the_night_feed_is_partial():
 
 
 def test_a_429_kills_tiingos_fetching_and_its_forex_with_it(tmp_path):
-    from liminal.errors import RateLimited
-    from liminal.storage import Store
+    from liminal_lib.errors import RateLimited
+    from liminal_lib.storage import Store
 
     rec, poller = _recorder(tmp_path)
 
@@ -131,7 +131,7 @@ def test_a_429_kills_tiingos_fetching_and_its_forex_with_it(tmp_path):
 
 
 def test_the_day_cap_shows_idle_on_tiingos_limits_and_any_other_error_down(tmp_path):
-    from liminal.errors import BudgetExhausted
+    from liminal_lib.errors import BudgetExhausted
 
     for fail, idle, words in ((BudgetExhausted("the daily request cap is reached"), True, "Tiingo's limits"),
                               (ConnectionError("network down"), False, "network down")):
@@ -151,7 +151,7 @@ def test_the_day_cap_shows_idle_on_tiingos_limits_and_any_other_error_down(tmp_p
 
 
 def test_a_lower_limit_found_while_a_client_runs_is_kept_from_then_on():
-    from liminal.ratelimit import RateLimiter
+    from liminal_lib.ratelimit import RateLimiter
     from liminal_plugin_massive.client import MassiveClient
 
     client = MassiveClient("k", rate_limiter=RateLimiter(190, 60.0))
@@ -162,7 +162,7 @@ def test_a_lower_limit_found_while_a_client_runs_is_kept_from_then_on():
 
 
 def test_the_publications_thread_lives_through_a_file_that_will_not_open(tmp_path, monkeypatch):
-    from liminal import gov
+    from liminal_lib import gov
 
     rec = live.Recorder(tmp_path / "m.db", coins=(), publications=object(), log=lambda *_: None)
     opened = []

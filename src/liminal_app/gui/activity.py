@@ -10,13 +10,13 @@ import time as _time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from .. import collector
-from ..collector import ET, history_floor
-from .. import freshness
-from ..config import Settings, Tier
-from .. import killswitch
-from ..live import RECORDER_KEY, STATUS_KEY
-from ..storage import Store
+from liminal_lib import collector
+from liminal_lib.collector import ET, history_floor
+from liminal_lib import freshness
+from liminal_lib.config import Settings, Tier
+from liminal_lib import killswitch
+from liminal_lib.live import RECORDER_KEY, STATUS_KEY
+from liminal_lib.storage import Store
 
 LOG_TAIL_BYTES = 64 * 1024
 # Rough request cost of backfilling minute bars: Massive returns up to 50,000 bars per request and
@@ -53,7 +53,7 @@ def lock_owner(db_path: Path) -> int | None:
 def fetching_feeds(db_path: Path) -> dict[str | None, int]:
     """The feeds being fetched now: {feed: process id}, None when the whole database is locked
     (proc.run_holders: the feeds run side by side, one run each)."""
-    from ..proc import run_holders
+    from liminal_lib.proc import run_holders
 
     return run_holders(db_path)
 
@@ -140,8 +140,8 @@ def symbol_rows(store: Store, settings: Settings, source: str, now: datetime, cu
     them), not everything it lacks itself. That plan costs a few queries a symbol: with `detail`,
     only the first `detail` rows by relevance (`ranked`), and the `focus` tickers, get it (each
     marked `planned`); the others keep the estimate from what the feed holds itself."""
-    from ..coverage import plan
-    from ..sources import feed_profiles, providers
+    from liminal_lib.coverage import plan
+    from liminal_lib.sources import feed_profiles, providers
 
     today = now.date()
     profiles = feed_profiles(settings)
@@ -151,7 +151,7 @@ def symbol_rows(store: Store, settings: Settings, source: str, now: datetime, cu
     settings = settings.for_source(source)
     me = profiles.get(source)
     holders = store.series_holders()  # once, not once a symbol
-    from .. import collector
+    from liminal_lib import collector
 
     asked = collector.priority_requests(store, now)  # opened in the chart: taken before anything else
     live_too = set(asked) | set(collector.watchlist_tickers(store))  # fetched through the session
@@ -228,7 +228,7 @@ def _ticks(store: Store, settings: Settings) -> dict:
 
 
 def _directory(store: Store, source: str, settings: Settings, used_today: int) -> dict:
-    from ..collector import COMPANY_TYPES, DAILY_RESERVE
+    from liminal_lib.collector import COMPANY_TYPES, DAILY_RESERVE
 
     s = store.directory_stats(source, COMPANY_TYPES)
     left = max(0, s["companies"] - s["iconsChecked"])
@@ -285,7 +285,7 @@ def exchange_checks(store: Store, source: str, now: datetime) -> list[dict]:
     """The background checks that keep the Markets globe and the news current: when each last
     ran, what it found, when it runs next and what it costs."""
     from . import world
-    from ..collector import CALENDAR_REFRESH_DAYS, NEWS_REFRESH_MINUTES
+    from liminal_lib.collector import CALENDAR_REFRESH_DAYS, NEWS_REFRESH_MINUTES
 
     checks = []
     try:
@@ -359,8 +359,8 @@ def limits(store: Store, settings: Settings, now: datetime) -> list[dict]:
     (and how full it is now, from the window runs share), the caps per run and per day, today's
     requests and the month's (month_allowance), and a wait in progress (a full window or a
     server's Retry-After) with its reason."""
-    from ..ratelimit import describe, load_times, wait_key, window_state
-    from ..sources import providers
+    from liminal_lib.ratelimit import describe, load_times, wait_key, window_state
+    from liminal_lib.sources import providers
 
     t = now.timestamp()
     rows = []
@@ -395,7 +395,7 @@ def health(store: Store, settings: Settings, now: datetime, limit_rows: list[dic
     - done: a public archive with every symbol filled (not asked again);
     - ok: its last run went through (stopping at its per-run cap is how backfills go);
     - idle: it has not run yet."""
-    from ..sources import feed_profiles, providers
+    from liminal_lib.sources import feed_profiles, providers
 
     profiles = feed_profiles(settings)
     limits_by = {r["source"]: r for r in limit_rows}
@@ -447,14 +447,14 @@ DERIVE_FRESH_MS = 120_000  # a build not heard from for this long has ended (or 
 
 
 def _pause(store: Store, now: datetime) -> dict | None:
-    from ..collector import pause_state
+    from liminal_lib.collector import pause_state
 
     return pause_state(store, now)
 
 
 def derive_progress(store: Store, now: datetime) -> dict | None:
     """What derive.py is building now (frames from finer bars, for the status bar), or None."""
-    from ..derive import PROGRESS_KEY
+    from liminal_lib.derive import PROGRESS_KEY
 
     p = store.kv_json(PROGRESS_KEY, {})
     if not p or now.timestamp() * 1000 - p.get("at", 0) > DERIVE_FRESH_MS:

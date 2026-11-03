@@ -5,13 +5,13 @@ from __future__ import annotations
 import json
 
 
-from liminal import live
-from liminal.config import load_settings
-from liminal.gui.bars import BarEngine
-from liminal.gui.server import ChartApp
-from liminal.storage import Store
+from liminal_lib import live
+from liminal_lib.config import load_settings
+from liminal_app.gui.bars import BarEngine
+from liminal_app.gui.server import ChartApp
+from liminal_lib.storage import Store
 from liminal_plugin_alpaca import AlpacaIexStream  # the stream the recorder drives: its package's
-from liminal.sources import stream
+from liminal_lib.sources import stream
 
 T0 = 1_792_764_000_000  # 2026-10-23 14:00 UTC (10:00 in New York), ms
 

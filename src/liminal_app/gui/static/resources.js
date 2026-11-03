@@ -62,7 +62,7 @@
     if (!deps.rows.length) return '';
     const cls = { OK: 'fresh', WARN: 'backfilling', FAIL: 'run-error' };
     const order = { FAIL: 0, WARN: 1, OK: 2 };
-    return `<h3 class="res-h">Dependencies <span class="p-muted small">docs/DEPENDENCIES.md · python -m liminal deps</span></h3>
+    return `<h3 class="res-h">Dependencies <span class="p-muted small">docs/DEPENDENCIES.md · liminal deps</span></h3>
       <div class="table-wrap"><table class="act-table res-table"><thead><tr><th>Area</th><th>Item</th><th>Status</th><th>Found</th><th>Action</th></tr></thead>
       <tbody>${[...deps.rows].sort((a, b) => order[a.status] - order[b.status]).map((c) => `
         <tr><td class="sub">${esc(c.area)}</td><td><b>${esc(c.item)}</b></td>

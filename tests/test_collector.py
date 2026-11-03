@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from liminal import collector
+from liminal_lib import collector
 from liminal_plugin_massive import TIERS
-from liminal.collector import ET, history_floor, sync
+from liminal_lib.collector import ET, history_floor, sync
 
 from .conftest import FakeSource
 

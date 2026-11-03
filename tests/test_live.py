@@ -6,10 +6,10 @@ import socket
 import struct
 import threading
 
-from liminal import live
-from liminal.storage import Store
-from liminal.wsclient import OP_PING, OP_PONG, OP_TEXT, WebSocket, encode_frame
-from liminal.sources import stream
+from liminal_lib import live
+from liminal_lib.storage import Store
+from liminal_lib.wsclient import OP_PING, OP_PONG, OP_TEXT, WebSocket, encode_frame
+from liminal_lib.sources import stream
 
 
 def _server_frame(opcode: int, payload: bytes, fin: bool = True) -> bytes:

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-from liminal.config import load_settings
-from liminal.sources import build_source
+from liminal_lib.config import load_settings
+from liminal_lib.sources import build_source
 
 
 class FakeTiingo:
@@ -30,9 +30,9 @@ class FakeTiingo:
 
 
 def test_a_sync_fills_a_pair_from_2020_inverted_as_shown_through_the_day_before(store):
-    from liminal.collector import sync
-    from liminal.coverage import FeedProfile
-    from liminal.symbols import resolve
+    from liminal_lib.collector import sync
+    from liminal_lib.coverage import FeedProfile
+    from liminal_lib.symbols import resolve
 
     settings = load_settings(env={"TIINGO_API_KEY": "k", "TIINGO_PLAN": "power"}, env_file=None)
     tier = settings.for_source("tiingofx").tier

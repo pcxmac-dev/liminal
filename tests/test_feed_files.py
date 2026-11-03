@@ -6,8 +6,8 @@ from contextlib import closing
 
 import pytest
 
-from liminal import splitfeeds
-from liminal.storage import OldLayout, Store
+from liminal_lib import splitfeeds
+from liminal_lib.storage import OldLayout, Store
 
 
 def _bar(t: int, c: float = 1.0) -> dict:

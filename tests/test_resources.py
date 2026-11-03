@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from liminal import resources as res
-from liminal.resources import Conn, Machine, Monitor, Net, Proc
+from liminal_lib import resources as res
+from liminal_lib.resources import Conn, Machine, Monitor, Net, Proc
 
-SYNC = '"C:\\venv\\Scripts\\pythonw.exe" -m liminal sync'
-LIVE = "pythonw.exe -m liminal live"
-GUI = "python.exe -m liminal gui --no-browser --port 8765"
+SYNC = '"C:\\venv\\Scripts\\pythonw.exe" -m liminal_app sync'
+LIVE = "pythonw.exe -m liminal_app live"
+GUI = "python.exe -m liminal_app gui --no-browser --port 8765"
 
 
 class Clock:
@@ -64,11 +64,15 @@ def test_each_program_is_named_from_its_command_line():
     assert res.role_of(GUI)[:2] == ("gui", "Chart app · port 8765")
     assert res.role_of(SYNC)[:2] == ("sync", "Fetcher (sync)")
     assert res.role_of(SYNC + " --tickers SPCX")[1] == "Fetcher: run for opened symbols"
-    assert res.role_of("pythonw.exe -m liminal --source alpaca sync --only --fetch-only")[:2] == (
+    assert res.role_of("pythonw.exe -m liminal_app --source alpaca sync --only --fetch-only")[:2] == (
         "sync", "Fetcher: alpaca")  # one feed's run: the feeds run side by side
     assert res.role_of(LIVE)[:2] == ("live", "Live recorder")
-    assert res.role_of("python -m liminal audit --daily")[:2] == ("audit", "audit command")
+    assert res.role_of("python -m liminal_app audit --daily")[:2] == ("audit", "audit command")
     assert res.is_app(SYNC) and not res.is_app("python -m pytest")
+    # the console script (`liminal gui`, its .exe on Windows) and the old module name read the same way
+    assert res.role_of('"C:\\venv\\Scripts\\liminal.exe" gui --port 8765')[:2] == ("gui", "Chart app · port 8765")
+    assert res.role_of("/home/me/.venv/bin/liminal live")[:2] == ("live", "Live recorder")
+    assert res.is_app("pythonw.exe -m liminal sync") and not res.is_app("python -m liminal_integrator serve")
     assert res.is_local("127.0.0.1:8765") and res.is_local("[::1]:8765") and not res.is_local("34.1.2.3:443")
 
 
@@ -215,7 +219,7 @@ def test_the_view_has_each_programs_series_for_the_range_asked(tmp_path):
 
 
 def test_the_chart_app_answers_without_starting_the_sampler(store):
-    from liminal.gui.server import ChartApp
+    from liminal_app.gui.server import ChartApp
 
     app = ChartApp(store)
     assert app.monitor.data_dir == Path(store.path).parent  # the data folder the store is in

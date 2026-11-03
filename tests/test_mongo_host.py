@@ -12,8 +12,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from liminal import cli, host as hosting, mongo
-from liminal.config import load_settings
+from liminal_app import cli
+from liminal_lib import host as hosting, mongo
+from liminal_lib.config import load_settings
 
 
 class FakeAttachment:
@@ -68,7 +69,7 @@ def test_nothing_is_attached_without_a_server_installed_or_from_a_reading_copy(t
     with pytest.raises(RuntimeError, match="not installed"):
         mongo.attach(tmp_path)
     monkeypatch.setattr(mongo, "binary", lambda: tmp_path / "mongod.exe")
-    from liminal.storage import common
+    from liminal_lib.storage import common
 
     monkeypatch.setattr(common, "read_only", lambda: True)
     with pytest.raises(RuntimeError, match="read-only"):

@@ -35,8 +35,8 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from ..sources import providers
-from ..sources.registry import (PLUGIN_API, database_row, errors, key_row, label, plugin_databases, plugin_feeds,
+from liminal_lib.sources import providers
+from liminal_lib.sources.registry import (PLUGIN_API, database_row, errors, key_row, label, plugin_databases, plugin_feeds,
                                 plugin_keys, plugin_of, publisher_parts)
 
 GROUPS = ("Feeds with keys", "Public feeds")
@@ -121,7 +121,7 @@ def view(store, settings, feeds: dict, scheme, scans: dict, running: dict | None
          today: date | None = None) -> dict:
     """Every plugin for the view (see the module's docstring); `running`: the rescan going now
     ({"name": one provider or None for all, "since": iso}) or None."""
-    from .. import killswitch
+    from liminal_lib import killswitch
 
     today = today or scheme.today
     counts = store.watch_counts()

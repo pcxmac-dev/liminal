@@ -10,11 +10,11 @@ import pathlib
 import pandas as pd
 import pytest
 
-from liminal import datasets
-from liminal.gui import server
-from liminal.gui.bars import BarEngine, _regular_close, to_records
-from liminal.gui.window import HISTORY_TOLERANCE_PCT, WindowReader
-from liminal.storage import Store
+from liminal_lib import datasets
+from liminal_app.gui import server
+from liminal_app.gui.bars import BarEngine, _regular_close, to_records
+from liminal_app.gui.window import HISTORY_TOLERANCE_PCT, WindowReader
+from liminal_lib.storage import Store
 
 ET = "America/New_York"
 SHILLER = "shiller-us-market-monthly"

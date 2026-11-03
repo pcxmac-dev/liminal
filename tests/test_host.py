@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from liminal import host as hosting
-from liminal.host import Attachment, Host, address, attach, key
-from liminal.host import start_host as real_start_host  # bound before conftest's guard replaces it
+from liminal_lib import host as hosting
+from liminal_lib.host import Attachment, Host, address, attach, key
+from liminal_lib.host import start_host as real_start_host  # bound before conftest's guard replaces it
 
 
 @pytest.fixture
@@ -184,7 +184,7 @@ def test_start_host_runs_the_host_command_without_a_window(db, monkeypatch):
     monkeypatch.setattr(hosting.subprocess, "Popen", Popen)
     real_start_host("live", db)
     (args, kw), = calls
-    assert args[1:] == ["-m", "liminal", "host", "live"] and kw["env"]["LIMINAL_DB"] == str(db)
+    assert args[1:] == ["-m", "liminal_app", "host", "live"] and kw["env"]["LIMINAL_DB"] == str(db)
     if os.name == "nt":
         assert kw["creationflags"] & 0x08000000 and kw["creationflags"] & 0x00000008  # no window, detached
     assert kw["stdin"] == kw["stdout"] == kw["stderr"] == hosting.subprocess.DEVNULL

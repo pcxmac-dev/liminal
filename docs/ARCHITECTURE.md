@@ -47,7 +47,7 @@ write: the frames built above the bar are rebuilt and the chart's caches see it.
 An entry can be released (put back) without losing the record that it was pruned, and a released
 entry is not pruned again. Pruning never mixes feeds: a feed's series is judged on its own. Reads of
 a series as it stood at a past moment (`as_of`) include bad data: it was there. (`baddata.py`;
-`python -m liminal pruned`; the chart app's Data panel.)
+`liminal pruned`; the chart app's Data panel.)
 
 What constitutes bad data (rules 1 to 3 are checked whenever a series is derived: after each
 symbol's fetch and in the live recorder, from where it changed; `pruned scan` checks stored history):
@@ -123,7 +123,7 @@ live recorder, whose "what changed since" read every bar's `stored_at`, had read
   up to 30 s, then are answered busy (503). The live recorder holds at most 64 MB of trades while the
   database refuses writes. numpy loads with one thread: OpenBLAS committed 757 MB per process, per
   CPU thread's buffer, almost none of it used.
-- **Measured apart.** `python -m liminal admin memory` shows each app process's own memory
+- **Measured apart.** `liminal admin memory` shows each app process's own memory
   (private bytes, working set) and disk reads, apart from Windows' file cache: active (held) and
   standby (handed back whenever anything needs it, counted as available).
 
@@ -190,12 +190,12 @@ liminal-integrator"; "all lib calls will point to liminal-lib".
   the composites and derived frames, the datasets, the publishers, the settings, the log
   (`logs.py`). The two places the library reached into the GUI were turned around: the regular
   session's mask and close are the library's (`sessions.regular_mask`, `regular_close`), the market
-  proxies are a parameter of `collector.sync` (`proxies`, the app's `gui/world.PROXIES`). The app's
-  package maps `liminal.<module>` to `liminal_lib.<module>` with a meta path finder (`liminal/__init__.py`:
-  the one module object under both names, first in `sys.meta_path` so the path finder never makes a
-  second), so the app, its tests and the plugins keep their imports until each points to
-  `liminal_lib`; the GitHub-hosted datasets' submodules stay in the app's repository (`LIMINAL_DATA_REPOS`).
-  The suite proper still runs here, with the library installed; it moves there module by module.
+  proxies are a parameter of `collector.sync` (`proxies`, the app's `gui/world.PROXIES`). The app
+  (package `liminal_app` since 2026-11-02, the user: "lets rename the app to liminal-app", "not
+  liminal", "refactor"), its tests, the integrator and every plugin import the library as
+  `liminal_lib`; the alias package `liminal` that once mapped `liminal.<module>` onto it is gone. The
+  GitHub-hosted datasets' submodules stay in the app's repository (`LIMINAL_DATA_REPOS`). The suite
+  proper still runs here, with the library installed; it moves there module by module.
 - **liminal-integrator** (`liminal_integrator`, [its repository](https://github.com/pcxmac-dev/liminal-integrator)):
   the fetcher, the resident host `fetcher` (one per database, `host.FETCHER`), up while someone holds
   it and gone once nobody does. `lib.py` is the one place naming the library (what it uses of
@@ -307,7 +307,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
 - **Keys and settings.** Keys stay in the user's environment variables only. `Settings.env` holds
   the variables the plugins declare (never in a repr), read from the saved user
   variables too (`config.saved_names`). `tools/set-key.ps1` asks the app for the plugins
-  (`python -m liminal plugins --json`: names and whether set, never a value) and offers a
+  (`liminal plugins --json`: names and whether set, never a value) and offers a
   menu per provider: set, replace or remove its keys, typed hidden.
 - **Read everywhere from the registry**: the sync's feed list and `--source` choices, feed profiles
   and the one-download-per-span rule, the Fetcher's tabs, rows, limits and health, `status`, `feeds`,
@@ -472,7 +472,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     `fetch(ctx, job)` one of them (`Fetched`: requests, rows, bytes, when asked again). The fetch
     queue (`fetch_queue` in the main file, `storage/queue.py`) holds one row per resource by plugin,
     part, kind and key: waiting, running (with its process), done, failed or held. `runner.py`
-    gives each such plugin a worker of its own (`python -m liminal fetcher`), taking only
+    gives each such plugin a worker of its own (`liminal fetcher`), taking only
     its own jobs and stopping between two for the fetching pause, its kill or pause, a StopRun; one
     plugin's failure stops its worker alone. Until a plugin fetches on its own, the app's paths keep
     the same queue: the bars sync (each symbol it plans waiting, then running, done or failed), the
@@ -661,8 +661,8 @@ sync from its next run. An offline copy refuses: it shares the user's real varia
 ## Which source delivers what (2026-10-27)
 
 The user's order of collection: **#1 daily bars, #2 1-minute bars, #3 1-second bars**. `sourcing.py`
-reads every provider's standard report and makes the delivery plan; `python -m liminal
-sourcing` shows the reports and the plan (no requests).
+reads every provider's standard report and makes the delivery plan; `liminal sourcing` shows the
+reports and the plan (no requests).
 
 - **Cost** is what a job spends of a subscription's limits (its price is fixed): requests per
   symbol-year (from the bars a request returns) against the requests a day it allows, as days of
@@ -686,7 +686,7 @@ sourcing` shows the reports and the plan (no requests).
   the bars since 2016.
 - The current session is the live streams' (only for the symbols open on a chart: `LIVE_STREAMS`).
 - **Capability scans.** A plugin may scan what its plan really gives (`scan`: a few requests);
-  each feed's sync runs it once a week (`cli.SCAN_DAYS`), `python -m liminal capabilities`
+  each feed's sync runs it once a week (`cli.SCAN_DAYS`), `liminal capabilities`
   on demand, and its report shows the answers. Tiingo's (2026-10-27): daily bars, IEX's 1-minute
   bars, forex and crypto bars on the free plan; Blue Ocean's overnight bars refused (a $9 a month
   add-on). Only its daily bars are collected.
@@ -862,7 +862,7 @@ refresh, so the French library's revisions are lost.
    composite builds, quality scores, audits and dataset quality priors; derived rows point to it.
    Bars built from ticks live apart from the feed's own in `built_bars` (reads combine them, built
    first); the composite has its own file; indicators (computed on request) return their settings,
-   code version and whether they look ahead. `python -m liminal provenance [product] -v`.
+   code version and whether they look ahead. `liminal provenance [product] -v`.
    Bars built before provenance moved apart under "before-provenance" records.
 5. **Calculations out of the GUI.** Resampling, calendar grouping, chart-type construction and
    statistics move to `calc/`; `gui/bars.py` becomes a thin adapter; the projection uses public
