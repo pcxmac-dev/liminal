@@ -341,6 +341,7 @@ class ChartApp:
         symbol = str(body.get("symbol") or "").strip().upper()
         if not symbol:
             raise ValueError("symbol is required")
+        symbol = stored_ticker(symbol)  # TWSE:2330 and 2330::XTAI are the request for 2330.TW (one request, asked anew)
         kinds = [k for k in (body.get("kinds") or ["bars"]) if k in REQUEST_KINDS] or ["bars"]
         by = body.get("by") if body.get("by") in ("chart", "page", "cli") else "page"
         if self.settings.read_only:
@@ -1905,6 +1906,17 @@ def _change(snapshot: dict, ticker: str) -> float | None:
 
 
 FUTURES_MOVE_BARS = 5  # day bars read a front: its session's bar and the one before, past newer ones
+
+
+def stored_ticker(symbol: str) -> str:
+    """The name a symbol is stored under, from the text typed (SPCX::NASDAQ: SPCX; TSE:7203: 7203.T;
+    EUR/USD: EURUSD), or the text itself when the library cannot read it (the fetcher then says why)."""
+    from liminal_lib.symbols import resolve
+
+    try:
+        return resolve(symbol).ticker
+    except ValueError:
+        return symbol
 
 
 def _futures_moves(store) -> Callable[[dict], dict]:

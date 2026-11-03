@@ -634,6 +634,24 @@ API 1.12), liminal-integrator 1.2.0 and this app:
   exchanges without a free official route (HKEX, ASX, LSE, TSX, Euronext); exchange-holiday
   precision for foreign calendars and intraday foreign sessions in the chart are follow-ups.
 
+- **Five passes over the fetcher's page (2026-11-03;** the user: "loop at least 5 times, each time
+  go through the UI and look for discrepancies and attempt to fix them, then cycle, and make sure
+  fixes worked, just go through the integrator with emphasis on function of each plugin"**).** On the
+  offline preview, plugin by plugin: the Plugins view offers a plugin's own settings in an Options
+  table (`Provider.options` with choices in `plan_choices`: Tiingo's `TIINGO_LISTINGS`, B3's
+  `B3_HISTORY_YEARS`, saved like a plan); a plugin is "a closed archive" only when each of its feeds
+  is (Cboe's indices are, its VIX futures live; the feeds table says which); a keyed feed without a
+  scan no longer calls itself public; a feed of daily bars alone lists no trades database
+  (`registry.plugin_databases`); a keyed plugin without its key shows what the plan would give once
+  the key is set; VIX futures are end of day (`PLAN_DELAYS["cboe-futures"]`). The Live view lists
+  the stocks abroad with why they have no session feed. The dependency checks read a ticker's asset
+  class from the ticker when it is no longer watched, name the integrator's service, and explain the
+  pandas 3.1 calendar failure. The fetcher assesses a request even offline, so the stack shows which
+  feeds it would ask; a request is put under its stored name however it is typed
+  (`server.stored_ticker`, the integrator's `request` too); a listing abroad's plan is one job per
+  feed (liminal-integrator 1.2.1 to 1.2.3, liminal-lib 1.2.2 to 1.2.4, Tiingo 1.5.1, B3 1.0.1, Cboe
+  1.3.1).
+
 ## The Federal plugin (2026-10-30)
 
 The user: "lets take a look at all regulatory agencies that affect corporations and stocks, review

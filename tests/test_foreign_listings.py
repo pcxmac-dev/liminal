@@ -92,6 +92,26 @@ def test_the_live_view_names_listings_abroad_as_end_of_day_without_a_session_fee
     assert "no current-session feed" in rows["abroad"]["note"] and rows["abroad"]["delay"].startswith("end of day")
 
 
+def test_a_request_is_put_under_the_stored_ticker_however_it_is_typed(tmp_path):
+    from types import SimpleNamespace
+
+    from liminal_app.gui.server import ChartApp, stored_ticker
+    from liminal_lib.config import load_settings
+    from liminal_lib.storage import Store
+
+    assert stored_ticker("TWSE:2330") == "2330.TW" and stored_ticker("SPCX::NASDAQ") == "SPCX" and stored_ticker("EUR/USD") == "EURUSD"
+    s = Store(tmp_path / "m.db", check_same_thread=False)
+    try:
+        app = ChartApp(s, settings=load_settings(env={"MASSIVE_API_KEY": "k"}, env_file=None),
+                       fetcher=SimpleNamespace(wake_up=lambda: None, ask_pass=lambda: None, status=lambda: {}))
+        first = app.request_symbol({"symbol": "twse:2330", "kinds": ["bars"], "by": "page"})
+        again = app.request_symbol({"symbol": "2330::XTAI", "kinds": ["bars"], "by": "page"})
+        assert first["symbol"] == "2330.TW" and again["id"] == first["id"]  # one request, asked anew
+        assert [r["symbol"] for r in s.request_rows()] == ["2330.TW"]
+    finally:
+        s.close()
+
+
 def test_the_bad_data_scans_leave_a_listing_abroad_alone(store):
     bars, evidence = baddata.inconsistent(store, "fake", "7203.T", "day", _ms(date(2026, 11, 23)), _ms(date(2026, 11, 28)),
                                           "stock", "XTKS")

@@ -25,7 +25,7 @@ BUILT_IN: list[str] = []  # none left in sources/plugins/ (2026-11-01): every pr
 PACKAGED = {  # name: (its distribution's version, the contract it needs, its entry point's value)
     "bitstamp": ("1.3.1", "1.6", "liminal_plugin_bitstamp:PLUGIN"), "coinbase": ("1.3.1", "1.6", "liminal_plugin_coinbase:PLUGIN"),
     "bitfinex": ("1.2.1", "1.6", "liminal_plugin_bitfinex:PLUGIN"),
-    "cboe": ("1.3.0", "1.12", "liminal_plugin_cboe"), "cboefutures": ("1.3.0", "1.12", "liminal_plugin_cboe"),
+    "cboe": ("1.3.1", "1.12", "liminal_plugin_cboe"), "cboefutures": ("1.3.1", "1.12", "liminal_plugin_cboe"),
     "tiingo": ("1.5.1", "1.12", "liminal_plugin_tiingo"), "tiingofx": ("1.5.1", "1.12", "liminal_plugin_tiingo"),
     "alpaca": ("1.4.1", "1.11", "liminal_plugin_alpaca"), "boats": ("1.4.1", "1.11", "liminal_plugin_alpaca"),
     "massive": ("1.4.1", "1.11", "liminal_plugin_massive"), "twse": ("1.0.0", "1.12", "liminal_plugin_twse"),
