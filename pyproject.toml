@@ -17,7 +17,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 # the fetcher, released on its own (the app's pages get their data through it)
-integrator = ["liminal-integrator @ git+https://github.com/pcxmac-dev/liminal-integrator@v1.0.1"]
+integrator = ["liminal-integrator @ git+https://github.com/pcxmac-dev/liminal-integrator@v1.1.0"]
 # the plugins released on their own, from their tags (docs/ARCHITECTURE.md: Providers are plugins)
 plugins = [
     "liminal-plugin-cboe @ git+https://github.com/pcxmac-dev/liminal-plugin-cboe@v1.2.0",

@@ -1,13 +1,16 @@
 """What the app's two servers share (the user, 2026-11-01: "make sure that the library calls
 contribute to code reuse"): the fetcher's page and data API (server.py) and the chart front
 (front.py) both answer only requests addressed to this machine from this app's own pages, serve
-the page's files from one folder, and send bodies the same way.
+the page's files from one folder, and send bodies the same way. The fetcher's own page
+(fetcher_page) is here too: the data API serves it in the fetcher's process, and the front in
+mode "fetcher" keeps it at the fetcher's port for the integrator (`serve`, its service).
 
 Nothing here opens a database: the front has none, the data API's is the app's (ChartApp)."""
 from __future__ import annotations
 
 import json
 import mimetypes
+import socket
 from http import HTTPStatus
 from pathlib import Path
 
@@ -20,6 +23,19 @@ PROFILE_COOKIE = "mc_profile"  # the profile this browser signed in as (no passw
 PROFILE_HEADER = "X-Liminal-Profile"
 LOCAL_HOSTS = ("127.0.0.1", "localhost")
 ALWAYS = (("Cache-Control", "no-store"), ("X-Content-Type-Options", "nosniff"))
+
+
+def listening(port: int) -> bool:
+    """Whether something answers on 127.0.0.1:`port` already. A server's own bind cannot tell on
+    Windows: HTTPServer binds with SO_REUSEADDR, which there lets a second server take a port in
+    use (the fetcher's page took the integrator's front's port and the front proxied to itself)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        try:
+            s.connect(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
 
 
 def send(handler, status: int, body: bytes, ctype: str, headers=None) -> None:
@@ -88,3 +104,18 @@ def static_file(handler, rel: str) -> None:
     if ctype.startswith("text/") or ctype == "application/javascript":
         ctype += "; charset=utf-8"
     send(handler, HTTPStatus.OK, target.read_bytes(), ctype)
+
+
+_FETCHER_PAGE: list[bytes] = []
+
+
+def fetcher_page() -> bytes:
+    """The fetcher's own page: the chart page without the chart, the tools and what is the user's
+    (style.css and the scripts read the body's mode): the data and monitoring views, the icons.
+    Nobody's: no profile, no login."""
+    if not _FETCHER_PAGE:
+        html = (STATIC / "index.html").read_text(encoding="utf-8")
+        html = html.replace("<body>", '<body data-mode="fetcher">', 1).replace("<title>Liminal Charts</title>",
+                                                                               "<title>Liminal Fetcher</title>", 1)
+        _FETCHER_PAGE.append(html.encode("utf-8"))
+    return _FETCHER_PAGE[0]

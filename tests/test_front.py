@@ -4,6 +4,7 @@ fetcher to the databases"). The fetcher stands in as a small server here; no pro
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from http.client import HTTPConnection
@@ -12,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 from liminal import host as hosting
-from liminal.gui import front as front_mod
+from liminal.gui import front as front_mod, web
 from liminal.gui.front import Front, make_front_handler
 
 
@@ -142,6 +143,54 @@ def test_the_front_funnels_its_pages_requests_to_the_fetcher(tmp_path, monkeypat
         srv.shutdown()
         srv.server_close()
         front.let_go()
+
+
+def test_the_front_in_fetcher_mode_is_the_integrators_page(tmp_path, monkeypatch, upstream):
+    """`liminal-integrator serve` and its service (the user, 2026-11-02: "i need a way to run it from
+    the browser like the other liminals"): the fetcher's own page at its port, nobody's (no login),
+    its data through the fetcher like the chart's; serve_front ends when told to stop."""
+    page = f"http://127.0.0.1:{upstream.server_address[1]}/"
+    att = FakeAttachment(page)
+    monkeypatch.setattr(hosting, "attach_or_start", lambda name, db, log=print: att)
+    lines: list[str] = []
+    front = Front(tmp_path / "liminal.db", log=lines.append, name="the integrator's page")
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), make_front_handler(front, mode="fetcher"))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    try:
+        for headers in ({}, {"Cookie": "mc_profile=1"}):  # the same page whoever the browser signed in as
+            status, body, _ = _get(port, "/", headers)
+            assert status == 200 and b'data-mode="fetcher"' in body and b"<title>Liminal Fetcher" in body
+        assert _get(port, "/app.js")[0] == 200
+        assert json.loads(_get(port, "/api/queue")[1])["path"] == "/api/queue" and front.connected
+        assert any(m.startswith("the integrator's page is connected to the fetcher") for m in lines)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        front.let_go()
+    assert att.detached
+    with pytest.raises(ValueError):
+        make_front_handler(front, mode="plots")
+    # serve_front itself, as the service runs it: on the port asked, or a free one when something
+    # answers there already (on Windows a second server binds a port in use), until told to stop
+    taken = upstream.server_address[1]
+    assert web.listening(taken)
+    stop = threading.Event()
+    done = threading.Event()
+
+    def run():
+        front_mod.serve_front(tmp_path / "liminal.db", port=taken, open_browser=False, log=lines.append, mode="fetcher", stop=stop)
+        done.set()
+    threading.Thread(target=run, daemon=True).start()
+    end = time.monotonic() + 5
+    while not (urls := [m for m in lines if m.startswith("front: the fetcher's page at")]) and time.monotonic() < end:
+        time.sleep(0.02)
+    served = int(re.search(r"http://127\.0\.0\.1:(\d+)/", urls[0]).group(1))
+    assert served != taken and any(f"port {taken} is taken" in m for m in lines)
+    assert b'data-mode="fetcher"' in _get(served, "/")[1]
+    stop.set()
+    assert done.wait(5)
+    assert not web.listening(served)
 
 
 def test_the_gui_command_runs_the_front_unless_alone(tmp_path, monkeypatch):

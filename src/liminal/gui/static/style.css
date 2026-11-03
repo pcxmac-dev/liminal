@@ -1090,7 +1090,7 @@ main > .view.ex-view:not([hidden]) { display: grid; }
 .pl-checks li { margin: 2px 0; overflow-wrap: anywhere; }
 @media (max-width: 1100px) { .ex-view { grid-template-columns: 200px minmax(0, 1fr); } .ex-side { grid-column: 1 / -1; border-left: none; border-top: 1px solid var(--border); } }
 
-/* The fetcher's own page (gui/server.py fetcher_page; the user, 2026-11-01: "without the symbol plot and
+/* The fetcher's own page (gui/web.py fetcher_page; the user, 2026-11-01: "without the symbol plot and
    user info, just the monitoring, plugins, icons", "no tools at top or left side"): the chart app's page
    without the top bar, the drawing tools, the chart and its side panel, the upper rail group and the profile */
 body[data-mode="fetcher"] #topbar, body[data-mode="fetcher"] #tools, body[data-mode="fetcher"] #sidePanel,

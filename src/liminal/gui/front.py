@@ -10,6 +10,13 @@ every /api/ request of its pages passed on to the fetcher's data API (fetcher.py
 opened here. A page in touch keeps the fetcher held; with none in touch for LIMINAL_QUIET_SECONDS
 the front lets it go (the fetcher ends once nobody holds it, unless a service does: service.py)
 and attaches again at the next request.
+
+In mode "fetcher" the page is the fetcher's own (web.fetcher_page) and this is the integrator's
+front (`liminal-integrator serve`, and its service): the page kept at the fetcher's port, 8785,
+like the chart's at 8765 (the user, 2026-11-02: "i need a way to run it from the browser like the
+other liminals"), while the fetcher itself comes and goes the same way, unless the service's
+`--daemon` holds it for good. The fetcher's own page then takes a free port, learnt from it like
+the app does.
 """
 from __future__ import annotations
 
@@ -34,14 +41,17 @@ QUIET_CHECK_SECONDS = 15.0
 # (Origin, Sec-Fetch-Site: this front checked them; the fetcher takes a request saying neither)
 FORWARDED = ("Cookie", "Content-Type", "Accept", "Last-Event-ID", WRITE_HEADER, PROFILE_HEADER)
 PASSED_BACK = ("Content-Type", "Cache-Control", "X-Content-Type-Options")
+MODES = ("chart", "fetcher")
 
 
 class Front:
-    """The front's hold on the fetcher: attached while its pages are in touch."""
+    """The front's hold on the fetcher: attached while its pages are in touch. `name`: whose
+    front this is, in its log lines (the app's, the integrator's page)."""
 
-    def __init__(self, db_path: Path, log=print):
+    def __init__(self, db_path: Path, log=print, name: str = "the app"):
         self.db_path = Path(db_path)
         self.log = log
+        self.name = name
         self._lock = threading.Lock()
         self._att = None
         self._port: int | None = None
@@ -78,10 +88,10 @@ class Front:
             page = (answer or {}).get("page") if isinstance(answer, dict) else None
             port = urlsplit(page).port if page else None
             if not port:
-                self.log("the fetcher has no page (LIMINAL_FETCHER_PORT=0): the app cannot reach its data")
+                self.log(f"the fetcher has no page (LIMINAL_FETCHER_PORT=none): {self.name} cannot reach its data")
                 return None
             self._port = port
-            self.log(f"the app is connected to the fetcher at {page}")
+            self.log(f"{self.name} is connected to the fetcher at {page}")
             return port
 
     def let_go(self) -> bool:
@@ -103,7 +113,13 @@ class Front:
                 self.log(f"quiet: no page in touch for {self.quiet_seconds():g} s; the fetcher is let go")
 
 
-def make_front_handler(front: Front):
+def make_front_handler(front: Front, mode: str = "chart"):
+    """The front's requests: the page's files from here, /api/ passed on to the fetcher. The page
+    is the chart's (a profile's: the login page first without one) or, in mode "fetcher", the
+    fetcher's own (nobody's)."""
+    if mode not in MODES:
+        raise ValueError(f"front: no mode {mode!r} (one of {', '.join(MODES)})")
+
     class Handler(BaseHTTPRequestHandler):
         server_version = "liminal-front"
 
@@ -160,8 +176,9 @@ def make_front_handler(front: Front):
             body = self.rfile.read(length) if length else None
             port = front.fetcher_port()
             if port is None:
-                return self._json({"error": "the fetcher is not running: the app has no data to show; "
-                                            "start it with `python -m liminal fetcher`"}, HTTPStatus.SERVICE_UNAVAILABLE)
+                return self._json({"error": f"the fetcher is not running (none answered, none could be started): "
+                                            f"{front.name} has no data to show; see logs/liminal.log"},
+                                  HTTPStatus.SERVICE_UNAVAILABLE)
             headers = {name: value for name in FORWARDED if (value := self.headers.get(name)) is not None}
             headers["Host"] = f"127.0.0.1:{port}"
             conn = http.client.HTTPConnection("127.0.0.1", port, timeout=None)
@@ -197,6 +214,8 @@ def make_front_handler(front: Front):
 
         def _static(self, path: str) -> None:
             rel = "index.html" if path in ("", "/") else path.lstrip("/")
+            if rel == "index.html" and mode == "fetcher":  # the fetcher's own page: nobody's, no profile
+                return self._send(HTTPStatus.OK, web.fetcher_page(), "text/html; charset=utf-8")
             # a browser signed in as no profile (its cookie; whether it still exists is the fetcher's
             # to check) picks or makes one first
             if rel == "index.html" and web.profile_cookie(self) is None:
@@ -206,23 +225,41 @@ def make_front_handler(front: Front):
     return Handler
 
 
-def serve_front(db_path: Path, port: int = 8765, open_browser: bool = True, log=None) -> None:
-    """The chart app: its page here, its data through the fetcher (attached at the first page)."""
+def serve_front(db_path: Path, port: int = 8765, open_browser: bool = True, log=None, mode: str = "chart",
+                stop: threading.Event | None = None) -> None:
+    """The chart app: its page here, its data through the fetcher (attached at the first page).
+    In mode "fetcher" the fetcher's own page instead, at the fetcher's port (`liminal-integrator
+    serve`; its service, which passes `stop`). On `port`, or a free one when it is taken; until
+    Ctrl+C or `stop` is set, then the fetcher is let go."""
     log = log or log_to(db_path)
-    front = Front(db_path, log)
-    threading.Thread(target=front.watch_quiet, name="front-quiet", daemon=True).start()
+    fetchers = mode == "fetcher"
+    front = Front(db_path, log, name="the integrator's page" if fetchers else "the app")
+    stop = stop or threading.Event()
+    threading.Thread(target=front.watch_quiet, args=(stop,), name="front-quiet", daemon=True).start()
+    if port and web.listening(port):  # a bind alone cannot tell on Windows (web.listening)
+        log(f"front: port {port} is taken (another server answers there): a free one instead")
+        port = 0
     try:
-        httpd = ThreadingHTTPServer(("127.0.0.1", port), make_front_handler(front))
+        httpd = ThreadingHTTPServer(("127.0.0.1", port), make_front_handler(front, mode))
     except OSError:
-        httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_front_handler(front))  # port taken: pick a free one
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_front_handler(front, mode))  # port taken: pick a free one
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
-    print(f"chart app running at {url}, its data through the fetcher  (Ctrl+C to stop)", flush=True)
+    log(f"front: {'the fetcher' if fetchers else 'the chart'}'s page at {url}, its data through the fetcher")
+    print(f"the fetcher's page at {url}; the fetcher runs while a page is in touch  (Ctrl+C to stop)" if fetchers else
+          f"chart app running at {url}, its data through the fetcher  (Ctrl+C to stop)", flush=True)
     if open_browser:
         threading.Timer(0.5, webbrowser.open, args=(url,)).start()
+
+    def stopping() -> None:
+        stop.wait()
+        httpd.shutdown()
+
+    threading.Thread(target=stopping, name="front-stop", daemon=True).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        stop.set()
         httpd.server_close()
         front.let_go()

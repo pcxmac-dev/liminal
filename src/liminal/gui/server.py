@@ -31,7 +31,7 @@ from . import activity, astro, web
 from .bars import CALENDAR, PRICE_BASED, TIME_TYPES, BarEngine, Style, _BoundedCache, resample
 from ..calc.derivatives import Model
 from .stats import details_subset, key_stats
-from .web import MAX_BODY, PROFILE_COOKIE, PROFILE_HEADER, STATIC, WRITE_HEADER  # noqa: F401 (shared with the front, web.py)
+from .web import MAX_BODY, PROFILE_COOKIE, PROFILE_HEADER, STATIC, WRITE_HEADER, fetcher_page  # noqa: F401 (shared with the front, web.py)
 
 
 def finite(data):
@@ -2336,18 +2336,6 @@ def _log_to(db_path):
 
 
 RESCAN_AFTER_START_S = 10.0  # the start's rescan waits for the first pages' requests
-_FETCHER_PAGE: list[bytes] = []
-
-
-def fetcher_page() -> bytes:
-    """The fetcher's own page: the chart page without the chart, the tools and what is the user's
-    (style.css and the scripts read the body's mode): the data and monitoring views, the icons."""
-    if not _FETCHER_PAGE:
-        html = (STATIC / "index.html").read_text(encoding="utf-8")
-        html = html.replace("<body>", '<body data-mode="fetcher">', 1).replace("<title>Liminal Charts</title>",
-                                                                               "<title>Liminal Fetcher</title>", 1)
-        _FETCHER_PAGE.append(html.encode("utf-8"))
-    return _FETCHER_PAGE[0]
 
 
 def _prepare(app: ChartApp, rescan: bool) -> None:
@@ -2368,12 +2356,17 @@ def _prepare(app: ChartApp, rescan: bool) -> None:
 
 
 def make_server(app: ChartApp, port: int) -> ThreadingHTTPServer:
-    """The HTTP server of `app` on 127.0.0.1:`port` (a free one when it is taken)."""
+    """The HTTP server of `app` on 127.0.0.1:`port`, or a free one when something answers there
+    already (web.listening: a bind alone cannot tell on Windows, where the fetcher's page took the
+    integrator's front's port, 8785, and the front proxied to itself)."""
     port_ref = [port]
+    if port and web.listening(port):
+        port = 0
     try:
-        return ThreadingHTTPServer(("127.0.0.1", port), make_handler(app, port_ref))
+        httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app, port_ref))
     except OSError:
-        return ThreadingHTTPServer(("127.0.0.1", 0), make_handler(app, port_ref))  # port taken: pick a free one
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(app, port_ref))  # port taken: pick a free one
+    return httpd
 
 
 def serve(db_path: Path, port: int = 8765, open_browser: bool = True, priority: list[str] | None = None,

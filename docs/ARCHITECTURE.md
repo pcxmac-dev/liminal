@@ -226,20 +226,28 @@ liminal-integrator"; "all lib calls will point to liminal-lib".
     frames), the plugins that fetch on their own through their queue (runner.py).
   - *Its status* in the main file (`STATUS_KEY`, `read_status`/`write_status`), for every page; over
     its pipe it answers `status`, `pass` and `wake` (`Fetcher.handle`).
-  - *Its page*: the chart app's page in fetcher mode (`gui/server.fetcher_page`: the body marked
+  - *Its page*: the chart app's page in fetcher mode (`gui/web.fetcher_page`: the body marked
     `data-mode="fetcher"`; style.css hides the top bar, the drawing tools, the chart and its side panel,
     the upper rail group and the profile; app.js loads no chart; panels.js keeps to the data and
     monitoring views) and the data API, on LIMINAL_FETCHER_PORT (8785; 0 a free one; none: no page).
-    A page in touch holds the host (`Host.touch`) as a client does.
-  - *The service* (`service.py`, by the user's decision: "Only while I use it" stays the default):
-    a client that holds the fetcher for good and starts it again when it ends (`service run`);
-    installed as a Task Scheduler task at logon as the user on Windows (`LiminalFetcher`: pythonw, no
-    window; as the user it sees the keys in the user environment variables) or a systemd user unit
-    on Linux (`liminal-fetcher`; lingering for no-login runs; the keys need a home the unit can read
-    at boot: the keyring or systemd's credentials, never a file the program writes: the user's
-    decision, open). `liminal-integrator serve|status|request|pass|cancel|host` and `service
-    install|remove|status|run`; the app's `fetcher` and `service` commands and `host fetcher` answer
-    through it (`cli.integrator()`), and say where it is when it is not installed.
+    A page in touch holds the host (`Host.touch`) as a client does. The integrator's service keeps that
+    page at the port from outside the fetcher (the app's front in mode "fetcher", `gui/front.py`: the
+    fetcher attached, started if none answers, when a page comes; let go once none has been in touch
+    for LIMINAL_QUIET_SECONDS; the fetcher's own page then takes a free port, learnt from it), so the
+    page is there from the browser like the chart app's (the user, 2026-11-02: "i need a way to run it
+    from the browser like the other liminals").
+  - *The service* (`service.py`): that page from the user's logon, the fetcher running only while a
+    page is in touch ("Only while I use it" stays the default), or with `--daemon` held for good and
+    started again when it ends, so its standing passes go on on their own (the user, 2026-11-02: "the
+    integrator needs to be able to run autonomously in a 'daemon' mode"); `liminal-integrator serve`
+    runs the same in the foreground (the page in the browser). Installed as a Task Scheduler task at
+    logon as the user on Windows (`LiminalIntegrator`: pythonw, no window; as the user it sees the
+    keys in the user environment variables) or a systemd user unit on Linux (`liminal-integrator`;
+    lingering for no-login runs; the keys need a home the unit can read at boot: the keyring or
+    systemd's credentials, never a file the program writes: the user's decision, open).
+    `liminal-integrator serve|status|request|pass|cancel|host [--daemon]` and `service
+    install|remove|status|run [--daemon]`; the app's `fetcher` and `service` commands and `host
+    fetcher` answer through it (`cli.integrator()`), and say where it is when it is not installed.
 - **The app** (this repository): the chart front (`gui/front.py`, `liminal gui`): serves the chart page
   and its scripts, attaches to the fetcher at the first page (`host.attach_fetcher`, started if none
   answers; its port learnt from its status over the pipe) and passes every `/api/` request of its

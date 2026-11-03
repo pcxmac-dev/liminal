@@ -377,7 +377,7 @@
     el('qCounts').textContent = total ? Q_STATES.filter((st) => t[st]).map((st) => `${num(t[st])} ${Q_LABEL[st]}`).join(' · ') : '';
     const chips = (key, items) => items.map(([v, text, n]) => `<button type="button" data-q="${key}" data-v="${esc(v)}"
       class="${qFilter[key] === v ? 'active' : ''}">${text}${n != null ? ` <span class="chip">${num(n)}</span>` : ''}</button>`).join('');
-    el('qFilters').innerHTML = `<div class="q-group">${chips('plugin', [['', 'All plugins', total],
+    el('qFilters').innerHTML = `<div class="q-group">${chips('plugin', [['', 'Every plugin', null],
         ...queue.plugins.map((p) => [p.name, esc(p.title), sum(queue.counts.plugins[p.name])])])}</div>
       <div class="q-group">${chips('kind', [['', 'Every kind', null], ...queue.kinds.map((k) => [k, esc(k), sum(queue.counts.kinds[k])])])}</div>
       <div class="q-group">${chips('state', [['', 'Every state', null], ...Q_STATES.filter((st) => t[st] || st === qFilter.state)

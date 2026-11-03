@@ -1,7 +1,7 @@
 'use strict';
 /* Liminal Charts: TradingView-style front end over the local data API. */
 
-// The fetcher's own page (gui/server.py fetcher_page): the same page without the chart, the tools and what is
+// The fetcher's own page (gui/web.py fetcher_page): the same page without the chart, the tools and what is
 // the user's (style.css hides them; panels.js keeps to the data and monitoring views); no chart is loaded.
 const FETCHER_MODE = document.body.dataset.mode === 'fetcher';
 window.FETCHER_MODE = FETCHER_MODE;
