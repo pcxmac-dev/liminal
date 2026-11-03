@@ -59,6 +59,20 @@ def test_every_tracked_venue_with_its_state_products_and_insight(tmp_path):
     assert by["XNYS"]["movers"]["down"] == [{"ticker": "KO", "pct": -1.0}]
 
 
+def test_vix_futures_are_the_cboe_futures_exchanges_venue(tmp_path):
+    feeds = feed_profiles(load_settings(env=KEYS, env_file=None))
+    with _store(tmp_path) as s:
+        s.update_directory("cboefutures", "future", [{"ticker": "VX", "name": "Cboe Volatility Index (VIX) futures",
+                                                      "exchange": "XCBF", "type": "volatility", "kind": "future"}], date(2026, 10, 27))
+        s.watch_spec("cboefutures", resolve("VX1!"), "day")
+        out = venues.summary(s, MarketCalendar(), feeds, now=NOW)
+    by = {v["id"]: v for v in out["venues"]}
+    assert by["XCBF"]["name"] == "Cboe Futures Exchange" and by["XCBF"]["group"] == "Cboe Futures" and by["XCBF"]["asset"] == "future"
+    assert by["XCBF"]["products"] == 1 and by["XCBF"]["feeds"] == [("cboefutures", 1)] and by["XCBF"]["state"] == "open"
+    assert "FUT-OTHER" not in by and out["groups"].index("Cboe Futures") == out["groups"].index("CME Group") + 1
+    assert [v["id"] for v in out["venues"] if v["group"] in ("CME Group", "Cboe Futures")] == ["XCME", "XNYM", "XCBF"]
+
+
 def test_a_stock_exchange_abroad_is_a_venue_of_its_own(tmp_path):
     feeds = feed_profiles(load_settings(env=KEYS, env_file=None))
     with _store(tmp_path) as s:

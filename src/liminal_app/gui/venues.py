@@ -35,12 +35,14 @@ VENUES: dict[str, tuple[str, str, str, str, str]] = {
     "XCBT": ("CBOT", "CME Group", "future", "America/Chicago", "Globex: Sunday 18:00 to Friday 17:00 ET, a break 17:00-18:00"),
     "XCEC": ("COMEX", "CME Group", "future", "America/Chicago", "Globex: Sunday 18:00 to Friday 17:00 ET, a break 17:00-18:00"),
     "FUT-OTHER": ("Other futures", "CME Group", "future", "America/Chicago", "Globex hours"),
+    "XCBF": ("Cboe Futures Exchange", "Cboe Futures", "future", "America/Chicago",
+             "VIX futures: Sunday 18:00 to Friday 16:00 ET, a break 16:15-16:30 ET"),
     "INDEX": ("US indices", "Indices", "index", "America/New_York", "Calculated 09:30-16:00 ET"),
     "FX": ("Forex (OTC)", "Forex", "fx", "America/New_York", "Sunday 17:00 to Friday 17:00 ET"),
 }
 CRYPTO_NAMES = {"coinbase": "Coinbase", "bitstamp": "Bitstamp", "bitfinex": "Bitfinex", "kraken": "Kraken",
                 "alpaca": "Alpaca", "consolidated": "Consolidated (Massive)"}
-GROUPS = ("Stock exchanges", "CME Group", "Indices", "Crypto", "Forex")
+GROUPS = ("Stock exchanges", "CME Group", "Cboe Futures", "Indices", "Crypto", "Forex")
 STOCK_MICS = ("XNYS", "XNAS")
 
 
@@ -146,7 +148,7 @@ def _delivery(scheme, asset: str, market: str | None) -> list[dict]:
 def _market(vid: str, asset: str, rows: list[dict] = (), by_feed: dict | None = None) -> str | None:
     if is_foreign(vid):  # a stock exchange abroad: its feeds' own market (TWSE's twse, B3's b3)
         return next((by_feed[f].get("stock") for r in rows for f in r["feeds"] if f in (by_feed or {})), None)
-    return {"BOATS": "boats", "INDEX": "index", "FX": "otc"}.get(vid) or (
+    return {"BOATS": "boats", "INDEX": "index", "FX": "otc", "XCBF": "cfe"}.get(vid) or (
         vid.split(":", 1)[1] if vid.startswith("CRYPTO:") else "sip" if asset == "stock" else "cme" if asset == "future" else None)
 
 

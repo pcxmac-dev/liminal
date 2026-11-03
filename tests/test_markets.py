@@ -79,6 +79,21 @@ def test_markets_lists_watched_groups():
     assert cme["state"] == "open" and cme["tradeDate"] == "2026-10-23"
 
 
+def test_vix_futures_are_cboes_group_and_a_symbol_on_several_feeds_is_listed_once():
+    import pandas as pd
+
+    watch = [{"ticker": "AAPL", "asset": "stock", "source_ticker": "AAPL", "exchange": "XNAS", "source": "massive"},
+             {"ticker": "AAPL", "asset": "stock", "source_ticker": "AAPL", "exchange": "XNAS", "source": "alpaca"},
+             {"ticker": "VX1!", "asset": "future", "source_ticker": "VX", "source": "cboefutures"},
+             {"ticker": "VX1!", "asset": "future", "source_ticker": "VX", "source": "massive"},
+             {"ticker": "NQ1!", "asset": "future", "source_ticker": "NQ", "source": "massive"}]
+    by = {m["id"]: m for m in markets(CAL, pd.DataFrame(), watch, datetime(2026, 10, 22, 21, 0, tzinfo=ET))["markets"]}
+    assert by["us-equities"]["symbols"] == ["AAPL"] and by["cme-equity"]["symbols"] == ["NQ1!"]
+    assert by["cfe"]["symbols"] == ["VX1!"] and by["cfe"]["exchanges"] == [{"name": "Cboe Futures Exchange", "mic": "XCBF"}]
+    assert by["cfe"]["state"] == "open" and by["cfe"]["timezone"] == "America/Chicago"
+    assert [m["id"] for m in markets(CAL, pd.DataFrame(), watch[:2], datetime(2026, 10, 22, 21, 0, tzinfo=ET))["markets"]] == ["us-equities", "us-indices"]
+
+
 def test_a_stock_exchange_abroad_is_a_market_group_of_its_own():
     import pandas as pd
 

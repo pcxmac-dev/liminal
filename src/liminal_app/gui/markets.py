@@ -9,6 +9,7 @@ from liminal_lib.models import exchange_name, exchange_timezone, is_foreign
 from liminal_lib.sessions import ET, ENERGY_FUTURES, EQUITY_FUTURES, MarketCalendar, nyse_holidays
 
 US_VENUE_TYPES = ("exchange",)
+CFE_FUTURES = ("VX", "VXM")  # Cboe Futures Exchange's products (VIX futures): not CME Globex's
 
 
 def _iso(t: datetime | None) -> str | None:
@@ -88,14 +89,14 @@ def markets(cal: MarketCalendar, exchanges, watch: list[dict], now: datetime | N
         "hours": "Pre-market 04:00, regular 09:30-16:00, after-hours to 20:00 ET",
         "exchanges": [{"name": n, "mic": m} for n, m in venues] or [{"name": "Nasdaq", "mic": "XNAS"},
                                                                        {"name": "New York Stock Exchange", "mic": "XNYS"}],
-        "symbols": sorted(w["ticker"] for w in watch if w["asset"] == "stock" and not is_foreign(w.get("exchange"))),
+        "symbols": sorted({w["ticker"] for w in watch if w["asset"] == "stock" and not is_foreign(w.get("exchange"))}),
         **us_equities(cal, now),
     }]
     index = us_equities(cal, now)
     out.append({
         "id": "us-indices", "name": "US indices", "timezone": "America/New_York",
         "hours": "Calculated 09:30-16:00 ET", "exchanges": [{"name": "Index calculation (Nasdaq, S&P, Dow Jones)", "mic": None}],
-        "symbols": sorted(w["ticker"] for w in watch if w["asset"] == "index"),
+        "symbols": sorted({w["ticker"] for w in watch if w["asset"] == "index"}),
         **{**index, "state": "open" if index["state"] == "open" else "closed"},
     })
     for mic in sorted({w["exchange"] for w in watch if w["asset"] == "stock" and is_foreign(w.get("exchange"))}):
@@ -103,11 +104,11 @@ def markets(cal: MarketCalendar, exchanges, watch: list[dict], now: datetime | N
             "id": f"x-{mic.lower()}", "name": exchange_name(mic) or mic, "timezone": exchange_timezone(mic),
             "hours": "The local calendar day, Monday to Friday (its own hours and holidays later)",
             "exchanges": [{"name": exchange_name(mic) or mic, "mic": mic}],
-            "symbols": sorted(w["ticker"] for w in watch if w["asset"] == "stock" and w.get("exchange") == mic),
+            "symbols": sorted({w["ticker"] for w in watch if w["asset"] == "stock" and w.get("exchange") == mic}),
             **foreign_day(cal, mic, now),
         })
     products = sorted({w["source_ticker"] for w in watch if w["asset"] == "future"})
-    groups = {"equity": [p for p in products if p in EQUITY_FUTURES or p not in ENERGY_FUTURES],
+    groups = {"equity": [p for p in products if p not in CFE_FUTURES and (p in EQUITY_FUTURES or p not in ENERGY_FUTURES)],
               "energy": [p for p in products if p in ENERGY_FUTURES]}
     for group, prods in groups.items():
         if not prods:
@@ -117,14 +118,23 @@ def markets(cal: MarketCalendar, exchanges, watch: list[dict], now: datetime | N
             "timezone": "America/Chicago",
             "hours": "Sunday 18:00 to Friday 17:00 ET, daily break 17:00-18:00 ET",
             "exchanges": [{"name": "CME Globex", "mic": "XCME" if group == "equity" else "XNYM"}],
-            "symbols": sorted(w["ticker"] for w in watch if w["asset"] == "future" and w["source_ticker"] in prods),
+            "symbols": sorted({w["ticker"] for w in watch if w["asset"] == "future" and w["source_ticker"] in prods}),
             **_around_the_clock(cal, "future", prods[0], now),
+        })
+    cfe = [p for p in products if p in CFE_FUTURES]
+    if cfe:  # VIX futures: Cboe's own exchange, nearly around the clock like Globex (the calendar's futures rules)
+        out.append({
+            "id": "cfe", "name": "Cboe Futures Exchange (VIX futures)", "timezone": "America/Chicago",
+            "hours": "Sunday 18:00 to Friday 16:00 ET, a break 16:15-16:30 ET",
+            "exchanges": [{"name": "Cboe Futures Exchange", "mic": "XCBF"}],
+            "symbols": sorted({w["ticker"] for w in watch if w["asset"] == "future" and w["source_ticker"] in cfe}),
+            **_around_the_clock(cal, "future", cfe[0], now),
         })
     if any(w["asset"] == "fx" for w in watch):
         out.append({
             "id": "fx", "name": "Foreign exchange", "timezone": "America/New_York",
             "hours": "Sunday 17:00 to Friday 17:00 ET", "exchanges": [{"name": "Interbank (OTC)", "mic": None}],
-            "symbols": sorted(w["ticker"] for w in watch if w["asset"] == "fx"),
+            "symbols": sorted({w["ticker"] for w in watch if w["asset"] == "fx"}),
             **_around_the_clock(cal, "fx", None, now),
         })
     if any(w["asset"] == "crypto" for w in watch):
@@ -132,7 +142,7 @@ def markets(cal: MarketCalendar, exchanges, watch: list[dict], now: datetime | N
             "id": "crypto", "name": "Crypto", "timezone": "UTC",
             "hours": "Around the clock, every day; daily bars are UTC days",
             "exchanges": [{"name": "Consolidated across crypto exchanges", "mic": None}],
-            "symbols": sorted(w["ticker"] for w in watch if w["asset"] == "crypto"),
+            "symbols": sorted({w["ticker"] for w in watch if w["asset"] == "crypto"}),
             # never closes: the UTC day boundary is not a close, so no "until"
             **_around_the_clock(cal, "crypto", None, now), "since": None, "until": None, "next": None,
         })
