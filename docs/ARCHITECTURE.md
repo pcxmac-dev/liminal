@@ -585,6 +585,54 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
   (the federal agencies, one plugin; made), the dataset libraries `liminal-plugin-french` (made) and
   `liminal-plugin-datahub` (made), and, later, a state regulators' plugin of its own.
 
+## Stocks abroad, VIX futures and more forex (2026-11-02)
+
+The user: "are there any other public sources for 'bars'/data for stocks on foreign exchanges?",
+"lets include futures and forex/currencies", "update existing plugins, add exchanges where applicable
+and symbols, and if new sources, create a new plugin". Built with liminal-lib 1.2.0/1.2.1 (plugin
+API 1.12), liminal-integrator 1.2.0 and this app:
+
+- **One name per listing.** A stock listed outside the US is stored as `TICKER.SUFFIX` with the
+  Reuters-style suffix of its exchange's MIC (`models.VENUES`: `7203.T` Tokyo XTKS, `2330.TW` Taiwan
+  XTAI, `PETR4.SA` B3 BVMF, `600519.SS` Shanghai XSHG, `000001.SZ` Shenzhen XSHE, `VOD.L` London
+  XLON, `SHOP.TO` Toronto XTSE, `SAP.DE` Xetra XETR, ...); `TSE:7203` and `7203::XTKS` normalise to
+  it (`symbols.stock_spec`), US tickers and pins (`SPCX::NASDAQ`, `BRK.B`) are as before. `VOD` on
+  London and on Nasdaq are two names, never one row.
+- **A feed carries the exchanges it names.** `Provider.exchanges` (API 1.12) lists the MICs a stock
+  feed carries, `"US"` standing for every US listing; a feed without it carries US listings alone, so
+  Massive and Alpaca refuse `7203.T` and the fetcher's assessment puts a listing abroad on the feeds
+  that carry its exchange, or says "no feed set up here carries XTKS listings". The fetcher assesses
+  by the stored ticker (`resolve` first: before, a request for `SPCX::NASDAQ` or `EUR/USD` failed).
+- **Its own days.** A listing abroad counts every weekday as a trading day covering its local calendar
+  day (`sessions.MarketCalendar.local_day_session`, the seam where `exchange_calendars`' holidays
+  will go), through `freshness`, `coverage` and the collector (the watch row's `exchange`), so a
+  Tokyo trading day that is a US holiday is asked for; its day bars stay stamped at midnight ET of
+  the local date (`derive.aggregate` bins by the local day, no regular-session filter); the bad-data
+  scans and audits built on New York sessions leave it alone. Publication delays by tier name
+  (`freshness.PLAN_DELAYS`: `twse`, `b3`, `alphavantage-free` end of day; `jquants-free` twelve weeks
+  late; `twelvedata-free` whole UTC days). The Markets globe reads the library's
+  `sessions.world_calendar`.
+- **In the app.** The Exchanges view gives a stock exchange abroad its own venue (name, local
+  timezone, the local day as its session, its feeds' market behind the delivery), the Markets panel a
+  group of its own (`x-xtks`); US equities keep US listings alone; the stocks tab names each listing's
+  exchange (`exchangeName`), the directory spanning every source's listings (`Store.directory()`,
+  one row per listing); a listing's freshness, horizon and next due moment follow its exchange's days.
+- **The plugins.** `liminal-plugin-tiingo` 1.5.0 carries Shanghai's and Shenzhen's A-shares (Tiingo's
+  bare codes, from 2007; `TIINGO_LISTINGS=on` lists them from its supported-tickers file);
+  `liminal-plugin-cboe` 1.3.0 adds a second feed, `cboefutures`: Cboe's daily file of each VX
+  contract, named by its settlement date (the Wednesday 30 days before the next month's third Friday,
+  holiday-shifted), so `VX1!` rolls by volume from them; new packages `liminal-plugin-twse` 1.0.0
+  (every Taiwan Stock Exchange listing's daily bars from TWSE's open data, no key),
+  `liminal-plugin-b3` (B3's COTAHIST files, no key), `liminal-plugin-jquants` (JPX's J-Quants API,
+  an account's refresh token, the free plan twelve weeks late), `liminal-plugin-alphavantage`
+  (stocks on London, Toronto, Xetra, Bombay, Shanghai and Shenzhen, a free key, the latest 100 days
+  accumulating run by run) and `liminal-plugin-twelvedata` (forex minutes on a free key, its own
+  market like Tiingo's forex). Deferred, with why, in the plan of 2026-11-02: NSE/BSE (bot
+  protection, terms), KRX (registration terms), Cboe Europe files, Deutsche Börse's dataset (tens of
+  GB, needs a minute-bar foreign calendar), TrueFX/HistData/Dukascopy (accounts or terms), the
+  exchanges without a free official route (HKEX, ASX, LSE, TSX, Euronext); exchange-holiday
+  precision for foreign calendars and intraday foreign sessions in the chart are follow-ups.
+
 ## The Federal plugin (2026-10-30)
 
 The user: "lets take a look at all regulatory agencies that affect corporations and stocks, review

@@ -20,16 +20,17 @@ dev = ["pytest>=8"]
 integrator = ["liminal-integrator @ git+https://github.com/pcxmac-dev/liminal-integrator@v1.2.0"]
 # the plugins released on their own, from their tags (docs/ARCHITECTURE.md: Providers are plugins)
 plugins = [
-    "liminal-plugin-cboe @ git+https://github.com/pcxmac-dev/liminal-plugin-cboe@v1.2.1",
+    "liminal-plugin-cboe @ git+https://github.com/pcxmac-dev/liminal-plugin-cboe@v1.3.0",
     "liminal-plugin-bitstamp @ git+https://github.com/pcxmac-dev/liminal-plugin-bitstamp@v1.3.1",
     "liminal-plugin-coinbase @ git+https://github.com/pcxmac-dev/liminal-plugin-coinbase@v1.3.1",
     "liminal-plugin-bitfinex @ git+https://github.com/pcxmac-dev/liminal-plugin-bitfinex@v1.2.1",
-    "liminal-plugin-tiingo @ git+https://github.com/pcxmac-dev/liminal-plugin-tiingo@v1.4.1",
+    "liminal-plugin-tiingo @ git+https://github.com/pcxmac-dev/liminal-plugin-tiingo@v1.5.0",
     "liminal-plugin-french @ git+https://github.com/pcxmac-dev/liminal-plugin-french@v1.1.1",
     "liminal-plugin-datahub @ git+https://github.com/pcxmac-dev/liminal-plugin-datahub@v1.1.1",
     "liminal-plugin-federal @ git+https://github.com/pcxmac-dev/liminal-plugin-federal@v1.4.1",
     "liminal-plugin-alpaca @ git+https://github.com/pcxmac-dev/liminal-plugin-alpaca@v1.4.1",
     "liminal-plugin-massive @ git+https://github.com/pcxmac-dev/liminal-plugin-massive@v1.4.1",
+    "liminal-plugin-twse @ git+https://github.com/pcxmac-dev/liminal-plugin-twse@v1.0.0",
 ]
 
 [project.scripts]

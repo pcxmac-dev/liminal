@@ -24,14 +24,16 @@ BUILT_IN: list[str] = []  # none left in sources/plugins/ (2026-11-01): every pr
 # sees them as the user's app does (tests/conftest.py), each with its distribution's version.
 PACKAGED = {  # name: (its distribution's version, the contract it needs, its entry point's value)
     "bitstamp": ("1.3.1", "1.6", "liminal_plugin_bitstamp:PLUGIN"), "coinbase": ("1.3.1", "1.6", "liminal_plugin_coinbase:PLUGIN"),
-    "bitfinex": ("1.2.1", "1.6", "liminal_plugin_bitfinex:PLUGIN"), "cboe": ("1.2.1", "1.6", "liminal_plugin_cboe:PLUGIN"),
-    "tiingo": ("1.4.1", "1.10", "liminal_plugin_tiingo"), "tiingofx": ("1.4.1", "1.10", "liminal_plugin_tiingo"),
+    "bitfinex": ("1.2.1", "1.6", "liminal_plugin_bitfinex:PLUGIN"),
+    "cboe": ("1.3.0", "1.12", "liminal_plugin_cboe"), "cboefutures": ("1.3.0", "1.12", "liminal_plugin_cboe"),
+    "tiingo": ("1.5.0", "1.12", "liminal_plugin_tiingo"), "tiingofx": ("1.5.0", "1.12", "liminal_plugin_tiingo"),
     "alpaca": ("1.4.1", "1.11", "liminal_plugin_alpaca"), "boats": ("1.4.1", "1.11", "liminal_plugin_alpaca"),
-    "massive": ("1.4.1", "1.11", "liminal_plugin_massive")}
+    "massive": ("1.4.1", "1.11", "liminal_plugin_massive"), "twse": ("1.0.0", "1.12", "liminal_plugin_twse")}
 TIINGO_BOATS = "tiingoboats"  # Tiingo's Blue Ocean feed, live: its package's
 IEX_FEED = "iex"  # Alpaca's IEX stream, live: its package's
-FEEDS = ["massive", "alpaca", "boats", "bitstamp", "coinbase", "bitfinex", "cboe", "tiingo", "tiingofx"]  # all, in order
-LISTED = [n for n in FEEDS if n not in ("boats", "tiingofx")]  # the plugins listed: Alpaca's and Tiingo's second feeds in them
+FEEDS = ["massive", "alpaca", "boats", "bitstamp", "coinbase", "bitfinex", "cboe", "cboefutures", "tiingo", "tiingofx",
+         "twse"]  # all, in order
+LISTED = [n for n in FEEDS if n not in ("boats", "tiingofx", "cboefutures")]  # the plugins listed: second feeds in their plugins
 
 
 class AcmeSource(FakeSource):
@@ -242,7 +244,7 @@ def test_a_plugins_parts_are_released_with_it():
     release = {n: (p.version, p.api) for n, p in [*feeds.items(), *pubs.items()]}
     parts = {n: registry.plugin_of(n) for n in feeds if registry.plugin_of(n) != n}
     parts |= {n: registry.publisher_of(n) for n in pubs if registry.publisher_of(n) != n}
-    assert parts == {"boats": "alpaca", "tiingofx": "tiingo", "massive-news": "massive",
+    assert parts == {"boats": "alpaca", "tiingofx": "tiingo", "cboefutures": "cboe", "massive-news": "massive",
                      **dict.fromkeys(("fed", "nyfed", "sec", "bls", "fedreg", "cftc"), "federal")}
     assert {n: release[n] for n in parts} == {n: release[owner] for n, owner in parts.items()}
 
@@ -541,7 +543,8 @@ def test_the_plugins_command_lists_alpaca_once_with_its_blue_ocean_feed(monkeypa
     (feed,) = rows["alpaca"]["feeds"]
     assert (feed["name"], feed["title"], feed["label"], feed["serves"]) == ("boats", "Blue Ocean", "alpaca (blue ocean)", ["stock"])
     assert [f["name"] for f in rows["tiingo"]["feeds"]] == ["tiingofx"]
-    assert all(r["feeds"] == [] for n, r in rows.items() if n not in ("alpaca", "tiingo"))
+    assert [f["name"] for f in rows["cboe"]["feeds"]] == ["cboefutures"] and "cboefutures" not in rows
+    assert all(r["feeds"] == [] for n, r in rows.items() if n not in ("alpaca", "tiingo", "cboe"))
     assert cli.main(["plugins"]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert any(line.strip().startswith("and alpaca (blue ocean) (feed boats): US stocks overnight") and "serves: stock" in line
