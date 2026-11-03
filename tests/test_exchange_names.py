@@ -19,3 +19,4 @@ def test_an_exchange_names_its_mic_before_a_tape_of_it():
     assert names["XNYS"] == "New York Stock Exchange"
     assert names["XNAS"] == "NASDAQ OMX"  # an exchange's own, the first source's
     assert names["XTRF"] == "A TRF only"  # no exchange of that MIC: what there is
+    assert names["XTKS"] == "Tokyo Stock Exchange"  # an exchange abroad the app knows by name before any row of it

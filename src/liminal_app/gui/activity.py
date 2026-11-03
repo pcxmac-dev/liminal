@@ -95,7 +95,8 @@ def symbol_status(item: dict, edges: tuple | None, floor: date, today: date, now
 
     newest = datetime.fromtimestamp(newest_any / 1000, ET) if newest_any else None
     hours = freshness.hours(item.get("source"), item["asset"])  # the feed's own (Blue Ocean: the nights)
-    fresh = freshness.assess(hours, tier, max(t for t in (last, newest) if t) if last or newest else None, now)
+    exchange = item.get("exchange") if item["asset"] == "stock" else None  # a listing abroad: its exchange's days
+    fresh = freshness.assess(hours, tier, max(t for t in (last, newest) if t) if last or newest else None, now, exchange)
     source_through = None
     if probe and probe[1] is not None:
         source_through = datetime.fromtimestamp(probe[1] / 1000, ET)
@@ -104,7 +105,8 @@ def symbol_status(item: dict, edges: tuple | None, floor: date, today: date, now
     # sync's own rule (collector._due) decides: newer data can exist only if published since.
     # (`horizon`: how far the run fetches it: freshness.history_horizon, completed sessions only,
     # unless it is opened in the chart or on a watchlist)
-    published_since = item.get("synced_at") is None or collector._due(hours, tier, item["synced_at"], horizon or now, 0.0)
+    published_since = item.get("synced_at") is None or \
+        collector._due(hours, tier, item["synced_at"], horizon or now, 0.0, exchange)
     if item["ticker"] == current:
         state = "fetching"
     elif not done:
@@ -168,7 +170,8 @@ def symbol_rows(store: Store, settings: Settings, source: str, now: datetime, cu
             edges = store.bar_edges(source, item["ticker"])
         newest = store.newest_any(item["ticker"], "minute", holders) if item["asset"] != "future" else None
         horizon = now if item["ticker"] in live_too else \
-            freshness.history_horizon(freshness.hours(source, item["asset"]), settings.tier, now)
+            freshness.history_horizon(freshness.hours(source, item["asset"]), settings.tier, now,
+                                      item.get("exchange") if item["asset"] == "stock" else None)
         row = symbol_status(item, edges, floor, today, now, settings.tier, current,
                             store.probe(source, item["ticker"]), newest[1] if newest else None,
                             per_request, horizon=horizon)

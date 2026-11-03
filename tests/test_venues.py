@@ -59,6 +59,26 @@ def test_every_tracked_venue_with_its_state_products_and_insight(tmp_path):
     assert by["XNYS"]["movers"]["down"] == [{"ticker": "KO", "pct": -1.0}]
 
 
+def test_a_stock_exchange_abroad_is_a_venue_of_its_own(tmp_path):
+    feeds = feed_profiles(load_settings(env=KEYS, env_file=None))
+    with _store(tmp_path) as s:
+        s.update_directory("twse", "stock", [{"ticker": "2330.TW", "name": "TSMC", "exchange": "XTAI", "type": "CS",
+                                              "kind": "stock"}], date(2026, 10, 27))
+        s.watch_spec("twse", resolve("2330.TW"))
+        s.watch_spec("tiingo", resolve("600519.SS"))
+        out = venues.summary(s, MarketCalendar(), feeds, now=NOW)
+        taiwan = venues.products(s, feeds, "XTAI")
+    by = {v["id"]: v for v in out["venues"]}
+    assert by["XTAI"]["name"] == "Taiwan Stock Exchange" and by["XTAI"]["group"] == "Stock exchanges"
+    assert by["XTAI"]["timezone"] == "Asia/Taipei" and by["XTAI"]["products"] == 1 and by["XTAI"]["feeds"] == [("twse", 1)]
+    assert by["XTAI"]["state"] == "open" and by["XTAI"]["until"].startswith("2026-10-27T12:00")  # 23:00 in Taipei
+    assert by["XSHG"]["name"] == "Shanghai Stock Exchange" and by["XSHG"]["delivery"] == []
+    assert [v["id"] for v in out["venues"]][:3] == ["XNYS", "XNAS", "BOATS"]  # the US venues keep their places
+    assert "US-OTHER" not in by
+    (p,) = taiwan["products"]
+    assert p["ticker"] == "2330.TW" and p["name"] == "TSMC" and taiwan["group"] == "Stock exchanges"
+
+
 def test_the_delivery_scheme_behind_each_venue(tmp_path):
     from liminal_lib import sourcing
 

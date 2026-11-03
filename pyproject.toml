@@ -11,13 +11,13 @@ requires-python = ">=3.10"
 # the library (the stores, the plugin contract, the collector, the scheme: liminal-lib) brings the
 # data dependencies (pandas below 3.1, numpy, requests, exchange_calendars, duckdb, pymongo, plotly)
 dependencies = [
-    "liminal-lib @ git+https://github.com/pcxmac-dev/liminal-lib@v1.1.1",
+    "liminal-lib @ git+https://github.com/pcxmac-dev/liminal-lib@v1.2.1",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 # the fetcher, released on its own (the app's pages get their data through it)
-integrator = ["liminal-integrator @ git+https://github.com/pcxmac-dev/liminal-integrator@v1.1.2"]
+integrator = ["liminal-integrator @ git+https://github.com/pcxmac-dev/liminal-integrator@v1.2.0"]
 # the plugins released on their own, from their tags (docs/ARCHITECTURE.md: Providers are plugins)
 plugins = [
     "liminal-plugin-cboe @ git+https://github.com/pcxmac-dev/liminal-plugin-cboe@v1.2.1",

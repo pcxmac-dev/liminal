@@ -13,7 +13,6 @@ at their headquarters (or place of registration where they declare none).
 """
 from __future__ import annotations
 
-import threading
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 
@@ -166,26 +165,12 @@ PROXIES = sorted({e.proxy for e in EXCHANGES if e.proxy})
 SERIES = sorted({e.series for e in EXCHANGES if e.series})
 FX_HOURS = (time(8, 0), time(17, 0))  # a dealing centre's business hours, local time
 
-_calendars: dict[str, object] = {}
-_lock = threading.Lock()
-
-
 def _calendar(name: str):
-    import exchange_calendars as xc
+    """An exchange's own calendar: the library's (sessions.world_calendar, built once a process;
+    the sessions of a listing outside the US will read the same)."""
+    from liminal_lib.sessions import world_calendar
 
-    with _lock:
-        cal = _calendars.get(name)
-        if cal is None:
-            today = pd.Timestamp.now(tz="UTC").normalize().tz_localize(None)
-            start, end = today - pd.Timedelta(days=30), today + pd.Timedelta(days=400)
-            try:
-                cal = xc.get_calendar(name, start=start, end=end)
-            except Exception:
-                # Some exchanges publish next year's holidays late in the year (China, Singapore,
-                # India): use what is recorded and say so rather than guess.
-                cal = xc.get_calendar(name, start=start)
-            _calendars[name] = cal
-        return cal
+    return world_calendar(name)
 
 
 def warm() -> None:

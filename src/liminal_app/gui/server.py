@@ -744,12 +744,14 @@ class ChartApp:
             members = self.store.constituents("sp500", "S&P 500")
             changes = self.store.snapshot_changes()
             futures = _futures_moves(self.store)
+            names = mic_names(self.store.exchanges())  # a listing abroad: its exchange by name (Tokyo Stock Exchange)
         out = []
         for r in rows:
             dv = (r["close"] or 0) * (r["volume"] or 0) if r["close"] and r["volume"] else None
             # a future's move is its front contract's; a stock's, the whole-market file's
             fut = futures({"source": "massive", "source_ticker": r["ticker"], "rank": 1}) if r["kind"] == "future" else None
             out.append({"ticker": r["ticker"], "kind": r["kind"], "name": r["name"], "exchange": r["exchange"],
+                        "exchangeName": names.get(r["exchange"], r["exchange"]) if r["exchange"] else None,
                         "type": r["type"], "close": fut["close"] if fut else r["close"], "dollarVolume": dv,
                         "icon": bool(r["icon"]), "watched": r["ticker"] in watched,
                         "changePct": fut["changePct"] if fut else changes.get(r["ticker"]),
@@ -1798,7 +1800,8 @@ class ChartApp:
                         "retiredOn": max(str(r["retired_on"]) for r in rows)}
             if serving and not self.settings.offline and not self._halted() and not need:
                 # up to date on every feed: nothing new can exist yet (out of session, or not released)
-                due = [e.next_due for e in (expected(freshness.hours(r["source"], r["asset"]), tiers[r["source"]], now)
+                due = [e.next_due for e in (expected(freshness.hours(r["source"], r["asset"]), tiers[r["source"]], now,
+                                                     r.get("exchange") if r["asset"] == "stock" else None)
                                             for r in rows
                                             if r["source"] in tiers) if e.next_due]
                 return {"ticker": ticker, "feeds": feeds, "state": "current",

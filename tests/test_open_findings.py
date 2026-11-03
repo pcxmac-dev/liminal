@@ -164,7 +164,7 @@ def test_a_finished_utc_day_of_a_round_the_clock_asset_counts_at_once(monkeypatc
     from liminal_plugin_massive import TIERS
 
     last = datetime(2026, 10, 28, 23, 59, tzinfo=timezone.utc)  # an end-of-day plan's newest: the day's last minute
-    monkeypatch.setattr(freshness, "expected", lambda asset, tier, now: SimpleNamespace(latest=last))
+    monkeypatch.setattr(freshness, "expected", lambda asset, tier, now, exchange=None: SimpleNamespace(latest=last))
     monkeypatch.setattr(freshness, "settle", lambda tier, asset: timedelta(0))
     end = coverage.frontier_ms("crypto", TIERS["free"], datetime(2026, 10, 29, 6, tzinfo=timezone.utc), "day")
     assert end == int(datetime(2026, 10, 29, tzinfo=timezone.utc).timestamp() * 1000)  # the 28th is in

@@ -228,7 +228,7 @@ def test_every_plugin_is_versioned_for_this_apps_contract():
             "french": ("1.1.1", "1.4"), "datahub": ("1.1.1", "1.4")}  # the dataset libraries: packages too
     assert {p.name: (p.version, p.api) for p in plugins_} == want
     assert all(registry.api_refusal(p.api) is None for p in plugins_)
-    assert registry.PLUGIN_API == "1.11"
+    assert registry.PLUGIN_API == "1.12"
 
 
 def test_a_plugins_parts_are_released_with_it():

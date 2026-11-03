@@ -53,6 +53,20 @@ def test_directory_lists_exchanges_and_futures_daily(store):
     assert store.listing_events("fake") == []  # the first listing is a starting point, not news
 
 
+def test_listings_abroad_are_stored_in_their_suffix_form_and_named_by_their_exchange(store):
+    from liminal_app.gui.server import ChartApp
+
+    src = DirSource()
+    src.venues["XTKS"] = [("7203", "CS"), ("6758.T", "CS")]  # a feed may give the bare code or the stored form
+    assert collector.refresh_directory(src, store, TODAY, log=lambda m: None, mics=("XNAS", "XTKS")) == 3
+    rows = {r["ticker"]: r for r in store.directory("fake")}
+    assert {t for t in rows if rows[t]["exchange"] == "XTKS"} == {"7203.T", "6758.T"} and "7203" not in rows
+    assert rows["AAPL"]["exchange"] == "XNAS" and rows["7203.T"]["name"] == "7203 Inc."
+    items = {x["ticker"]: x for x in ChartApp(store).directory()["items"]}
+    assert items["7203.T"]["exchangeName"] == "Tokyo Stock Exchange" and items["AAPL"]["exchangeName"] == "Nasdaq"
+    assert len(store.directory()) == len(store.directory("fake"))  # every source's listings, once each
+
+
 def test_new_retired_relisted_and_reassigned_listings_are_marked(store):
     from datetime import timedelta
 

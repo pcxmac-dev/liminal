@@ -3,7 +3,9 @@ sessions of a symbol over a time range (for annotating sessions on the chart).""
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
+from liminal_lib.models import exchange_name, exchange_timezone, is_foreign
 from liminal_lib.sessions import ET, ENERGY_FUTURES, EQUITY_FUTURES, MarketCalendar, nyse_holidays
 
 US_VENUE_TYPES = ("exchange",)
@@ -61,8 +63,21 @@ def _around_the_clock(cal: MarketCalendar, asset: str, product: str | None, now:
     }
 
 
+def foreign_day(cal: MarketCalendar, mic: str, now: datetime) -> dict:
+    """A stock exchange abroad as the library keeps its listings' days (sessions.local_day_session):
+    open through the local calendar day Monday to Friday, closed at the weekend, until its own hours
+    and holidays come."""
+    today = now.astimezone(ZoneInfo(exchange_timezone(mic))).date()
+    s = cal.local_day_session(mic, today)
+    if s is not None and s.open <= now < s.close:
+        return {"state": "open", "since": _iso(s.open), "until": _iso(s.close), "next": {"state": "closed", "at": _iso(s.close)}}
+    nxt = next(x for x in (cal.local_day_session(mic, today + timedelta(days=i)) for i in range(1, 8)) if x)
+    return {"state": "closed", "since": None, "until": None, "next": {"state": "open", "at": _iso(nxt.open)}}
+
+
 def markets(cal: MarketCalendar, exchanges, watch: list[dict], now: datetime | None = None) -> dict:
-    """Every market group the watchlist touches, plus US equities always."""
+    """Every market group the watchlist touches, plus US equities always; a stock exchange abroad
+    (the exchange of a watched listing outside the US) is a group of its own."""
     now = (now or datetime.now(timezone.utc)).astimezone(ET)
     us = exchanges[(exchanges["country"] == "US") & (exchanges["type"].isin(US_VENUE_TYPES))] \
         if len(exchanges) and "country" in exchanges else exchanges.iloc[0:0] if len(exchanges) else []
@@ -73,7 +88,7 @@ def markets(cal: MarketCalendar, exchanges, watch: list[dict], now: datetime | N
         "hours": "Pre-market 04:00, regular 09:30-16:00, after-hours to 20:00 ET",
         "exchanges": [{"name": n, "mic": m} for n, m in venues] or [{"name": "Nasdaq", "mic": "XNAS"},
                                                                        {"name": "New York Stock Exchange", "mic": "XNYS"}],
-        "symbols": sorted(w["ticker"] for w in watch if w["asset"] == "stock"),
+        "symbols": sorted(w["ticker"] for w in watch if w["asset"] == "stock" and not is_foreign(w.get("exchange"))),
         **us_equities(cal, now),
     }]
     index = us_equities(cal, now)
@@ -83,6 +98,14 @@ def markets(cal: MarketCalendar, exchanges, watch: list[dict], now: datetime | N
         "symbols": sorted(w["ticker"] for w in watch if w["asset"] == "index"),
         **{**index, "state": "open" if index["state"] == "open" else "closed"},
     })
+    for mic in sorted({w["exchange"] for w in watch if w["asset"] == "stock" and is_foreign(w.get("exchange"))}):
+        out.append({
+            "id": f"x-{mic.lower()}", "name": exchange_name(mic) or mic, "timezone": exchange_timezone(mic),
+            "hours": "The local calendar day, Monday to Friday (its own hours and holidays later)",
+            "exchanges": [{"name": exchange_name(mic) or mic, "mic": mic}],
+            "symbols": sorted(w["ticker"] for w in watch if w["asset"] == "stock" and w.get("exchange") == mic),
+            **foreign_day(cal, mic, now),
+        })
     products = sorted({w["source_ticker"] for w in watch if w["asset"] == "future"})
     groups = {"equity": [p for p in products if p in EQUITY_FUTURES or p not in ENERGY_FUTURES],
               "energy": [p for p in products if p in ENERGY_FUTURES]}

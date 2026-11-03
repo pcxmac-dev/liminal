@@ -79,6 +79,24 @@ def test_markets_lists_watched_groups():
     assert cme["state"] == "open" and cme["tradeDate"] == "2026-10-23"
 
 
+def test_a_stock_exchange_abroad_is_a_market_group_of_its_own():
+    import pandas as pd
+
+    watch = [{"ticker": "AAPL", "asset": "stock", "source_ticker": "AAPL", "exchange": "XNAS"},
+             {"ticker": "7203.T", "asset": "stock", "source_ticker": "7203.T", "exchange": "XTKS"}]
+    thanksgiving = datetime(2026, 11, 26, 10, 0, tzinfo=ET)  # the US closed; Tokyo's Friday has just begun
+    by = {m["id"]: m for m in markets(CAL, pd.DataFrame(), watch, thanksgiving)["markets"]}
+    assert by["us-equities"]["symbols"] == ["AAPL"] and by["us-equities"]["state"] == "closed"
+    tokyo = by["x-xtks"]
+    assert tokyo["name"] == "Tokyo Stock Exchange" and tokyo["timezone"] == "Asia/Tokyo" and tokyo["symbols"] == ["7203.T"]
+    assert tokyo["exchanges"] == [{"name": "Tokyo Stock Exchange", "mic": "XTKS"}]
+    assert tokyo["state"] == "open" and tokyo["until"].startswith("2026-11-27T10:00")  # midnight Tokyo ends its day
+    saturday = datetime(2026, 11, 28, 10, 0, tzinfo=ET)  # Sunday 00:00 in Tokyo
+    sat = {m["id"]: m for m in markets(CAL, pd.DataFrame(), watch, saturday)["markets"]}["x-xtks"]
+    assert sat["state"] == "closed" and sat["next"] == {"state": "open", "at": sat["next"]["at"]}
+    assert sat["next"]["at"].startswith("2026-11-29T10:00")  # Monday 00:00 Tokyo
+
+
 def test_symbol_sessions_for_annotations():
     rows = symbol_sessions(CAL, "stock", None, datetime(2026, 11, 25, tzinfo=ET), datetime(2026, 11, 28, tzinfo=ET))
     assert [r["day"] for r in rows] == ["2026-11-25", "2026-11-27"]  # Thanksgiving skipped

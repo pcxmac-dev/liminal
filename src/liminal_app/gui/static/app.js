@@ -2346,7 +2346,7 @@ function renderDirectoryList(query) {
   list.innerHTML = `<h4>${kind === 'future' ? 'Futures products' : 'Nasdaq & NYSE'} <span class="p-muted">${total.toLocaleString()}${total > rows.length ? ` · showing ${rows.length}, search for more` : ''}</span></h4>
     <div class="tiles-grid">${rows.map((r) => `
       <div class="tile-btn dir${r.watched ? ' watched' : ''}" role="option" tabindex="0" data-ticker="${e(r.ticker)}" data-watched="${r.watched ? 1 : 0}"
-           title="${e(r.name || r.ticker)}${r.exchange ? ` · ${e(r.exchange)}` : ''}${r.type ? ` · ${e(r.type)}` : ''}">
+           title="${e(r.name || r.ticker)}${r.exchange ? ` · ${e(r.exchangeName || r.exchange)}` : ''}${r.type ? ` · ${e(r.type)}` : ''}">
         <span class="tile-top">${symbolIcon({ ticker: r.ticker, icon: r.icon, asset: r.kind === 'future' ? 'future' : 'stock' }, 30)}
           ${r.watched ? '<span class="chip">watched</span>' : `<button type="button" class="watch-btn" data-watch="${e(r.ticker)}" title="Add to the watchlist: the fetcher will collect it">+ Watch</button>`}</span>
         <b class="tile-tk">${e(r.ticker)}</b>

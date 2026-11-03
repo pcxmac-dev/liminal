@@ -7,6 +7,11 @@ from liminal_lib.symbols import resolve
     ("SPCX::NASDAQ", "SPCX", "stock", "SPCX", False, 1, "XNAS"),
     ("nasdaq:spcx", "SPCX", "stock", "SPCX", False, 1, "XNAS"),
     ("spcx", "SPCX", "stock", "SPCX", False, 1, None),
+    ("BRK.B", "BRK.B", "stock", "BRK.B", False, 1, None),  # a share class, not a listing abroad
+    ("7203.T", "7203.T", "stock", "7203.T", False, 1, "XTKS"),  # a listing abroad: TICKER.SUFFIX, its exchange
+    ("TSE:7203", "7203.T", "stock", "7203.T", False, 1, "XTKS"),
+    ("2330::XTAI", "2330.TW", "stock", "2330.TW", False, 1, "XTAI"),
+    ("petr4.sa", "PETR4.SA", "stock", "PETR4.SA", False, 1, "BVMF"),
     ("IXIC", "IXIC", "index", "I:COMP", False, 1, None),
     ("SPX", "SPX", "index", "I:SPX", False, 1, None),
     ("RUT", "RUT", "index", "I:RUT", False, 1, None),

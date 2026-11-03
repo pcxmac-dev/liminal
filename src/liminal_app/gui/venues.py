@@ -16,8 +16,9 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from datetime import datetime, time, timedelta, timezone
 
+from liminal_lib.models import exchange_name, exchange_timezone, is_foreign
 from liminal_lib.sessions import ET, MarketCalendar
-from .markets import _around_the_clock, _iso, us_equities
+from .markets import _around_the_clock, _iso, foreign_day, us_equities
 
 # id -> (name, group, asset, timezone, hours)
 VENUES: dict[str, tuple[str, str, str, str, str]] = {
@@ -48,8 +49,9 @@ def venue_of(row: dict, futures_mic: dict[str, str], markets: dict[str, dict]) -
     asset, feed = row["asset"], row["source"]
     if feed == "boats":
         return "BOATS"
-    if asset == "stock":
-        return row["exchange"] if row.get("exchange") in STOCK_MICS else "US-OTHER"
+    if asset == "stock":  # a listing outside the US: its exchange (its own venue)
+        mic = row.get("exchange")
+        return mic if mic in STOCK_MICS or is_foreign(mic) else "US-OTHER"
     if asset == "future":
         mic = futures_mic.get(row["source_ticker"])
         return mic if mic in VENUES else "FUT-OTHER"
@@ -63,6 +65,9 @@ def venue_of(row: dict, futures_mic: dict[str, str], markets: dict[str, dict]) -
 
 
 def _venue_meta(vid: str) -> tuple[str, str, str, str, str]:
+    if is_foreign(vid):  # a stock exchange abroad: its listings' days are the local calendar days
+        return (exchange_name(vid) or vid, "Stock exchanges", "stock", exchange_timezone(vid),
+                "The local calendar day, Monday to Friday (its own hours and holidays later)")
     if vid.startswith("CRYPTO:"):
         market = vid.split(":", 1)[1]
         return (CRYPTO_NAMES.get(market, market.title()), "Crypto", "crypto", "UTC", "Around the clock, every day")
@@ -86,6 +91,8 @@ def state_of(vid: str, asset: str, cal: MarketCalendar, now: datetime, product: 
     if vid == "BOATS":
         return _overnight_state(cal, now)
     if asset == "stock":
+        if is_foreign(vid):
+            return foreign_day(cal, vid, now)
         s = us_equities(cal, now)
         return {k: s.get(k) for k in ("state", "since", "until", "next")}
     if asset == "index":
@@ -136,7 +143,9 @@ def _delivery(scheme, asset: str, market: str | None) -> list[dict]:
             for e in scheme.eras if e.asset == asset and (market is None or e.market == market)]
 
 
-def _market(vid: str, asset: str) -> str | None:
+def _market(vid: str, asset: str, rows: list[dict] = (), by_feed: dict | None = None) -> str | None:
+    if is_foreign(vid):  # a stock exchange abroad: its feeds' own market (TWSE's twse, B3's b3)
+        return next((by_feed[f].get("stock") for r in rows for f in r["feeds"] if f in (by_feed or {})), None)
     return {"BOATS": "boats", "INDEX": "index", "FX": "otc"}.get(vid) or (
         vid.split(":", 1)[1] if vid.startswith("CRYPTO:") else "sip" if asset == "stock" else "cme" if asset == "future" else None)
 
@@ -145,7 +154,8 @@ def summary(store, cal: MarketCalendar, feeds: dict, scheme=None, now: datetime 
     """Every tracked venue for the left column, with its insight (see the module's docstring)."""
     now = (now or datetime.now(timezone.utc)).astimezone(ET)
     stocks, futures = _directories(store)
-    products = _products(store.watchlist(), stocks, futures, {name: p.venues for name, p in feeds.items()})
+    by_feed = {name: p.venues for name, p in feeds.items()}
+    products = _products(store.watchlist(), stocks, futures, by_feed)
     moves = store.snapshot_changes()
     fresh_after = (now - timedelta(days=2)).isoformat()
     out = []
@@ -156,6 +166,7 @@ def summary(store, cal: MarketCalendar, feeds: dict, scheme=None, now: datetime 
         synced = [r["synced"] for r in rows if r["synced"]]
         movers = sorted(((r["ticker"], moves[r["ticker"]]) for r in rows if asset == "stock" and r["ticker"] in moves),
                         key=lambda m: m[1])
+        market = _market(vid, asset, rows, by_feed)
         out.append({
             "id": vid, "name": name, "group": group, "asset": asset, "timezone": tz, "hours": hours,
             **state_of(vid, asset, cal, now, sample),
@@ -166,7 +177,7 @@ def summary(store, cal: MarketCalendar, feeds: dict, scheme=None, now: datetime 
                           "newest": max(synced, default=None)},
             "movers": {"up": [{"ticker": t, "pct": round(v, 2)} for t, v in movers[::-1][:5] if v > 0],
                        "down": [{"ticker": t, "pct": round(v, 2)} for t, v in movers[:5] if v < 0]},
-            "delivery": _delivery(scheme, asset, _market(vid, asset)),
+            "delivery": _delivery(scheme, asset, market) if market or not is_foreign(vid) else [],
         })
     order, place = {g: i for i, g in enumerate(GROUPS)}, {vid: i for i, vid in enumerate(VENUES)}
     out.sort(key=lambda v: (order.get(v["group"], len(order)), place.get(v["id"], len(place)), -v["products"], v["name"]))
