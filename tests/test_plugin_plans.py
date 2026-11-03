@@ -320,7 +320,7 @@ def test_the_plugins_view_shows_each_plugin_its_plan_keys_and_part(tmp_path):
         store.watch_spec("alpaca", resolve("AAPL::XNAS"))
         out = app.plugins()
         by = {p["name"]: p for p in out["plugins"]}
-        assert list(by) == [n for n in providers() if n not in ("boats", "tiingofx")]  # feeds of Alpaca's and Tiingo's plugins
+        assert list(by) == [n for n in providers() if n not in ("boats", "tiingofx", "cboefutures")]  # second feeds: in their plugins
         assert out["offline"] is False and out["errors"] == []
         assert by["massive"]["group"] == "Feeds with keys" and by["bitstamp"]["group"] == "Public feeds"
         assert [{k: x[k] for k in ("name", "label", "set")} for x in by["alpaca"]["keys"]] == [

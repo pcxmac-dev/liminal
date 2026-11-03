@@ -77,7 +77,7 @@ def test_eras_are_unique_or_common_and_go_to_who_finishes_soonest():
     feeds = feed_profiles(_settings())
     counts = {("massive", "stock"): 100, ("alpaca", "stock"): 100, ("tiingo", "stock"): 100}
     scheme = sourcing.build(feeds, counts, TODAY)
-    days = [e for e in scheme.eras if e.asset == "stock" and e.resolution == "day"]
+    days = [e for e in scheme.eras if e.asset == "stock" and e.resolution == "day" and e.market == "sip"]
     assert [(str(e.start), str(e.end) if e.end else None, e.unique) for e in days] == [
         ("1962-01-01", "2003-09-10", True), ("2003-09-10", "2016-01-01", False), ("2016-01-01", None, False)]
     assert days[0].sources == ["tiingo"]  # only Tiingo reaches before 2003: it must deliver it
@@ -92,6 +92,8 @@ def test_eras_are_unique_or_common_and_go_to_who_finishes_soonest():
     assert [(e.resolution, e.unique, e.sources) for e in nights] == [("minute", True, ["boats"])]
     seconds = [e for e in scheme.eras if e.resolution == "second"]
     assert [(e.unique, e.sources) for e in seconds] == [(True, ["massive"])]
+    taiwan = [e for e in scheme.eras if e.market == "twse"]  # a market abroad: its feed's own eras, unique
+    assert [(e.asset, e.resolution, str(e.start), e.unique, e.sources) for e in taiwan] == [("stock", "day", "2010-01-04", True, ["twse"])]
     assert [e.resolution for e in scheme.eras][:1] == ["day"] and scheme.eras[-1].resolution == "second"
     assert scheme.load["tiingo"] == 100 / 15  # 450 symbols a month: 15 a day
 
