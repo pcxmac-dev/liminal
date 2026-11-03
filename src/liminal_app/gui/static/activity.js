@@ -523,7 +523,7 @@
     const live = data.liveFeeds;
     const badge = (f) => f.realtime ? '<span class="state fresh">real time</span>'
       : f.available ? `<span class="state backfilling">${esc(f.delay)}</span>` : '<span class="state">end of day only</span>';
-    const names = { stock: 'Stocks', index: 'Indices', fx: 'Forex', future: 'Futures' };
+    const names = { stock: 'Stocks', index: 'Indices', fx: 'Forex', future: 'Futures', abroad: 'Stocks abroad' };
     box.innerHTML = `
       <div class="view-head"><div><h2>Live feeds</h2>
         <div class="p-muted small">The current session, as it happens. The fetcher handles everything before it.</div></div>
@@ -540,7 +540,7 @@
         <thead><tr><th>Feed</th><th>Symbols</th><th>Latency on your plan</th><th>Recording</th></tr></thead>
         <tbody>${live.feeds.map((f) => `
           <tr><td><b>${esc(names[f.asset] || f.asset)}</b>${f.note ? `<div class="sub">${esc(f.note)}</div>` : ''}</td>
-            <td><span class="sym-cell">${f.symbols.slice(0, 12).map((t) => symbolIcon({ ticker: t, asset: f.asset, icon: symbolInfo(t).icon }, 18)).join('')}</span>
+            <td><span class="sym-cell">${f.symbols.slice(0, 12).map((t) => symbolIcon({ ticker: t, asset: f.asset === 'abroad' ? 'stock' : f.asset, icon: symbolInfo(t).icon }, 18)).join('')}</span>
               <div class="sub">${esc(f.symbols.join(', '))}</div></td>
             <td>${badge(f)}</td>
             <td>${f.recording ? '<span class="rec on"></span> recording' : '<span class="p-muted">idle</span>'}</td></tr>`).join('')}

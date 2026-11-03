@@ -338,6 +338,10 @@ def test_the_plugins_view_shows_each_plugin_its_plan_keys_and_part(tmp_path):
         assert by["tiingo"]["options"] == [{"name": "TIINGO_LISTINGS", "value": "off", "origin": "default", "choices": ["off", "on"]}]
         assert [o["name"] for o in by["b3"]["options"]] == ["B3_HISTORY_YEARS"] and by["b3"]["options"][0]["choices"][0] == "2"
         assert by["massive"]["options"] == []
+        # a keyed plugin without its key shows what the plan would give (Tiingo here: no key in KEYS)
+        assert by["tiingo"]["capabilitiesWithKey"] is True and by["massive"]["capabilitiesWithKey"] is False
+        assert {(c["feed"], c["asset"], c["resolution"]) for c in by["tiingo"]["capabilities"]} == {("tiingo", "stock", "day"), ("tiingo (forex)", "fx", "minute")}
+        assert by["tiingo"]["serves"] == [] and by["tiingo"]["state"] == "no key"
         # a plugin is a closed archive as a whole only when each of its feeds is: Cboe's VIX futures are live
         assert by["tiingo"]["archive"] is False and by["cboe"]["archive"] is False and by["bitstamp"]["archive"] is False
         assert [(f["name"], f["archive"]) for f in by["cboe"]["feeds"]] == [("cboe", True), ("cboefutures", False)]

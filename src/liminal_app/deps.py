@@ -44,6 +44,20 @@ def _fresh(area, item, iso, now, warn_days, fail_days, what, action) -> Check:
     return Check(area, item, status, f"{what}: {age:.1f} days ago", "" if status == "OK" else action)
 
 
+def _asset_of(ticker: str, watched: dict) -> str:
+    """A ticker's asset class: the watchlist's, or read from the ticker itself for one no longer
+    watched (a crypto pair's spans on two exchanges were judged as a stock's, one market, and
+    counted as a double download: 2026-11-03)."""
+    if ticker in watched:
+        return watched[ticker]
+    from liminal_lib.symbols import resolve
+
+    try:
+        return resolve(ticker).asset
+    except ValueError:
+        return "stock"
+
+
 def coverage_overlaps(store: Store, same_market=None) -> list[str]:
     """Downloaded spans of a series held by more than one feed of the same market (should never
     happen: only audits fetch twice). `same_market(feed_a, feed_b, ticker)`: two exchanges'
@@ -77,7 +91,8 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
     runs = store.runs(50)
     ok = next((r for r in runs if r["status"] == "ok" and r["command"] == "sync"), None)
     out.append(_fresh("Massive API", "Scheduled sync", ok["finished_at"] if ok else None, now, 0.2, 1,
-                      "last successful sync", "check the LiminalSync task and the log"))
+                      "last successful sync", "check the integrator's service (the LiminalIntegrator task: "
+                                             "liminal-integrator service status) and the log"))
     errors = [r for r in runs[:10] if r["status"] == "error"]
     out.append(Check("Massive API", "Recent errors", "WARN" if errors else "OK",
                      f"{len(errors)} of the last 10 runs failed" + (f": {errors[0]['message'][:80]}" if errors else ""),
@@ -133,7 +148,7 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
 
     profiles = feed_profiles(settings)
     assets = {w["ticker"]: w["asset"] for w in store.watchlist()}
-    overlaps = coverage_overlaps(store, lambda a, b, t: same_market(profiles, a, b, assets.get(t, "stock"))
+    overlaps = coverage_overlaps(store, lambda a, b, t: same_market(profiles, a, b, _asset_of(t, assets))
                                  and a in profiles and b in profiles)
     out.append(Check("Feeds", "One feed per span", "OK" if not overlaps else "FAIL",
                      "no span is held by two feeds" if not overlaps else
@@ -210,7 +225,13 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
                          "upgrade exchange_calendars (pip install -U exchange_calendars) once the "
                          "exchanges publish next year's holidays" if short else ""))
     except Exception as e:  # missing package or a calendar that fails to build
-        out.append(Check("Calendars", "exchange_calendars", "FAIL", str(e), "pip install -U exchange_calendars"))
+        why = str(e)
+        if "implemented by subclasses" in why or "vectorized" in why:  # pandas 3.1 refuses its Orthodox-Easter offset
+            fix = ("pandas 3.1 refuses exchange_calendars' Orthodox-Easter offset (Athens, Belgrade, Bucharest, Nicosia): "
+                   "hold pandas below 3.1 (pip install \"pandas<3.1\") until exchange_calendars supports it")
+        else:
+            fix = "pip install -U exchange_calendars"
+        out.append(Check("Calendars", "exchange_calendars", "FAIL", why, fix))
     out.append(_nyse_rules_check(store, source, now))
     try:
         import tzdata

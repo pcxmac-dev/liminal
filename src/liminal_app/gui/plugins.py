@@ -33,6 +33,8 @@ and the request ledger: no requests. A key's value never leaves: only whether it
 """
 from __future__ import annotations
 
+from dataclasses import replace
+
 from datetime import date, datetime
 
 from liminal_lib.sources import providers
@@ -90,6 +92,7 @@ def _fold(entry: dict, feeds: list[dict]) -> dict:
            "archive": all(e["archive"] for e in every),  # a closed archive as a whole: each of its feeds is one
            "assets": sorted({a for e in every for a in e["assets"]}),
            "capabilities": [c for e in every for c in e["capabilities"]],
+           "capabilitiesWithKey": any(e["capabilitiesWithKey"] for e in every),
            "streams": [s for e in every for s in e["streams"]],
            # a note names its feed when the plugin has several (Cboe's indices are an archive, its VIX futures live)
            "notes": [*(f"{entry['label']}: {n}" if feeds else n for n in entry["notes"]),
@@ -148,6 +151,10 @@ def view(store, settings, feeds: dict, scheme, scans: dict, running: dict | None
         scan = scans.get(name)
         report = p.report(prof, today, settings, scan) if prof is not None else None
         keys_set = p.keys_set(settings)
+        # its key not set (serving nothing yet): what the plan would give with one, so the view tells
+        # what a key is for before it is entered (seen 2026-11-03: J-Quants' panel showed nothing)
+        would = p.report(replace(prof, assets=frozenset(p.assets)), today, settings, scan) \
+            if prof is not None and not prof.assets and keys_set is False and p.assets else None
         served = sorted(prof.assets) if prof is not None else []
         kill = killswitch.killed(store, name, "fetch")
         view_ = settings.for_source(name)
@@ -172,7 +179,8 @@ def view(store, settings, feeds: dict, scheme, scans: dict, running: dict | None
                        if report else {"published": p.limits}),
             "capabilities": [{"asset": c.asset, "resolution": c.resolution, "market": c.market, "since": str(c.since),
                               "fresh": _fresh(c.latency), "perRequest": c.per_request}
-                             for c in (report.capabilities if report else ())],
+                             for c in ((would or report).capabilities if (would or report) else ())],
+            "capabilitiesWithKey": would is not None,
             "streams": [{"asset": a, "what": w} for a, w in (report.streams if report else ())],
             "notes": list(report.notes) if report else [],
             "scan": {"has": p.scan is not None, "at": (scan or {}).get("at"),

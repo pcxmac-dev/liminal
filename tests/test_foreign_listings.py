@@ -75,6 +75,23 @@ def test_day_bars_of_a_listing_abroad_are_its_local_days_stamped_at_midnight_new
     assert hour["t"] == int(datetime(2026, 11, 25, 19, 0, tzinfo=ET).timestamp() * 1000)
 
 
+def test_the_live_view_names_listings_abroad_as_end_of_day_without_a_session_feed(store):
+    from datetime import timezone
+
+    from liminal_app.gui import activity
+    from liminal_lib.config import load_settings
+
+    store.watch("massive", ["AAPL"], "minute", exchange="XNAS")
+    store.watch_spec("twse", resolve("2330.TW"), "day")
+    store.watch_spec("tiingo", resolve("600519.SS"), "day")
+    out = activity.live_feeds(store, load_settings(env={"MASSIVE_API_KEY": "k"}, env_file=None), "massive",
+                              datetime(2026, 11, 3, 15, 0, tzinfo=timezone.utc))
+    rows = {f["asset"]: f for f in out["feeds"]}
+    assert rows["stock"]["symbols"] == ["AAPL"] and rows["abroad"]["symbols"] == ["2330.TW", "600519.SS"]
+    assert not rows["abroad"]["available"] and not rows["abroad"]["recording"]
+    assert "no current-session feed" in rows["abroad"]["note"] and rows["abroad"]["delay"].startswith("end of day")
+
+
 def test_the_bad_data_scans_leave_a_listing_abroad_alone(store):
     bars, evidence = baddata.inconsistent(store, "fake", "7203.T", "day", _ms(date(2026, 11, 23)), _ms(date(2026, 11, 28)),
                                           "stock", "XTKS")

@@ -10,6 +10,7 @@ import time as _time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from liminal_lib.models import is_foreign
 from liminal_lib import collector
 from liminal_lib.collector import ET, history_floor
 from liminal_lib import freshness
@@ -263,6 +264,11 @@ def live_feeds(store: Store, settings: Settings, source: str, now: datetime) -> 
             "recording": recording and live,
             "note": None if live else "your plan has end-of-day data only: no current-session feed",
         })
+    abroad = sorted({w["ticker"] for w in store.watchlist() if w["asset"] == "stock" and is_foreign(w.get("exchange"))})
+    if abroad:  # listings outside the US (2026-11-02): each day comes with its exchange's feed's run, no session feed
+        feeds.append({"asset": "abroad", "symbols": abroad, "delay": "end of day (its exchange's feed)", "delayMinutes": None,
+                      "available": False, "realtime": False, "recording": False,
+                      "note": "listings outside the US: no current-session feed; each day comes with its feed's run"})
     return {"recording": recording and (any(f["recording"] for f in feeds) or bool(live_tickers)),
             "available": any(f["available"] for f in feeds) or bool(streams), "feeds": feeds,
             "streams": streams, "liveTickers": live_tickers, "recorder": recording,

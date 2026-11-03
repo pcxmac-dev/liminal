@@ -387,7 +387,9 @@
   function capabilitiesHtml(p) {
     if (!p.capabilities.length) return '';
     const feed = (c) => (several(p) ? `<td>${esc(c.feed)}</td>` : '');
-    return `<h4>What it can do on this plan</h4><table class="act-table ex-mini"><thead><tr>${several(p) ? '<th>Feed</th>' : ''}<th>Asset</th><th>Bars</th>
+    return `<h4>What it can do on this plan${p.capabilitiesWithKey ? ', once its key is set' : ''}</h4>${p.capabilitiesWithKey
+      ? '<div class="p-muted small">Its key is not set, so it serves nothing yet: this is what the plan gives with one.</div>' : ''}
+      <table class="act-table ex-mini"><thead><tr>${several(p) ? '<th>Feed</th>' : ''}<th>Asset</th><th>Bars</th>
         <th>Market</th><th>From</th><th>Fresh</th><th class="num">A request</th></tr></thead><tbody>
       ${p.capabilities.map((c) => `<tr>${feed(c)}<td>${esc(c.asset)}</td><td>${esc(JOBS[c.resolution] || c.resolution)}</td><td>${esc(c.market)}</td>
         <td>${esc(c.since)}</td><td>${esc(c.fresh)}</td><td class="num">${c.perRequest == null ? 'whole history' : `${num(c.perRequest)} bars`}</td></tr>`).join('')}
