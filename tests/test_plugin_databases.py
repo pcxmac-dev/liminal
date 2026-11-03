@@ -41,9 +41,19 @@ def wheres(name: str) -> list[str]:
     return [d.where for d in registry.plugin_databases(name)]
 
 
+def trades(name: str) -> bool:
+    """Whether a feed can have trades (2026-11-03): 1-second bars among what it provides, or a stream
+    of its own; a live feed's (iex, boats) when it is a stream, not a poller."""
+    p = providers().get(name)
+    if p is None:
+        live = next(x for q in providers().values() for x in q.live if x.name == name)
+        return live.stream is not None
+    return not p.provides or any("second" in r for r in p.provides.values()) or any(x.stream is not None for x in p.live)
+
+
 def feed(name: str) -> list[str]:
-    """A feed's bars, its closed months in DuckDB, its trades."""
-    return [layout.bars(name), layout.history(name), layout.ticks(name)]
+    """A feed's bars, its closed months in DuckDB, and its trades where it can have them."""
+    return [layout.bars(name), layout.history(name), *([layout.ticks(name)] if trades(name) else [])]
 
 
 NEWS = "mongodb://127.0.0.1:27017/liminal.news"
@@ -53,7 +63,10 @@ ITEMS = "mongodb://127.0.0.1:27017/liminal.gov_items"
 def test_each_feed_plugin_points_to_its_feeds_files_and_its_rows_in_the_main_file():
     assert wheres("alpaca") == [*feed("alpaca"), *feed("iex"), *feed("boats"), MAIN]  # its live feed's, its part's
     alpaca = {d.where: d for d in registry.plugin_databases("alpaca")}
-    assert alpaca["feeds/iex.db"].holds == "alpaca (iex): bars" and alpaca["feeds/boats-ticks.db"].holds == "alpaca (blue ocean): trades"
+    assert alpaca["feeds/iex.db"].holds == "alpaca (iex): bars" and alpaca["feeds/iex-ticks.db"].holds == "alpaca (iex): trades"
+    assert "feeds/boats-ticks.db" not in alpaca  # Blue Ocean's nights: minutes polled, never trades
+    assert "feeds/tiingofx-ticks.db" not in wheres("tiingo") and "feeds/twse-ticks.db" not in wheres("twse")  # daily, minutes
+    assert "feeds/massive-ticks.db" in wheres("massive")  # 1-second bars and trades
     assert not alpaca["feeds/alpaca.db"].shared and alpaca[MAIN].shared
     assert alpaca["history/alpaca/"].kind == "duckdb" and not alpaca["history/alpaca/"].shared
     assert wheres("tiingo") == [*feed("tiingo"), *feed("tiingoboats"), *feed("tiingofx"), MAIN]
@@ -97,7 +110,8 @@ def test_a_file_of_a_plugins_own_is_no_other_plugins_and_every_feed_and_dataset_
             assert d.where not in owner, (d.where, owner.get(d.where), name)
             owner[d.where] = name
     feeds = [*providers(), *registry.live_feeds()]
-    assert all(owner[layout.bars(n)] == owner[layout.ticks(n)] for n in feeds)
+    assert all(owner[layout.bars(n)] == owner[layout.ticks(n)] for n in feeds if layout.ticks(n) in owner)
+    assert {n for n in feeds if layout.ticks(n) in owner} == {n for n in feeds if trades(n)}
     assert owner["feeds/iex.db"] == "alpaca" and owner["feeds/tiingofx.db"] == "tiingo"
     assert layout.bars(layout.COMPOSITE) not in owner  # the composite model's: the app's, built from the feeds
     files = {d.provider for p in publishers().values() for d in p.declared}

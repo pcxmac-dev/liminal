@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 # the library (the stores, the plugin contract, the collector, the scheme: liminal-lib) brings the
 # data dependencies (pandas below 3.1, numpy, requests, exchange_calendars, duckdb, pymongo, plotly)
 dependencies = [
-    "liminal-lib @ git+https://github.com/pcxmac-dev/liminal-lib@v1.2.1",
+    "liminal-lib @ git+https://github.com/pcxmac-dev/liminal-lib@v1.2.2",
 ]
 
 [project.optional-dependencies]
@@ -24,13 +24,17 @@ plugins = [
     "liminal-plugin-bitstamp @ git+https://github.com/pcxmac-dev/liminal-plugin-bitstamp@v1.3.1",
     "liminal-plugin-coinbase @ git+https://github.com/pcxmac-dev/liminal-plugin-coinbase@v1.3.1",
     "liminal-plugin-bitfinex @ git+https://github.com/pcxmac-dev/liminal-plugin-bitfinex@v1.2.1",
-    "liminal-plugin-tiingo @ git+https://github.com/pcxmac-dev/liminal-plugin-tiingo@v1.5.0",
+    "liminal-plugin-tiingo @ git+https://github.com/pcxmac-dev/liminal-plugin-tiingo@v1.5.1",
     "liminal-plugin-french @ git+https://github.com/pcxmac-dev/liminal-plugin-french@v1.1.1",
     "liminal-plugin-datahub @ git+https://github.com/pcxmac-dev/liminal-plugin-datahub@v1.1.1",
     "liminal-plugin-federal @ git+https://github.com/pcxmac-dev/liminal-plugin-federal@v1.4.1",
     "liminal-plugin-alpaca @ git+https://github.com/pcxmac-dev/liminal-plugin-alpaca@v1.4.1",
     "liminal-plugin-massive @ git+https://github.com/pcxmac-dev/liminal-plugin-massive@v1.4.1",
     "liminal-plugin-twse @ git+https://github.com/pcxmac-dev/liminal-plugin-twse@v1.0.0",
+    "liminal-plugin-b3 @ git+https://github.com/pcxmac-dev/liminal-plugin-b3@v1.0.1",
+    "liminal-plugin-alphavantage @ git+https://github.com/pcxmac-dev/liminal-plugin-alphavantage@v1.0.0",
+    "liminal-plugin-jquants @ git+https://github.com/pcxmac-dev/liminal-plugin-jquants@v1.0.0",
+    "liminal-plugin-twelvedata @ git+https://github.com/pcxmac-dev/liminal-plugin-twelvedata@v1.0.0",
 ]
 
 [project.scripts]

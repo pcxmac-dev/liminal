@@ -139,7 +139,7 @@ def test_tiingos_plan_is_your_choice_and_sets_its_limits():
     for env, plan in (({"TIINGO_PLAN": "free"}, "starter"), ({"TIINGO_PLAN": "Business"}, "commercial"),
                       ({"TIINGO_PLAN": "gold"}, "starter")):
         assert tiingo.plan_of(load_settings(env={**keys, **env}, env_file=None)) == plan  # unknown: never more than Starter
-    assert providers()["tiingo"].plan_choices == {"TIINGO_PLAN": ("starter", "power", "commercial")}
+    assert providers()["tiingo"].plan_choices == {"TIINGO_PLAN": ("starter", "power", "commercial"), "TIINGO_LISTINGS": ("off", "on")}
     published = {"starter": (50, 1_000), "power": (10_000, 100_000), "commercial": (20_000, 150_000)}
     for name, (_, per_hour, per_day, _) in tiingo.PLANS.items():  # each a little inside what Tiingo publishes
         assert per_hour <= published[name][0] * 0.95 and per_day <= published[name][1] * 0.95
@@ -334,6 +334,16 @@ def test_the_plugins_view_shows_each_plugin_its_plan_keys_and_part(tmp_path):
         assert by["alpaca"]["watched"] == 1 and by["alpaca"]["limits"]["rate"] == [190, 60.0]
         assert {e["job"] for e in by["alpaca"]["delivery"]} >= {"minute"} and by["alpaca"]["load"] >= 0
         assert by["bitstamp"]["scan"]["has"] is False and by["massive"]["scan"]["has"] is True
+        # its other settings (Provider.options), with choices where the record gives them (2026-11-03)
+        assert by["tiingo"]["options"] == [{"name": "TIINGO_LISTINGS", "value": "off", "origin": "default", "choices": ["off", "on"]}]
+        assert [o["name"] for o in by["b3"]["options"]] == ["B3_HISTORY_YEARS"] and by["b3"]["options"][0]["choices"][0] == "2"
+        assert by["massive"]["options"] == []
+        # a plugin is a closed archive as a whole only when each of its feeds is: Cboe's VIX futures are live
+        assert by["tiingo"]["archive"] is False and by["cboe"]["archive"] is False and by["bitstamp"]["archive"] is False
+        assert [(f["name"], f["archive"]) for f in by["cboe"]["feeds"]] == [("cboe", True), ("cboefutures", False)]
+        assert [(f["name"], f["archive"]) for f in by["tiingo"]["feeds"]] == [("tiingo", True), ("tiingofx", False)]
+        assert any(n.startswith("cboe: a closed archive") for n in by["cboe"]["notes"])  # the note names its feed
+        assert all(not n.startswith("a closed archive") for n in by["cboe"]["notes"])
     finally:
         store.close()
 
@@ -449,13 +459,18 @@ def test_the_plugins_view_chooses_a_plan_the_scan_cannot_tell(tmp_path, monkeypa
                                              "choices": ["starter", "power", "commercial"]}
         app.set_plan("tiingo", "TIINGO_PLAN", None)  # automatic: the scan or the default again
         assert wrote[-1] == ("TIINGO_PLAN", None) and tiingo.plan_of(app.settings) == "starter"
+        # an option with choices is chosen the same way (TIINGO_LISTINGS: the A-shares' directory listing)
+        assert app.set_plan("tiingo", "TIINGO_LISTINGS", "On")["value"] == "on" and wrote[-1] == ("TIINGO_LISTINGS", "on")
+        assert tiingo.listings_on(app.settings)
+        assert next(p for p in app.plugins()["plugins"] if p["name"] == "tiingo")["options"][0]["origin"] == "you"
+        app.set_plan("tiingo", "TIINGO_LISTINGS", None)
         with pytest.raises(ValueError):
             app.set_plan("tiingo", "TIINGO_PLAN", "gold")
         for plugin, variable in (("tiingo", "TIINGO_API_KEY"), ("bitstamp", "TIINGO_PLAN"), ("nowhere", "X"),
                                  ("massive", "MASSIVE_MAX_REQUESTS_PER_DAY")):
             with pytest.raises(LookupError):
                 app.set_plan(plugin, variable, "x")  # never a key, nor a variable without choices
-        assert len(wrote) == 2
+        assert len(wrote) == 4
     finally:
         store.close()
 

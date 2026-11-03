@@ -314,6 +314,45 @@
         in Setup, or with the key script: <code>${esc(data.keyScript)} ${esc(name)}</code></div>` : ''}`;
   }
 
+  // Its other settings (Provider.options; the user, 2026-11-03: the view had no way to turn Tiingo's
+  // A-share listings on): chosen here like a plan where the record gives choices, else the key script's.
+  function optionCell(p, o) {
+    if (!o.choices.length) return `<code>${esc(o.value ?? 'not set')}</code>`;
+    const mine = o.origin === 'you';
+    return `<select class="pl-option" data-plan-plugin="${esc(p.name)}" data-var="${esc(o.name)}"${data.offline
+      ? ' disabled title="This offline copy of the app saves no settings"' : ''}>
+        <option value=""${mine ? '' : ' selected'}>${esc(`default: ${o.choices[0]}`)}</option>
+        ${o.choices.map((c) => `<option value="${esc(c)}"${mine && o.value === c ? ' selected' : ''}>${esc(c)}</option>`).join('')}
+      </select>`;
+  }
+
+  function optionsHtml(p) {
+    if (!p.options?.length) return '';
+    const rows = p.options.map((o) => `<tr><td><code>${esc(o.name)}</code></td><td>${optionCell(p, o)}</td>
+        <td class="pl-origin pl-${esc(o.origin)}">${esc(ORIGIN[o.origin])}</td></tr>`).join('');
+    return `<h4>Options</h4>
+      <table class="act-table ex-mini pl-plan"><thead><tr><th>Variable</th><th>Value</th><th>From</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="p-muted small">Its own settings, saved as your user environment variables like a plan: the app uses them at
+        its next look, the sync from its next run${p.options.some((o) => !o.choices.length)
+          ? `; one without choices is set with the key script: <code>${esc(data.keyScript)} ${esc(p.name)}</code>` : ''}.</div>`;
+  }
+
+  async function chooseOption(select) {
+    const p = data.plugins.find((x) => x.name === select.dataset.planPlugin);
+    const variable = select.dataset.var, value = select.value || null;
+    const ask = value ? `Set ${variable}=${value} for ${p.title}?` : `Leave ${variable} to its default for ${p.title}?`;
+    if (!window.confirm(ask)) { render(); return; }
+    note = '';
+    try {
+      const res = await fetch('/api/plugins/plan', { method: 'POST', headers: WRITE_HEADERS,
+        body: JSON.stringify({ plugin: p.name, variable, value }) });
+      const out = await res.json().catch(() => ({}));
+      note = res.ok ? `${variable} ${value ? `set to ${value}` : 'left to its default'}: the app uses it now, the sync from its next run.`
+        : out.error || res.statusText;
+    } catch (err) { note = String(err.message || err); }
+    await load();
+  }
+
   function limitsHtml(p) {
     const l = p.limits;
     if (l.requests_a_day == null) return `<h4>Limits</h4><div class="p-muted small">${esc(l.published || 'Not set up here.')}</div>`;
@@ -331,9 +370,10 @@
   function feedsHtml(p) {
     if (!several(p)) return '';
     return `<h4>Feeds</h4><table class="act-table ex-mini pl-feedlist"><tbody>${p.feeds.map((f) => `<tr>
-        <td><b>${esc(f.label)}</b><div class="p-muted small">${esc(f.about)}</div></td>
+        <td><b>${esc(f.label)}</b>${f.archive ? ' <span class="p-muted small">closed archive</span>' : ''}<div class="p-muted small">${esc(f.about)}</div></td>
         <td>${chip(f.state)}</td></tr>`).join('')}</tbody></table>
-      <div class="p-muted small">Each a feed of its own (its own bars, symbols and requests), on this plugin's keys and limits.</div>`;
+      <div class="p-muted small">Each a feed of its own (its own bars, symbols and requests), on this plugin's keys and limits${
+        p.feeds.some((f) => f.archive) && !p.archive ? '; a closed archive fills each symbol once, a live feed keeps it current' : ''}.</div>`;
   }
 
   // the publishers in a feed plugin (Massive's headlines): sections of its page
@@ -356,7 +396,8 @@
   }
 
   function scanHtml(p) {
-    if (!p.scan.has) return `<h4>Capability scan</h4><div class="p-muted small">${esc(p.title)} has none: a public feed with one fixed plan.</div>`;
+    if (!p.scan.has) return `<h4>Capability scan</h4><div class="p-muted small">${esc(p.title)} has none: ${p.keys.length
+      ? 'one fixed plan on its key, nothing a scan could tell' : 'a public feed with one fixed plan'}.</div>`;
     const can = p.configured && p.state !== 'no key' && !data.offline && !data.running;
     const why = data.offline ? 'This offline copy of the app sends no requests' : !p.configured || p.state === 'no key'
       ? 'Its keys are not set' : data.running ? 'A rescan is running' : 'Ask the provider again what the key gets (a few requests)';
@@ -631,7 +672,7 @@
     if (pub) return pubMainHtml(pub);
     const p = plugin();
     if (!p) return '<div class="empty">No plugin found.</div>';
-    return `${setupHtml(p.name, p.keys)}${fetchingHtml(p.name)}${feedsHtml(p)}${planHtml(p)}${limitsHtml(p)}${capabilitiesHtml(p)}${scanHtml(p)}
+    return `${setupHtml(p.name, p.keys)}${fetchingHtml(p.name)}${feedsHtml(p)}${planHtml(p)}${optionsHtml(p)}${limitsHtml(p)}${capabilitiesHtml(p)}${scanHtml(p)}
       ${p.notes.length ? `<h4>Notes</h4>${p.notes.map((n) => `<div class="small">${esc(n)}</div>`).join('')}` : ''}${publishersHtml(p)}${databasesHtml(p)}`;
   }
 
@@ -674,7 +715,7 @@
     const setUp = data.plugins.filter((x) => x.configured && x.state !== 'no key').length;
     const pubPlugins = (data.publishers || []).filter((q) => !parentOf(q)).length;  // its parts in it
     const head = pub ? `publisher · ${pubKind(pub)} · ${pubCount(pub)}`
-      : p ? `${p.archive ? 'closed archive' : 'feed'} · ${p.kind} data · ${p.assets.join(', ')}` : '';
+      : p ? `${p.archive ? 'closed archive' : p.feeds.some((f) => f.archive) ? 'feed, a closed archive in part' : 'feed'} · ${p.kind} data · ${p.assets.join(', ')}` : '';
     box.innerHTML = `
       <div class="ex-venues"><div class="view-head"><div><h2>Plugins</h2>
         <div class="p-muted small">${num(data.plugins.length + pubPlugins)} plugins · ${num(setUp)} of ${num(data.plugins.length)} feeds set up · plugin API ${esc(data.api)}</div></div></div>
@@ -700,6 +741,7 @@
   });
   box.addEventListener('change', (e) => {
     if (e.target.matches('select.pl-choose')) choosePlan(e.target);
+    if (e.target.matches('select.pl-option')) chooseOption(e.target);
     if (e.target.matches('select.pl-store')) chooseStore(e.target);
   });
   box.addEventListener('toggle', (e) => {  // a part's section opened or closed: kept through the refreshes

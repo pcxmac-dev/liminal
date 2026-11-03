@@ -623,8 +623,9 @@ API 1.12), liminal-integrator 1.2.0 and this app:
   contract, named by its settlement date (the Wednesday 30 days before the next month's third Friday,
   holiday-shifted), so `VX1!` rolls by volume from them; new packages `liminal-plugin-twse` 1.0.0
   (every Taiwan Stock Exchange listing's daily bars from TWSE's open data, no key),
-  `liminal-plugin-b3` (B3's COTAHIST files, no key), `liminal-plugin-jquants` (JPX's J-Quants API,
-  an account's refresh token, the free plan twelve weeks late), `liminal-plugin-alphavantage`
+  `liminal-plugin-b3` (B3's COTAHIST files, no key), `liminal-plugin-jquants` (JPX's J-Quants API
+  V2, an API key in a header: V1 and its refresh tokens were discontinued on 2026-06-01; the free
+  plan twelve weeks late), `liminal-plugin-alphavantage`
   (stocks on London, Toronto, Xetra, Bombay, Shanghai and Shenzhen, a free key, the latest 100 days
   accumulating run by run) and `liminal-plugin-twelvedata` (forex minutes on a free key, its own
   market like Tiingo's forex). Deferred, with why, in the plan of 2026-11-02: NSE/BSE (bot

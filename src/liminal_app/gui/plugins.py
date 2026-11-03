@@ -86,11 +86,15 @@ def _fold(entry: dict, feeds: list[dict]) -> dict:
             row["feed"] = e["label"]
     out = {**entry,
            "feeds": [{"name": e["name"], "title": e["title"], "label": e["label"], "about": e["about"], "state": e["state"],
-                      "serves": e["serves"], "scanAt": e["scan"]["at"]} for e in every],
+                      "serves": e["serves"], "scanAt": e["scan"]["at"], "archive": e["archive"]} for e in every],
+           "archive": all(e["archive"] for e in every),  # a closed archive as a whole: each of its feeds is one
            "assets": sorted({a for e in every for a in e["assets"]}),
            "capabilities": [c for e in every for c in e["capabilities"]],
            "streams": [s for e in every for s in e["streams"]],
-           "notes": [*entry["notes"], *(f"{e['label']}: {n}" for e in feeds for n in e["notes"])],
+           # a note names its feed when the plugin has several (Cboe's indices are an archive, its VIX futures live)
+           "notes": [*(f"{entry['label']}: {n}" if feeds else n for n in entry["notes"]),
+                     *(f"{e['label']}: {n}" for e in feeds for n in e["notes"])],
+           "options": list({o["name"]: o for e in every for o in e["options"]}.values()),
            "delivery": [d for e in every for d in e["delivery"]],
            "watched": sum(e["watched"] for e in every), "load": round(sum(e["load"] for e in every), 3),
            "usage": {**entry["usage"], "today": sum(e["usage"]["today"] for e in every)}}
@@ -100,6 +104,19 @@ def _fold(entry: dict, feeds: list[dict]) -> dict:
                    "running": any(e["scan"]["running"] for e in every)}
     if any(e["state"] == "scanning" for e in every) and entry["state"] in ("ready", "partly", "scanning"):
         out["state"] = "scanning"
+    return out
+
+
+def _options(p, settings) -> list[dict]:
+    """Its other settings (Provider.options: Tiingo's TIINGO_LISTINGS, B3's B3_HISTORY_YEARS), each
+    with its value here and where it comes from, and its choices where the record gives them
+    (plan_choices): chosen in the view like a plan, else set with the key script."""
+    mine = settings.variables or {}
+    out = []
+    for v in p.options:
+        choices = list(p.plan_choices.get(v, ()))
+        out.append({"name": v, "value": mine.get(v) or (choices[0] if choices else None),
+                    "origin": "you" if mine.get(v) else "default", "choices": choices})
     return out
 
 
@@ -150,7 +167,7 @@ def view(store, settings, feeds: dict, scheme, scans: dict, running: dict | None
             "keys": [key_row(k, settings) for k in plugin_keys(name)],  # its feeds' and publishers' too
             "publishers": publisher_parts(name),  # in this plugin (Massive's headlines)
             "state": "scanning" if scanning else state, "kill": kill,
-            "plan": _plan(p, settings, scan),
+            "plan": _plan(p, settings, scan), "options": _options(p, settings),
             "limits": ({**report.limits.__dict__, "rate": list(report.limits.rate) if report.limits.rate else None}
                        if report else {"published": p.limits}),
             "capabilities": [{"asset": c.asset, "resolution": c.resolution, "market": c.market, "since": str(c.since),

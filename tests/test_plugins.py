@@ -26,13 +26,16 @@ PACKAGED = {  # name: (its distribution's version, the contract it needs, its en
     "bitstamp": ("1.3.1", "1.6", "liminal_plugin_bitstamp:PLUGIN"), "coinbase": ("1.3.1", "1.6", "liminal_plugin_coinbase:PLUGIN"),
     "bitfinex": ("1.2.1", "1.6", "liminal_plugin_bitfinex:PLUGIN"),
     "cboe": ("1.3.0", "1.12", "liminal_plugin_cboe"), "cboefutures": ("1.3.0", "1.12", "liminal_plugin_cboe"),
-    "tiingo": ("1.5.0", "1.12", "liminal_plugin_tiingo"), "tiingofx": ("1.5.0", "1.12", "liminal_plugin_tiingo"),
+    "tiingo": ("1.5.1", "1.12", "liminal_plugin_tiingo"), "tiingofx": ("1.5.1", "1.12", "liminal_plugin_tiingo"),
     "alpaca": ("1.4.1", "1.11", "liminal_plugin_alpaca"), "boats": ("1.4.1", "1.11", "liminal_plugin_alpaca"),
-    "massive": ("1.4.1", "1.11", "liminal_plugin_massive"), "twse": ("1.0.0", "1.12", "liminal_plugin_twse")}
+    "massive": ("1.4.1", "1.11", "liminal_plugin_massive"), "twse": ("1.0.0", "1.12", "liminal_plugin_twse"),
+    "b3": ("1.0.1", "1.12", "liminal_plugin_b3"),
+    "alphavantage": ("1.0.0", "1.12", "liminal_plugin_alphavantage"), "jquants": ("1.0.0", "1.12", "liminal_plugin_jquants"),
+    "twelvedata": ("1.0.0", "1.12", "liminal_plugin_twelvedata")}
 TIINGO_BOATS = "tiingoboats"  # Tiingo's Blue Ocean feed, live: its package's
 IEX_FEED = "iex"  # Alpaca's IEX stream, live: its package's
 FEEDS = ["massive", "alpaca", "boats", "bitstamp", "coinbase", "bitfinex", "cboe", "cboefutures", "tiingo", "tiingofx",
-         "twse"]  # all, in order
+         "b3", "twse", "alphavantage", "jquants", "twelvedata"]  # all, in order
 LISTED = [n for n in FEEDS if n not in ("boats", "tiingofx", "cboefutures")]  # the plugins listed: second feeds in their plugins
 
 

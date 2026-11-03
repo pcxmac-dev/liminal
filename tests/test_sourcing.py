@@ -16,7 +16,8 @@ from liminal_lib.sources.registry import Capability, Limits, Provider, Report
 TODAY = date(2026, 10, 27)
 NOW = datetime(2026, 10, 27, 12, 0, tzinfo=ET)
 KEYS = {"MASSIVE_API_KEY": "k", "MASSIVE_TIER": "advanced", "ALPACA_API_KEY_ID": "i",
-        "ALPACA_API_SECRET_KEY": "s", "TIINGO_API_KEY": "t"}
+        "ALPACA_API_SECRET_KEY": "s", "TIINGO_API_KEY": "t", "TWELVEDATA_API_KEY": "w", "ALPHAVANTAGE_API_KEY": "v",
+        "JQUANTS_API_KEY": "j"}
 
 
 def _settings(**extra):
