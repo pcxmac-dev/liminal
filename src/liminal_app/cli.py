@@ -741,14 +741,34 @@ def integrator():
     return integrator_cli
 
 
+def _instance(found, args, settings: Settings) -> Settings | None:
+    """The integrator's `--name`, `--db` and `--plugins` applied to this process (its
+    apply_instance: an integrator of its own, on its own database, with the plugins it loads), the
+    settings loaded again when that changed anything. None: a name that cannot be one (said)."""
+    apply = getattr(found, "apply_instance", None)
+    if apply is None:  # an integrator from before 1.4.0
+        return settings
+    try:
+        changed = apply(args)
+    except ValueError as e:
+        print(e, file=sys.stderr)
+        return None
+    if not changed:
+        return settings
+    from liminal_lib import sourcing
+
+    return sourcing.apply_detected(load_settings())
+
+
 def cmd_fetcher(args, settings: Settings) -> int:
     """The fetcher (liminal-integrator): serve, status, request, pass, cancel; answered by the
-    integrator's own command line."""
+    integrator's own command line (`--name`, `--db`, `--plugins` applied first: _instance)."""
     found = integrator()
     if found is None:
         print(NO_INTEGRATOR, file=sys.stderr)
         return 2
-    return found.cmd_fetcher(args, settings)
+    settings = _instance(found, args, settings)
+    return 2 if settings is None else found.cmd_fetcher(args, settings)
 
 
 def cmd_service(args, settings: Settings) -> int:
@@ -757,7 +777,8 @@ def cmd_service(args, settings: Settings) -> int:
     if found is None:
         print(NO_INTEGRATOR, file=sys.stderr)
         return 2
-    return found.cmd_service(args, settings)
+    settings = _instance(found, args, settings)
+    return 2 if settings is None else found.cmd_service(args, settings)
 
 
 def cmd_datasets(args, settings: Settings) -> int:

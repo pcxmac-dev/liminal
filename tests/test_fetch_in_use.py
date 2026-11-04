@@ -5,8 +5,10 @@ the symbols given; nothing is scheduled any more (a service is the user's own de
 from __future__ import annotations
 
 import threading
+import os
 from argparse import Namespace
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -170,6 +172,38 @@ def test_the_fetcher_commands_and_its_host_are_the_integrators(tmp_path, monkeyp
     assert cli.cmd_fetcher(Namespace(action="serve"), settings) == 2 and cli.cmd_service(Namespace(action="run"), settings) == 2
     monkeypatch.setitem(__import__("sys").modules, "liminal_integrator", None)  # an import of it fails
     assert cli.cmd_host(Namespace(name="fetcher"), settings) == 2
+
+
+def test_the_fetcher_and_service_commands_apply_an_integrators_name_database_and_plugins(tmp_path, monkeypatch):
+    """`liminal fetcher --name paper --plugins none` and `liminal service install --name ...` apply the
+    integrator's name, database and plugin selection to this process first (the integrator's
+    apply_instance, 1.4.0), and load the settings again for it; a name that cannot be one is said."""
+    import liminal_integrator.cli as integrator_cli
+    import liminal_integrator.fetcher as integrator_fetcher
+    from liminal_lib.sources import registry
+
+    settings = _settings(tmp_path)
+    for var in (integrator_fetcher.NAME_VAR, "LIMINAL_DB", registry.SELECTION_VAR):
+        monkeypatch.setenv(var, "")  # restored (deleted) after
+    seen: list = []
+    monkeypatch.setattr(integrator_cli, "cmd_fetcher", lambda args, s: seen.append(("fetcher", s.db_path)) or 0)
+    monkeypatch.setattr(integrator_cli, "cmd_service", lambda args, s: seen.append(("service", s.db_path)) or 0)
+    monkeypatch.setattr(cli, "load_settings", lambda: replace(settings, db_path=Path(os.environ["LIMINAL_DB"])))
+    try:
+        assert cli.cmd_fetcher(cli.build_parser().parse_args(["fetcher", "status"]), settings) == 0
+        assert seen[-1] == ("fetcher", settings.db_path)  # nothing applied: the settings as loaded
+        db = tmp_path / "paper" / "liminal.db"
+        assert cli.cmd_fetcher(cli.build_parser().parse_args(["fetcher", "serve", "--name", "paper", "--db", str(db),
+                                                               "--plugins", "none"]), settings) == 0
+        assert seen[-1] == ("fetcher", db) and os.environ[integrator_fetcher.NAME_VAR] == "paper"
+        assert os.environ[registry.SELECTION_VAR] == "none" and registry.providers() == {}
+        assert cli.cmd_service(cli.build_parser().parse_args(["service", "install", "--name", "paper", "--plugins", "all"]),
+                               settings) == 0
+        assert seen[-1] == ("service", integrator_fetcher.instance_db("paper")) and registry.providers()
+        assert cli.cmd_fetcher(cli.build_parser().parse_args(["fetcher", "serve", "--name", "x y"]), settings) == 2
+        assert cli.cmd_fetcher(Namespace(action="serve"), settings) == 0  # an integrator's parser without them
+    finally:
+        registry.select(None)
 
 
 def test_nothing_is_scheduled_and_the_extras_run_alone(tmp_path, monkeypatch, capsys):

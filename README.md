@@ -130,6 +130,8 @@ liminal probe SPCX --watch   # find the finest resolution, add to watchlist
 liminal sync                 # a pass of the fetcher: update + backfill the watchlist (sync --tickers SPCX: a symbol)
 liminal fetcher              # the fetcher's page in your browser, the fetcher while a page is in touch (--daemon: held for good; status, request SYMBOL, pass, cancel, host)
 liminal service install      # that page from your logon (--daemon: the fetcher held for good, collecting what it can on its own)
+liminal fetcher --plugins twse,tiingo        # these plugins alone (none: no plugin at all); every plugin found otherwise
+liminal service install --name paper --port 8786   # an integrator of its own: its database store/data/paper/, its page, its task
 liminal status               # what's stored, limits, recent runs
 liminal exchanges --refresh  # exchange list
 liminal analyze SPCX         # statistics + per-exchange breakdown

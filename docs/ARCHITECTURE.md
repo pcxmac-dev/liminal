@@ -248,6 +248,21 @@ liminal-integrator"; "all lib calls will point to liminal-lib".
     `liminal-integrator serve|status|request|pass|cancel|host [--daemon]` and `service
     install|remove|status|run [--daemon]`; the app's `fetcher` and `service` commands and `host
     fetcher` answer through it (`cli.integrator()`), and say where it is when it is not installed.
+  - *Which plugins, and integrators of their own* (2026-11-03; integrator 1.4.0, library 1.3.1): the
+    user, "the default case is to load all plugins, however the integrator can be loaded with select
+    plugins or none"; "multiple integrators can address databases". `--plugins twse,tiingo` or
+    `--plugins none` on `serve`, `host`, `service install|run` is the library's selection
+    (`registry.Selection`, LIMINAL_PLUGINS_LOADED: the plugins named, each with its parts, or none;
+    every plugin found without it; `select`, `selection`, `plugins_loaded`), inherited by every
+    process the integrator starts; the plugins not named are left out quietly (`Selection.left_out`,
+    not `errors()`), and the fetcher's status (`plugins`: selection, loaded, leftOut, unknown) and log
+    say so (the Fetcher view's status line, `fetcher status`). `--name NAME` installs or serves an
+    integrator of its own, on its own database (`store/data/NAME/liminal.db` unless `--db`), with its
+    own page port (`--port`) and plugins, as the task `LiminalIntegrator-NAME` (the unit
+    `liminal-integrator-NAME`), its name in its status (LIMINAL_INTEGRATOR_NAME); the host `fetcher`
+    stays one per database, the machine's ledgers shared by key. The integrator's `cli.apply_instance`
+    applies the three before the settings load; the app's `fetcher` and `service` commands do the
+    same (`cli._instance`) and load the settings again when anything changed.
 - **The app** (this repository): the chart front (`gui/front.py`, `liminal gui`): serves the chart page
   and its scripts, attaches to the fetcher at the first page (`host.attach_fetcher`, started if none
   answers; its port learnt from its status over the pipe) and passes every `/api/` request of its

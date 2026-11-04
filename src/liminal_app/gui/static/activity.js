@@ -457,10 +457,16 @@
     const c = requests.counts || {};
     el('rqCounts').textContent = Object.keys(c).length ? Object.entries(c).map(([k, n]) => `${num(n)} ${k}`).join(' · ') : '';
     const st = requests.status;
+    const pl = st?.plugins;  // the plugins it loaded, when told which (--plugins): the names, or none
+    const plugins = pl && pl.selection && pl.selection !== 'all'
+      ? `; plugins: ${pl.loaded?.length ? esc(pl.loaded.map(label).join(', ')) : 'none'} (${esc(pl.selection)} asked for)`
+        + `${pl.leftOut?.length ? `; left out: ${esc(pl.leftOut.map(label).join(', '))}` : ''}`
+        + `${pl.unknown?.length ? `; unknown: ${esc(pl.unknown.join(', '))}` : ''}`
+      : '';
     el('rqStatus').innerHTML = st
-      ? `The fetcher is ${st.busy ? 'busy' : 'idle'}${st.feeds?.length ? `, holding ${esc(st.feeds.map(label).join(', '))}` : ''}`
+      ? `The fetcher${st.name ? ` ${esc(st.name)}` : ''} is ${st.busy ? 'busy' : 'idle'}${st.feeds?.length ? `, holding ${esc(st.feeds.map(label).join(', '))}` : ''}`
         + `${st.lastPass ? `; last pass ${ago(st.lastPass)}` : '; no pass yet'}${st.nextDue ? `; nothing new before ${when(st.nextDue)}` : ''}`
-        + `${st.clients?.length ? `; ${num(st.clients.length)} client${st.clients.length === 1 ? '' : 's'} attached` : ''}.`
+        + `${st.clients?.length ? `; ${num(st.clients.length)} client${st.clients.length === 1 ? '' : 's'} attached` : ''}${plugins}.`
       : 'No fetcher has run on this database yet.';
     const rows = requests.rows || [];
     el('rqRows').innerHTML = rows.length ? rows.map((r) => `<tr>
