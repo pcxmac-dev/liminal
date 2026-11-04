@@ -22,6 +22,11 @@
    Every plugin is set up here (Setup): each variable it reads, a key or a detail of yours it sends
    (GOV_CONTACT), set or not (never its value), typed and saved as your user environment variable
    (POST /api/plugins/key), or removed. What is typed is sent once and the field cleared.
+   The AI assistants (plugin API 2.0; the user, 2026-11-03): each a plugin too, in its own group: Setup
+   (its key hidden, its account in the open), Plan (the plan, the model, the caps), the vendor's plans
+   and models written in and the date they were verified, Limits, Connect (its capability scan: the key
+   tried, the plan read from the server's limits, the tables checked), what it spent today here and on
+   the whole machine, its last answers, and a Try it box (POST /api/ai/evaluate).
    Asked again every minute while shown, every few seconds while a rescan or recheck runs. */
 (() => {
   const box = document.getElementById('viewPlugins');
@@ -30,7 +35,7 @@
   const folds = new Map();  // a part's section opened or closed by hand (by its name); else open when alone
 
   const STATE = { ready: 'ready', scanning: 'scanning…', partly: 'keys not set', 'no key': 'no key', killed: 'killed', paused: 'paused',
-                  refused: 'refused', failing: 'failing', waiting: 'waiting', off: 'not set up' };
+                  refused: 'refused', failing: 'failing', waiting: 'waiting', off: 'not set up', 'no access': 'no API access' };
   const FEED_STATE = { ok: 'read', unchanged: 'unchanged', waiting: 'waiting', failed: 'failed', refused: 'refused',
                        'not asked yet': 'not asked yet' };
   const PUB = 'pub:';  // a publisher's id in the list (its name may be a feed's too)
@@ -669,11 +674,121 @@
       ${termsHtml(p)}`;
   }
 
+  // -- an AI assistant (p.ai: its tables, caps, usage and last answers) ---------------------------
+  const usd = (c) => (c == null ? '–' : c < 0.01 ? `$${c.toFixed(6)}` : `$${c.toFixed(4)}`);
+  const aiTry = { busy: false, answer: null, error: '' };
+
+  function aiTablesHtml(p) {
+    const a = p.ai;
+    const plans = a.plans.map((x) => `<tr class="${x.name === a.plan ? 'pl-current' : ''}"><td><b>${esc(x.title)}</b><div class="p-muted small">${esc(x.name)}${x.name === a.plan ? ' · chosen' : ''}</div></td>
+        <td>${x.apiAccess ? '<span class="up">yes</span>' : '<span class="down">no</span>'}</td>
+        <td>${x.rpm ? `${num(x.rpm)} a minute` : '–'}${x.tpm ? `<div class="p-muted small">${num(x.tpm)} tokens a minute</div>` : ''}${x.rpd ? `<div class="p-muted small">${num(x.rpd)} a day</div>` : ''}</td>
+        <td class="small">${esc(x.price || '')}${x.spendCap ? `<div class="p-muted">${esc(x.spendCap)}</div>` : ''}</td>
+        <td class="small p-muted">${esc(x.note || '')}</td></tr>`).join('');
+    const models = a.models.map((m) => `<tr class="${m.id === a.model ? 'pl-current' : ''}"><td><b>${esc(m.title)}</b><div class="p-muted small"><code>${esc(m.id)}</code>${m.id === a.model ? ' · chosen' : ''}</div></td>
+        <td class="num">${usd(m.inputUsd)}</td><td class="num">${usd(m.outputUsd)}</td><td class="num">${m.cachedUsd != null ? usd(m.cachedUsd) : '–'}</td>
+        <td class="num">${m.context ? num(m.context) : '–'}</td><td class="small p-muted">${m.reasoning ? 'thinks first · ' : ''}${esc(m.note || '')}</td></tr>`).join('');
+    const sources = a.sources.map((x) => `<div class="small"><a href="${esc(safeUrl(x.url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(x.url.replace(/^https:\/\//, ''))}</a> <span class="p-muted">${esc(x.holds)}</span></div>`).join('');
+    return `<h4>${esc(a.vendor)}'s plans, as written in</h4>
+      <table class="act-table ex-mini pl-ai-plans"><thead><tr><th>Plan</th><th>API</th><th>Limits published</th><th>Paid as</th><th></th></tr></thead><tbody>${plans}</tbody></table>
+      <h4>Its models and prices (per million tokens)</h4>
+      <table class="act-table ex-mini pl-ai-models"><thead><tr><th>Model</th><th class="num">In</th><th class="num">Out</th><th class="num">Cached</th><th class="num">Context</th><th></th></tr></thead><tbody>${models}</tbody></table>
+      <div class="p-muted small">Verified ${esc(a.verified || 'at release')} against ${a.sources.length ? 'these pages' : 'the vendor'}; the plugin's weekly CI run reads them again and a changed price or limit is a new release of the plugin.</div>${sources}`;
+  }
+
+  function aiLimitsHtml(p) {
+    const a = p.ai, u = a.usage;
+    const today = u.today || {}, machine = u.machine || {}, c = a.caps;
+    return `<h4>Caps on this machine</h4><div class="tiles ex-tiles pl-tiles">
+        ${tile('Requests today', num(machine.requests), `of ${num(c.requestsPerDay)} a day (this database: ${num(today.requests)})`)}
+        ${tile('Tokens today', num(machine.tokens), `of ${num(c.tokensPerDay)} a day (this database: ${num(today.tokens)})`)}
+        ${tile('Spent today', usd(today.costUsd), 'this database, by the vendor\'s count or the table')}
+        ${tile('An answer', num(c.maxOutputTokens), 'output tokens at most')}
+      </div><div class="p-muted small">${esc(p.limits.published || '')}. The caps count every database on this machine on this key (the machine ledgers); raise them in Plan.</div>`;
+  }
+
+  function aiConnectHtml(p) {
+    const can = p.state === 'ready' && !data.offline && !data.running;
+    const why = data.offline ? 'This offline copy of the app sends no requests' : p.state === 'no key' ? 'Its key is not set'
+      : p.state === 'no access' ? 'Its plan has no API access: choose the plan your key is on' : data.running ? 'A rescan is running'
+      : 'Try the key on the models list and one answer of a few tokens: the plan from the limits its server sends, the tables checked';
+    const rows = p.scan.results.map((r) => `<tr><td>${esc(r.what)}</td><td>${r.available ? '<span class="up">yes</span>' : '<span class="down">no</span>'}</td><td class="p-muted">${esc(r.detail)}</td></tr>`).join('');
+    return `<h4 class="pl-scan-head"><span>Connect</span>
+        <button type="button" data-rescan="${esc(p.name)}"${can ? '' : ' disabled'} title="${esc(why)}">${p.scan.running ? 'Connecting…' : 'Connect'}</button></h4>
+      <div class="p-muted small">${p.scan.at ? `Last connected ${ago(p.scan.at)}` : 'Not connected yet'}: on each start of the app and here; a plan it finds is used where you set none.</div>
+      ${rows ? `<table class="act-table ex-mini"><tbody>${rows}</tbody></table>` : ''}`;
+  }
+
+  function aiRecentHtml(p) {
+    const rows = p.ai.recent || [];
+    if (!rows.length) return '<h4>Answers</h4><div class="p-muted small">None kept yet: ask below, or from a plugin, the command line (<code>liminal ai ask</code>) or the fetcher\'s page.</div>';
+    return `<h4>Last answers</h4><table class="act-table ex-mini pl-ai-recent"><thead><tr><th>When</th><th>Asked</th><th>Answer</th><th>Verdict</th><th class="num">Tokens</th><th class="num">Cost</th></tr></thead><tbody>
+      ${rows.map((r) => `<tr><td>${ago(r.at)}<div class="p-muted small">${esc(r.model)} · ${esc(r.kind)}</div></td><td class="small">${esc(r.question)}</td>
+        <td class="small${r.stop === 'error' ? ' bad' : ''}">${esc(r.text)}</td><td>${esc(r.verdict || '–')}</td><td class="num">${num(r.tokens)}</td><td class="num">${usd(r.costUsd)}</td></tr>`).join('')}
+      </tbody></table>`;
+  }
+
+  function aiTryHtml(p) {
+    const can = p.state === 'ready' && !data.offline && !aiTry.busy;
+    const why = data.offline ? 'This offline copy of the app sends no requests' : p.state !== 'ready' ? 'Set its key and a plan with API access first' : '';
+    const models = p.ai.models.map((m) => `<option value="${esc(m.id)}"${m.id === p.ai.model ? ' selected' : ''}>${esc(m.title)}</option>`).join('');
+    const out = aiTry.answer && aiTry.answer.assistant === p.name ? aiTry.answer : null;
+    const shown = out ? `<div class="pl-ai-answer"><div class="small">${esc(out.text || `(no text: ${out.stop})`)}</div>
+        <div class="p-muted small">${esc(out.model)} · ${num(out.usage.inputTokens + out.usage.outputTokens)} tokens · ${usd(out.costUsd)} · ${out.seconds}s${out.verdict ? ` · verdict: ${esc(out.verdict)}` : ''}${out.stop !== 'end_turn' ? ` · ${esc(out.stop)}` : ''}</div></div>` : '';
+    return `<h4>Try it</h4><div class="pl-ai-try">
+      <textarea class="pl-ai-q" rows="3" maxlength="4000" placeholder="A question for ${esc(p.title)}: it answers from what you give it here, nothing else"${can ? '' : ' disabled'}></textarea>
+      <div class="pl-ai-row"><label>Answer <select class="pl-ai-answer-kind"><option value="text">text</option><option value="verdict">a verdict</option></select></label>
+        <label>Scale <input class="pl-ai-scale" type="text" placeholder="yes, no, unclear" size="18"></label>
+        <label>Model <select class="pl-ai-model">${models}</select></label>
+        <button type="button" data-ai-ask="${esc(p.name)}"${can ? '' : ' disabled'} title="${esc(why || 'One request to the vendor, counted on the caps')}">${aiTry.busy ? 'Asking…' : 'Ask'}</button></div>
+      ${aiTry.error ? `<div class="pl-warn">${esc(aiTry.error)}</div>` : ''}${shown}
+      <div class="p-muted small">One request, counted on the caps and kept with the answers; the account is sent only as a digest.</div></div>`;
+  }
+
+  async function aiAsk(name) {
+    const q = box.querySelector('textarea.pl-ai-q')?.value.trim();
+    if (!q) { aiTry.error = 'Type a question first.'; render(); return; }
+    const kind = box.querySelector('select.pl-ai-answer-kind')?.value || 'text';
+    const scale = box.querySelector('input.pl-ai-scale')?.value.trim() || '';
+    const model = box.querySelector('select.pl-ai-model')?.value || '';
+    if (kind === 'verdict' && !scale) { aiTry.error = 'A verdict needs its scale (yes, no, …).'; render(); return; }
+    aiTry.busy = true; aiTry.error = ''; render();
+    try {
+      const res = await fetch('/api/ai/evaluate', { method: 'POST', headers: WRITE_HEADERS,
+        body: JSON.stringify({ assistant: name, model, question: q, answer: kind, scale }) });
+      const out = await res.json().catch(() => ({}));
+      if (res.ok) aiTry.answer = out; else aiTry.error = out.error || res.statusText;
+    } catch (err) { aiTry.error = String(err.message || err); }
+    aiTry.busy = false;
+    render();
+    setTimeout(load, 500);
+  }
+
+  function aiMainHtml(p) {
+    return `${setupHtml(p.name, p.keys)}${p.ai.free ? `<div class="pl-warn">${esc(p.ai.free)}.</div>` : ''}${planHtml(p)}${optionsHtml(p)}${aiTablesHtml(p)}${aiLimitsHtml(p)}${aiConnectHtml(p)}${aiRecentHtml(p)}${aiTryHtml(p)}${databasesHtml(p)}`;
+  }
+
+  function aiSideHtml(p) {
+    const a = p.ai, today = a.usage.today || {}, machine = a.usage.machine || {};
+    const keys = p.keys.map((k) => `<div class="small"><code>${esc(k.name)}</code> ${k.set ? '<span class="up">set</span>' : '<span class="down">not set</span>'}</div>`).join('');
+    return `<h3>${esc(p.title)} ${chip(p.state)}</h3>
+      <div class="p-muted small">${esc(p.about)}</div>${release(p)}
+      <div class="tiles ex-tiles">
+        ${tile('Requests today', num(machine.requests), `of ${num(a.caps.requestsPerDay)} a day`)}
+        ${tile('Tokens today', num(machine.tokens), `of ${num(a.caps.tokensPerDay)}`)}
+        ${tile('Spent today', usd(today.costUsd), 'this database')}
+        ${tile('Model', esc((a.models.find((m) => m.id === a.model) || {}).title || a.model || '–'), `${esc(a.vendor)} · ${esc(a.plan || 'no plan')}`)}
+      </div>
+      <h4>Keys</h4>${keys}<div class="p-muted small">Set in Setup.</div>
+      ${p.signup ? `<div class="p-muted small">From ${esc(p.signup)}</div>` : ''}`;
+  }
+
   function mainHtml() {
     const pub = publisher();
     if (pub) return pubMainHtml(pub);
     const p = plugin();
     if (!p) return '<div class="empty">No plugin found.</div>';
+    if (p.ai) return aiMainHtml(p);
     return `${setupHtml(p.name, p.keys)}${fetchingHtml(p.name)}${feedsHtml(p)}${planHtml(p)}${optionsHtml(p)}${limitsHtml(p)}${capabilitiesHtml(p)}${scanHtml(p)}
       ${p.notes.length ? `<h4>Notes</h4>${p.notes.map((n) => `<div class="small">${esc(n)}</div>`).join('')}` : ''}${publishersHtml(p)}${databasesHtml(p)}`;
   }
@@ -684,6 +799,7 @@
     if (pub) return pubSideHtml(pub);
     const p = plugin();
     if (!p) return '';
+    if (p.ai) return aiSideHtml(p);
     const u = p.usage;
     const used = u.perDay ? Math.min(100, (u.today / u.perDay) * 100) : 0;
     const first = p.delivery.filter((e) => e.first), standby = p.delivery.filter((e) => !e.first);
@@ -714,13 +830,16 @@
     // what is being typed in Setup survives the view's refreshes (every minute, every few seconds in a rescan)
     const typed = [...box.querySelectorAll('input.pl-key')].filter((i) => i.value).map((i) => [i.dataset.var, i.value]);
     const focused = document.activeElement?.matches?.('input.pl-key') ? document.activeElement.dataset.var : null;
-    const setUp = data.plugins.filter((x) => x.configured && x.state !== 'no key').length;
+    const setUp = data.plugins.filter((x) => !x.ai && x.configured && x.state !== 'no key').length;
+    const feedCount = data.plugins.filter((x) => !x.ai).length;
     const pubPlugins = (data.publishers || []).filter((q) => !parentOf(q)).length;  // its parts in it
+    const asked = box.querySelector('textarea.pl-ai-q')?.value || '';  // a question being typed survives the refreshes
     const head = pub ? `publisher · ${pubKind(pub)} · ${pubCount(pub)}`
+      : p?.ai ? `AI assistant · ${p.ai.vendor} · ${p.ai.plan || 'no plan'} · ${p.ai.model}`
       : p ? `${p.archive ? 'closed archive' : p.feeds.some((f) => f.archive) ? 'feed, a closed archive in part' : 'feed'} · ${p.kind} data · ${p.assets.join(', ')}` : '';
     box.innerHTML = `
       <div class="ex-venues"><div class="view-head"><div><h2>Plugins</h2>
-        <div class="p-muted small">${num(data.plugins.length + pubPlugins)} plugins · ${num(setUp)} of ${num(data.plugins.length)} feeds set up · plugin API ${esc(data.api)}</div></div></div>
+        <div class="p-muted small">${num(data.plugins.length + pubPlugins)} plugins · ${num(setUp)} of ${num(feedCount)} feeds set up · plugin API ${esc(data.api)}</div></div></div>
         <button type="button" class="pl-all" data-rescan="*"${data.offline || data.running ? ' disabled' : ''}
           title="${data.offline ? 'This offline copy of the app sends no requests' : 'Every plugin set up here asks its provider again (a few requests each)'}">${data.running ? 'Scanning…' : 'Rescan all'}</button>
         ${note ? `<div class="p-muted small pl-note-line">${esc(note)}</div>` : ''}
@@ -729,6 +848,8 @@
         <div class="p-muted small">${esc(head)}</div></div></div>${mainHtml()}</div>
       <aside class="ex-side">${sideHtml()}</aside>`;
     box.querySelector('.ex-list').scrollTop = scrolled;
+    const askBox = box.querySelector('textarea.pl-ai-q');
+    if (askBox && asked) askBox.value = asked;
     for (const [v, value] of typed) {
       const input = box.querySelector(`input.pl-key[data-var="${CSS.escape(v)}"]`);
       if (input) input.value = value;
@@ -756,9 +877,11 @@
       document.getElementById('railFetcher')?.click();
       return;
     }
-    const t = e.target.closest('[data-plugin],[data-rescan],[data-recheck],[data-pause],[data-save-key],[data-remove-key]');
+    const t = e.target.closest('[data-plugin],[data-rescan],[data-recheck],[data-pause],[data-save-key],[data-remove-key],[data-ai-ask]');
     if (!t || t.disabled) return;
-    if (t.dataset.saveKey) {
+    if (t.dataset.aiAsk) {
+      aiAsk(t.dataset.aiAsk);
+    } else if (t.dataset.saveKey) {
       const input = box.querySelector(`input.pl-key[data-var="${CSS.escape(t.dataset.saveKey)}"]`);
       const value = input?.value.trim();
       if (!value) { note = `Type ${t.dataset.saveKey} first.`; render(); return; }

@@ -3,9 +3,11 @@
     Sets or removes a data provider's API keys as user environment variables, typed hidden.
 
 .DESCRIPTION
-    Every data provider is a plugin of the app (src/liminal/sources/registry.py). The
-    script asks the app which there are (python -m liminal_app plugins --json: names only,
-    never a key's value) and offers a menu: each provider, its keys and whether they are set.
+    Every data provider is a plugin of the app (liminal_lib.sources.registry), and so is every AI
+    assistant (liminal_lib.assistants: claude, grok, codex). The script asks the app which there
+    are (python -m liminal_app plugins --json: names only, never a key's value) and offers a menu:
+    each provider and assistant, its keys and whether they are set. An assistant's account (the
+    email or name its key belongs to) is a detail of yours, typed in the open, not a key.
     Pick one to set or replace its keys, or to remove them, to choose its plan, or to rescan it;
     a provider added as a plugin appears here by itself.
 
@@ -72,7 +74,11 @@ function Get-Providers {
     foreach ($e in @($listed.errors)) {
         if ($e) { Write-Host ('  left out: {0}: {1}' -f $e.where, $e.why) }
     }
-    @($listed.providers)
+    $all = @($listed.providers)
+    foreach ($a in @($listed.assistants)) {  # the AI assistants: listed after the providers, set up the same way
+        if ($a) { $a | Add-Member -NotePropertyName assistant -NotePropertyValue $true -Force; $all += $a }
+    }
+    $all
 }
 
 function Get-KeyState($key) {
@@ -98,9 +104,10 @@ function Show-Providers($providers) {
     $free = @($providers | Where-Object { @($_.keys).Count -eq 0 })
     $api = ''
     if ($script:PluginApi) { $api = "; plugin API $($script:PluginApi)" }
-    Write-Host "Data providers (each a plugin of the app$api):"
+    Write-Host "Data providers and AI assistants (each a plugin of the app$api):"
     for ($i = 0; $i -lt $keyed.Count; $i++) {
         $p = $keyed[$i]
+        if ($p.assistant -and ($i -eq 0 -or -not $keyed[$i - 1].assistant)) { Write-Host '  AI assistants (their account is typed in the open):' }
         $keys = (@($p.keys) | ForEach-Object { '{0}: {1}' -f $_.name, (Get-KeyState $_) }) -join ', '
         $note = ''
         if (@($p.keyless).Count -gt 0) { $note = '  ({0} without keys)' -f (@($p.keyless) -join ', ') }
@@ -146,13 +153,17 @@ function Invoke-Rescan($p) {
     }
 }
 
-function Set-Key([string]$Name) {
-    $secure = Read-Host "$Name (typed hidden)" -AsSecureString
-    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
-    try {
-        $value = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr).Trim()
-    } finally {
-        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)  # the plain copy in unmanaged memory, wiped
+function Set-Key([string]$Name, [bool]$Open = $false) {
+    if ($Open) {  # a detail of yours (an assistant's account): no secret, typed in the open
+        $value = (Read-Host "$Name (typed in the open)").Trim()
+    } else {
+        $secure = Read-Host "$Name (typed hidden)" -AsSecureString
+        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+        try {
+            $value = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr).Trim()
+        } finally {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)  # the plain copy in unmanaged memory, wiped
+        }
     }
     if (-not $value) {
         Write-Host "Nothing typed: $Name unchanged."
@@ -177,7 +188,7 @@ function Remove-Key([string]$Name) {
 function Set-ProviderKeys($p) {
     $changed = $false
     foreach ($k in @($p.keys)) {
-        if (Set-Key $k.name) { $changed = $true }
+        if (Set-Key $k.name (-not $k.secret)) { $changed = $true }
     }
     if ($changed) { Write-Host $Restart }
 }
@@ -203,7 +214,7 @@ function Edit-Provider($p) {
         Write-Host ('  {0}. Plan: {1}={2} ({3})' -f ($i + 3), $plans[$i].name, $plans[$i].value, (Get-Origin $plans[$i].origin))
     }
     $last = $plans.Count + 3
-    if ($p.scan) { Write-Host "  $last. Rescan: ask $($p.title) what the key gets (its capabilities and plan)" }
+    if ($p.scan) { Write-Host "  $last. $(if ($p.assistant) { 'Connect' } else { 'Rescan' }): ask $($p.title) what the key gets (its capabilities and plan)" }
     $pick = Read-Host 'Choice (number; Enter to go back)'
     if ($pick -eq '1') {
         Set-ProviderKeys $p

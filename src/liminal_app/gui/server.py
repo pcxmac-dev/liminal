@@ -79,6 +79,9 @@ def _heavy(method):
     return run
 
 
+_AI_IN_FLIGHT = threading.BoundedSemaphore(2)  # answers in flight at once across every page
+
+
 class ChartApp:
     """The API, independent of HTTP so it can be tested directly."""
 
@@ -954,7 +957,10 @@ class ChartApp:
             raise RuntimeError("offline (LIMINAL_OFFLINE): this copy of the app sends no requests")
         if self._halted():
             raise RuntimeError("fetching is halted: resume it first")
-        if name is not None and (name not in providers() or not providers()[name].has_scan):
+        from liminal_lib.sources.registry import assistants
+
+        scanned = providers().get(name) or assistants().get(name) if name is not None else None
+        if name is not None and (scanned is None or not scanned.has_scan):
             raise LookupError(f"{name} has no capability scan")
         if self._rescan_running():
             raise RuntimeError("a rescan is already running")
@@ -972,10 +978,11 @@ class ChartApp:
         default. Only a plan variable with choices, to one of them: never a key. The app uses it at
         its next look at the settings, the sync from its next run."""
         from liminal_lib.sources import providers
+        from liminal_lib.sources.registry import assistants
 
         if self.settings.offline:
             raise RuntimeError("offline (LIMINAL_OFFLINE): this copy of the app saves no settings")
-        p = providers().get(plugin)
+        p = providers().get(plugin) or assistants().get(plugin)  # an AI assistant's plan, model and caps too
         if p is None or variable not in p.plan_choices:
             raise LookupError(f"{plugin} has no plan variable {variable}")
         if value is not None:
@@ -996,11 +1003,11 @@ class ChartApp:
         removed. Only a variable the plugin declares (registry.plugin_keys). Its value is never
         logged, kept anywhere else or sent back: the answer says only whether it is set."""
         from liminal_lib.sources import keys, providers, publishers
-        from liminal_lib.sources.registry import plugin_keys
+        from liminal_lib.sources.registry import assistants, plugin_keys
 
         if self.settings.offline:
             raise RuntimeError("offline (LIMINAL_OFFLINE): this copy of the app saves no settings")
-        if plugin not in providers() and plugin not in publishers():
+        if plugin not in providers() and plugin not in publishers() and plugin not in assistants():
             raise LookupError(f"no plugin named {plugin}")
         if not any(k.name == variable for k in plugin_keys(plugin)):
             raise LookupError(f"{plugin} reads no variable {variable}")
@@ -1018,16 +1025,62 @@ class ChartApp:
         """Why a plugin may not set a variable another plugin declares too (one package's KeyVar
         naming Massive's key), or None: each variable is one plugin's, its feeds' and parts' included."""
         from liminal_lib.sources import providers, publishers
-        from liminal_lib.sources.registry import plugin_of, publisher_of
+        from liminal_lib.sources.registry import assistants, plugin_of, publisher_of
 
         def top(name: str) -> str:
             return publisher_of(name) if name in publishers() else plugin_of(name)
 
-        owners = {top(n) for n, p in [*providers().items(), *publishers().items()] if any(k.name == variable for k in p.keys)}
+        owners = {top(n) for n, p in [*providers().items(), *publishers().items(), *assistants().items()]
+                  if any(k.name == variable for k in p.keys)}
         return f"{variable} is declared by {', '.join(sorted(owners))}: no one plugin's to set" if len(owners) > 1 else None
 
     def _save_variable(self, name: str, value: str | None) -> None:
         config.save_user_variable(name, value)
+
+    # -- the AI assistants (plugin API 2.0; liminal_lib.assistants) ---------------------------------
+    def evaluate(self, body: dict, session=None) -> dict:
+        """An argument evaluated by an AI assistant plugin (the Plugins view's Try it, POST
+        /api/ai/evaluate, `liminal ai ask`): the body's `argument` (arguments.argument_from_dict: a
+        question or a judge, its inputs by evaluation id) or its simple form (`question`, `answer`,
+        `scale`, `fields`, `context` strings), sent to `assistant` (else the default) with `model`
+        (else its plan's), recorded in the main file's evaluations. Offline: nothing sent. At most
+        two answers in flight (the vendors are slow): the rest wait."""
+        from liminal_lib import assistants as ai
+        from liminal_lib.assistants import argument_from_dict
+
+        if self.settings.offline:
+            raise RuntimeError("offline (LIMINAL_OFFLINE): this copy of the app sends nothing to an assistant")
+        name = str(body.get("assistant") or "").strip().lower() or None
+        model = str(body.get("model") or "").strip() or None
+        arg = body.get("argument")
+        if not isinstance(arg, dict):
+            question = str(body.get("question") or "").strip()
+            if not question:
+                raise ValueError("question is required")
+            answer: dict = {"kind": str(body.get("answer") or "text").strip().lower()}
+            if body.get("scale"):
+                answer["scale"] = [s.strip() for s in str(body["scale"]).split(",") if s.strip()]
+            if body.get("fields"):
+                answer["fields"] = [s.strip() for s in str(body["fields"]).split(",") if s.strip()]
+            context = body.get("context") or []
+            if not isinstance(context, list):
+                raise ValueError("context must be a list of texts")
+            arg = {"kind": "question", "question": question[:4000], "answer": answer,
+                   "context": [{"kind": "text", "text": str(c)[:12000]} for c in context[:20]]}
+        argument = argument_from_dict(arg, lookup=self.store.evaluation)
+        with _AI_IN_FLIGHT:
+            ev = ai.evaluate(argument, self.settings, assistant=name, model=model, store=self.store, session=session)
+        return ev.as_dict()
+
+    def evaluations(self, q: dict) -> dict:
+        """The evaluations kept (GET /api/ai/evaluations): by assistant, kind, of one argument; with
+        `id`, that one and what it built on (a judge's inputs)."""
+        limit = int(q.get("limit") or 50)
+        out = {"evaluations": self.store.evaluations(assistant=q.get("assistant") or None, kind=q.get("kind") or None,
+                                                     limit=max(1, min(limit, 500)), argument_id=q.get("argument") or None)}
+        if q.get("id"):
+            out["chain"] = self.store.evaluation_chain(str(q["id"]))
+        return out
 
     def _spawn(self, args: list[str]):
         """A command of the app in its own windowless process (kept, so it is reaped)."""
@@ -2113,6 +2166,18 @@ def make_handler(app: ChartApp, port_ref: list[int]):
                     return self._json(app.priority(ticker, me if visit else None), HTTPStatus.ACCEPTED)
                 if method == "POST" and parts == ["", "api", "fetching"]:
                     return self._json(app.set_fetching(body))
+                if method == "POST" and parts == ["", "api", "ai", "evaluate"]:
+                    from liminal_lib.errors import BudgetExhausted, NotEntitled, SourceError, Unauthorized
+
+                    try:
+                        return self._json(app.evaluate(body), HTTPStatus.CREATED)
+                    except (RuntimeError, BudgetExhausted) as e:  # offline, or a cap reached
+                        return self._json({"error": str(e)}, HTTPStatus.TOO_MANY_REQUESTS if isinstance(e, BudgetExhausted)
+                                          else HTTPStatus.CONFLICT)
+                    except (Unauthorized, NotEntitled) as e:
+                        return self._json({"error": str(e)}, HTTPStatus.FORBIDDEN)
+                    except SourceError as e:
+                        return self._json({"error": str(e)}, HTTPStatus.BAD_GATEWAY)
                 if method == "POST" and parts == ["", "api", "plugins", "plan"]:
                     try:
                         return self._json(app.set_plan(str(body.get("plugin") or ""), str(body.get("variable") or ""),
@@ -2264,6 +2329,8 @@ def make_handler(app: ChartApp, port_ref: list[int]):
                     return self._json(app.venues())
                 if url.path == "/api/plugins":
                     return self._json(app.plugins())
+                if url.path == "/api/ai/evaluations":
+                    return self._json(app.evaluations(q))
                 if url.path == "/api/venue":
                     return self._json(app.venue(q.get("id", "")))
                 if url.path == "/api/markets":

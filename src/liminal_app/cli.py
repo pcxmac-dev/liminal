@@ -1122,9 +1122,10 @@ def cmd_plugins(args, settings: Settings | None) -> int:
 
     rows = registry.menu(settings)
     pubs = registry.publisher_menu()
+    assts = registry.assistant_menu(settings)  # the AI assistants (plugin API 2.0)
     left_out = registry.errors()
     if args.json:
-        print(json.dumps({"api": registry.PLUGIN_API, "providers": rows, "publishers": pubs,
+        print(json.dumps({"api": registry.PLUGIN_API, "providers": rows, "publishers": pubs, "assistants": assts,
                           "errors": [{"where": w, "why": why} for w, why in left_out]}))
         return 0
 
@@ -1149,11 +1150,101 @@ def cmd_plugins(args, settings: Settings | None) -> int:
               + (f"; you set: {', '.join(k['name'] for k in r['keys'])}" if r["keys"] else ""))
         for part in r["parts"]:  # a plugin of several publishers: Federal's agencies
             print(f"{'':12} and {part['title']} ({part['name']}): {part['about']}")
+    for r in assts:  # an AI assistant: its key and account, its plan and model (the user's choice, or Connect's)
+        keys = ", ".join(k["name"] + (" (set)" if k.get("set") else " (not set)") for k in r["keys"])
+        print(f"{r['name']:9} {r['title']:10} {'assistant':8} {keys:58} plan: {r.get('plan') or '-'}; model: {r.get('model') or '-'}")
+        print(f"{'':9} {r['about']}" + (f"; keys from {r['signup']}" if r["signup"] else "") + f" {release(r)}"
+              + (f"; {r['freeNote']}" if r.get("freeNote") else ""))
     for where, why in left_out:
         print(f"left out: {where}: {why}")
     print("Set or remove a plugin's keys: in the Plugins view (Setup), or "
           "powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\set-key.ps1")
     return 0
+
+
+def cmd_ai(args, settings: Settings) -> int:
+    """The AI assistants (plugins; liminal_lib.assistants): `ask QUESTION` evaluates a question (with
+    --context FILE texts, an --answer form, a --scale or --fields), `models` lists what the vendor
+    serves, `connect` reads the plan from its servers, `evaluations` lists what was kept, `judge
+    --id EV...` judges earlier answers; by --assistant (default: LIMINAL_ASSISTANT, else the first
+    set up) and --model. Offline: nothing is sent."""
+    import json
+
+    from liminal_lib import assistants as ai
+    from liminal_lib.assistants import Answer, ContextItem, Offline, Question
+    from liminal_lib.errors import SourceError
+
+    name = (args.assistant or "").strip().lower() or None
+    if args.action in ("ask", "connect", "judge", "models") and settings.offline:
+        print(f"offline (LIMINAL_OFFLINE): nothing sent to {name or ai.default_assistant(settings) or 'an assistant'}")
+        return 2
+    try:
+        if args.action == "models":
+            chosen = name or ai.default_assistant(settings)
+            if chosen is None:
+                print("no AI assistant is set up here: set one's key and plan on the Plugins view")
+                return 1
+            for m in ai.build(chosen, settings).models():
+                table = ai.assistants()[chosen].model_of(m["id"])
+                print(f"{m['id']:32} {m.get('title', '')[:32]:32} " + (f"${table.input_usd:g} in, ${table.output_usd:g} out per million"
+                                                                          if table else "not in the table (no price known)"))
+            return 0
+        if args.action == "connect":
+            chosen = name or ai.default_assistant(settings)
+            p = ai.assistants().get(chosen or "")
+            if p is None:
+                print("no AI assistant is set up here: set one's key and plan on the Plugins view")
+                return 1
+            with Store(settings.db_path, check_same_thread=False) as store:
+                _scan(p.name, p.build(settings), store, print, settings=settings)
+            return 0
+        with Store(settings.db_path, check_same_thread=False) as store:
+            if args.action == "evaluations":
+                rows = store.evaluations(assistant=name, kind=args.kind or None, limit=args.limit)
+                if args.json:
+                    print(json.dumps(rows, default=str))
+                    return 0
+                for r in rows:
+                    cost = f"${r['cost_usd']:.6f}" if r.get("cost_usd") is not None else "cost unknown"
+                    print(f"{r['at'][:16]} {r['assistant']:8} {r['model']:28} {r['kind']:8} {r.get('verdict') or '-':10} "
+                          f"{(r.get('input_tokens') or 0) + (r.get('output_tokens') or 0):>7} tokens {cost}  {r['id']}")
+                    print(f"{'':17} {(r.get('text') or r.get('error') or '')[:200]}")
+                return 0
+            if args.action == "judge":
+                found = [store.evaluation(i) for i in args.id or []]
+                if not found or any(e is None for e in found):
+                    print("judge needs the ids of evaluations kept here (--id EV_ID, repeatable): `ai evaluations` lists them")
+                    return 1
+                ev = ai.judge(found, settings, task=args.task, question=args.question or "", assistant=name, model=args.model or None,
+                              store=store)
+            else:  # ask
+                question = " ".join(args.question_words or []).strip() or (args.question or "")
+                if not question:
+                    print("ask needs a question")
+                    return 1
+                answer = Answer(args.answer, scale=tuple(s.strip() for s in (args.scale or "").split(",") if s.strip()),
+                                fields=tuple(s.strip() for s in (args.fields or "").split(",") if s.strip()))
+                context = tuple(ContextItem("document", Path(f).read_text(encoding="utf-8", errors="replace"), id=f,
+                                            title=Path(f).name) for f in (args.context or []))
+                ev = ai.evaluate(Question(question, context=context, answer=answer), settings, assistant=name,
+                                 model=args.model or None, store=store)
+        if args.json:
+            print(json.dumps(ev.as_dict(), default=str))
+            return 0
+        print(ev.text.strip() or f"(no text: {ev.stop})")
+        cost = f"${ev.cost_usd:.6f}" if ev.cost_usd is not None else "cost unknown"
+        print(f"--- {ev.assistant} ({ev.model}), {ev.usage.total} tokens, {cost}, {ev.seconds:g} s"
+              + (f"; verdict: {ev.verdict}" if ev.verdict else "") + (f"; {ev.stop}" if ev.stop != "end_turn" else "") + f"; {ev.id}")
+        return 0 if ev.ok else 1
+    except Offline as e:
+        print(str(e))
+        return 2
+    except LookupError as e:
+        print(str(e))
+        return 1
+    except SourceError as e:
+        print(f"{type(e).__name__}: {e}")
+        return 1
 
 
 def cmd_sourcing(args, settings: Settings) -> int:
@@ -1181,11 +1272,19 @@ def cmd_capabilities(args, settings: Settings) -> int:
     """Each provider's capability scan (its plugin's `scan`): a few requests asking what its plan
     really gives, within its caps like any run; kept and shown in its report (`sourcing`). A
     plugin's name scans each of its feeds (Alpaca: Blue Ocean's too)."""
-    from liminal_lib.sources.registry import plugin_feeds
+    from liminal_lib.sources.registry import assistants, plugin_feeds
 
-    names = plugin_feeds(args.name) if args.name else [n for n, p in providers().items() if p.has_scan]
+    names = plugin_feeds(args.name) if args.name else [n for n, p in [*providers().items(), *assistants().items()] if p.has_scan]
     for name in names:
         p = providers().get(name)
+        if p is None and name in assistants():  # an AI assistant's Connect: the key on the models list, the limits
+            p = assistants()[name]
+            if not p.served(settings):
+                print(f"{name}: not set up here ({p.free_note(settings) or p.key_hint}); not connected")
+                continue
+            with Store(settings.db_path, check_same_thread=False) as store:
+                _scan(name, p.build(settings), store, print, settings=settings)
+            continue
         if p is None or not p.has_scan:
             print(f"{name}: no capability scan")
             continue
@@ -1740,6 +1839,24 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("plugins", help="the data providers (a plugin each): keys set or not, what each serves")
     s.add_argument("--json", action="store_true", help="as JSON (tools/set-key.ps1's menu); no key's value")
     s.set_defaults(func=cmd_plugins, settings_optional=True)
+
+    s = sub.add_parser("ai", help="the AI assistants (plugins): ask QUESTION..., models, connect, evaluations, "
+                                 "or judge --id EV_ID...; --assistant and --model choose; offline sends nothing")
+    s.add_argument("action", choices=["ask", "models", "connect", "evaluations", "judge"])
+    s.add_argument("question_words", nargs="*", help="ask: the question")
+    s.add_argument("--assistant", help="claude, grok or codex (default: LIMINAL_ASSISTANT, else the first set up)")
+    s.add_argument("--model", help="a model of its table (default: its plan's)")
+    s.add_argument("--answer", default="text", choices=["text", "verdict", "fields"], help="ask: the answer form")
+    s.add_argument("--scale", help="ask, a verdict: the verdicts allowed, comma separated")
+    s.add_argument("--fields", help="ask, fields: the JSON fields wanted, comma separated")
+    s.add_argument("--context", action="append", help="ask: a text file given as material (repeatable)")
+    s.add_argument("--question", help="judge: what to do with the answers (task free); ask: the question, as one argument")
+    s.add_argument("--task", default="compare", choices=["compare", "score", "reconcile", "free"], help="judge: how")
+    s.add_argument("--id", action="append", help="judge: an evaluation kept here (repeatable)")
+    s.add_argument("--kind", help="evaluations: question or judge")
+    s.add_argument("--limit", type=int, default=20, help="evaluations: how many (default 20)")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(func=cmd_ai)
 
     s = sub.add_parser("sourcing", help="which source delivers what: each provider's report (subscription, limits, "
                                        "capabilities) and the plan by cost and capability (no requests)")

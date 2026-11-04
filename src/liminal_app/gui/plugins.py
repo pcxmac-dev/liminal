@@ -38,10 +38,11 @@ from dataclasses import replace
 from datetime import date, datetime
 
 from liminal_lib.sources import providers
-from liminal_lib.sources.registry import (PLUGIN_API, database_row, errors, key_row, label, plugin_databases, plugin_feeds,
-                                plugin_keys, plugin_of, publisher_parts)
+from liminal_lib.sources.registry import (PLUGIN_API, assistants, database_row, errors, key_row, label, plugin_databases,
+                                          plugin_feeds, plugin_keys, plugin_of, publisher_parts)
 
-GROUPS = ("Feeds with keys", "Public feeds")
+GROUPS = ("Feeds with keys", "Public feeds", "AI assistants")
+RECENT_EVALUATIONS = 8  # an assistant's last answers shown on its page
 
 
 def _fresh(latency: float) -> str:
@@ -123,6 +124,75 @@ def _options(p, settings) -> list[dict]:
     return out
 
 
+def _recent(r: dict) -> dict:
+    """An evaluation row for the view: what was asked and answered, what it cost; the text cut short."""
+    text = r.get("text") or r.get("error") or ""
+    return {"id": r["id"], "at": r["at"], "model": r["model"], "kind": r["kind"], "verdict": r.get("verdict"),
+            "text": text[:240] + ("…" if len(text) > 240 else ""), "costUsd": r.get("cost_usd"),
+            "tokens": (r.get("input_tokens") or 0) + (r.get("output_tokens") or 0), "stop": r.get("stop"),
+            "question": ((r.get("argument") or {}).get("question") or "")[:160]}
+
+
+def _ai_limits(p, plan) -> str:
+    """What the vendor publishes for the plan chosen, in a line (the Limits panel's text)."""
+    if plan is None:
+        return "no plan chosen"
+    bits = [f"{plan.rpm:,} requests a minute" if plan.rpm else "", f"{plan.tpm:,} tokens a minute" if plan.tpm else "",
+            f"{plan.rpd:,} requests a day" if plan.rpd else "", f"a spend cap of {plan.spend_cap}" if plan.spend_cap else ""]
+    said = ", ".join(b for b in bits if b)
+    return f"{p.vendor} publishes for the {plan.title} plan: {said}" if said else f"{p.vendor} publishes no limits for the {plan.title} plan"
+
+
+def _assistant_entry(p, store, settings, scans: dict, running: dict | None) -> dict:
+    """An AI assistant plugin's entry (the AI assistants group): its key and account (set or not),
+    its plan, model and caps, the vendor's written-in tables, its last Connect, what it spent today
+    here and on the whole machine, and its last answers (the user, 2026-11-03: the three AI plugins
+    "compliant with the rest of the plugin structure (setup / connecting methods / etc)")."""
+    from liminal_lib.ratelimit import MachineLedger
+
+    own = p.own(settings)
+    plan = p.plan_of(own.plan) if own else p.free_plan
+    keys_set = bool(p.keys_set(settings))
+    served = bool(p.served(settings))
+    state = "no key" if not keys_set else "no access" if not served else "ready"
+    scan = scans.get(p.name)
+    scanning = _scanning(p, running, scan, state)
+    mine = settings.variables or {}
+    found = (scan or {}).get("plan") or {}
+    differs = [{"name": v, "yours": mine[v], "found": found[v]} for v in found
+               if mine.get(v) and str(mine[v]).strip().lower() != str(found[v]).strip().lower()]
+    today = store.evaluations_today(p.name) if hasattr(store, "evaluations_today") else {"requests": 0, "tokens": 0, "costUsd": 0.0}
+    key = own.key if own else None
+    machine = ({"requests": MachineLedger(p.name, key).today(), "tokens": MachineLedger(f"{p.name}:tokens", key).today()}
+               if key else {"requests": 0, "tokens": 0})
+    caps = own.caps if own else p.caps
+    free = p.free_note(settings)
+    recent = store.evaluations(assistant=p.name, limit=RECENT_EVALUATIONS) if hasattr(store, "evaluations") else []
+    entry = {
+        "name": p.name, "title": p.title, "label": p.name, "about": p.about, "origin": p.origin, "version": p.version,
+        "api": p.api, "signup": p.signup, "group": GROUPS[2], "archive": False, "kind": "assistant",
+        "assets": [], "keyless": [], "serves": [], "configured": keys_set, "keysSet": keys_set,
+        "keys": [key_row(k, settings) for k in p.keys], "publishers": [],
+        "state": "scanning" if scanning else state, "kill": None,
+        "plan": {"tier": own.plan if own else (p.free_plan.name if p.free_plan else ""), "vars": p.plan_state(settings),
+                 "found": found, "alike": {}, "differs": differs, "note": p.plan_note},
+        "options": _options(p, settings),
+        "limits": {"published": _ai_limits(p, plan)},
+        "capabilities": [], "capabilitiesWithKey": False, "streams": [], "notes": [free] if free else [],
+        "scan": {"has": p.has_scan, "at": (scan or {}).get("at"),
+                 "results": [{"what": w, "available": bool(ok), "detail": d} for w, ok, d in (scan or {}).get("results", [])],
+                 "running": scanning},
+        "usage": {"today": today["requests"], "perDay": caps.requests_per_day, "perRun": None},
+        "watched": 0, "delivery": [], "load": 0.0,
+        "ai": {**p.table_rows(), "plan": own.plan if own else None, "model": own.model if own else p.default_model,
+               "effort": own.effort if own else "", "planAccess": bool(plan is not None and plan.api_access), "free": free,
+               "caps": {"requestsPerDay": caps.requests_per_day, "tokensPerDay": caps.tokens_per_day,
+                        "maxOutputTokens": caps.max_output_tokens},
+               "usage": {"today": today, "machine": machine}, "recent": [_recent(r) for r in recent]},
+    }
+    return _fold(entry, [])
+
+
 def _plan(p, settings, scan: dict | None) -> dict:
     """Its plan here: each plan variable with its origin (you, its scan, the default), what its last
     scan found, where that and your own setting disagree, and what its scan cannot tell."""
@@ -192,6 +262,7 @@ def view(store, settings, feeds: dict, scheme, scans: dict, running: dict | None
             "delivery": delivery, "load": round(scheme.load.get(name, 0.0), 3),
         }
     out = [_fold(e, [entries[n] for n in plugin_feeds(name)[1:]]) for name, e in entries.items() if plugin_of(name) == name]
+    out += [_assistant_entry(p, store, settings, scans, running) for p in assistants().values()]
     for e in out:
         e["databases"] = [database_row(d, store.path) for d in plugin_databases(e["name"])]
     return {"plugins": out, "groups": list(GROUPS), "errors": [{"where": w, "why": why} for w, why in errors()],

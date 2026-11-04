@@ -69,7 +69,10 @@ python -m pip install -e ".[dev,plugins]"
 ```
 
 `plugins` installs the provider plugins, each a package of its own (`liminal-plugin-<name>`, a
-repository under [pcxmac-dev](https://github.com/pcxmac-dev), listed in `pyproject.toml`). Every
+repository under [pcxmac-dev](https://github.com/pcxmac-dev), listed in `pyproject.toml`); the AI
+assistant plugins (`platform-plugin-claude`, `-grok`, `-codex`: evaluations of standardized
+arguments on your own API key, the Plugins view's "AI assistants" group, `liminal ai ask ...`) are
+packages of their own too. Every
 data provider is one, Massive included: without them the app has no feeds.
 
 Save each API key with `tools/set-key.ps1`: it asks for the key with the input hidden (not shown,

@@ -389,7 +389,7 @@ def test_the_plugins_view_shows_each_plugins_version_and_origin(tmp_path):
     with Store(tmp_path / "m.db") as store:
         out = ChartApp(store, settings=load_settings(env={}, env_file=None)).plugins()
     assert out["api"] == registry.PLUGIN_API
-    assert {(p["version"], p["api"], p["origin"]) for p in out["plugins"]} == {
+    assert {(p["version"], p["api"], p["origin"]) for p in out["plugins"] if not p.get("ai")} == {  # the feeds (the AI assistants aside)
         *((v, a, f"package: liminal-plugin-{registry.plugin_of(n)} ({e})") for n, (v, a, e) in PACKAGED.items())}
     assert {(p["version"], p["api"]) for p in out["publishers"]} == {("0.2.0", "2.0")}
 

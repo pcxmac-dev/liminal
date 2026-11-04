@@ -615,6 +615,55 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
   (the federal agencies, one plugin; made), the dataset libraries `liminal-plugin-french` (made) and
   `liminal-plugin-datahub` (made), and, later, a state regulators' plugin of its own.
 
+## AI assistants are plugins (2026-11-03)
+
+The user: three AI plugins "that have a vanilla API, are compliant with the rest of the plugin
+structure (setup / connecting methods / etc) but allow interfacing with Claude, Grock and ChatGPT
+Codex via API key, an email / account name", "used to evaluate certain standardized arguments from
+other plugins or apps", "extensible, and allow for higher order evaluation", supporting free plans,
+with each vendor's plans and rates written in and a way to find out when they change.
+
+- **The kind** (liminal-lib 1.3.0, `liminal_lib.assistants`): `AssistantPlugin` is the third kind of
+  plugin, on the platform's base (`PlatformPlugin`): its `vendor`, its `assistant` (an `Assistant`
+  subclass: the vendor's headers, request body, answer parsing, error shapes and rate-limit headers;
+  `ResponsesAssistant` for the OpenAI-shaped Responses API), its tables (`plans`, the free one first;
+  `models`, the default first; `sources`, the vendor's pages they were written from; `verified`, the
+  date) and its `caps`. Its keys (`<NAME>_API_KEY`, read under the vendor's own name too; `<NAME>_ACCOUNT`,
+  the email or account name, typed in the open, sent to the vendor only as a digest where the API
+  takes one), its plan variables (`<NAME>_PLAN`, `_MODEL`, `_REQUESTS_PER_DAY`, `_TOKENS_PER_DAY`) and its
+  options (`_MAX_OUTPUT_TOKENS`, `_EFFORT`) are derived from the tables; its settings are an
+  `AssistantSettings` (never shown with the key or the account). The packages: platform-plugin-claude
+  (Anthropic's Messages API), platform-plugin-grok (xAI's Responses API), platform-plugin-codex
+  (OpenAI's Responses API), each with the vendor's tables verified 2026-11-03.
+- **Arguments** (`assistants/arguments.py`): a `Question` (the question, context items such as headlines,
+  an assessment, a report or plain text, and the answer form: text, a verdict on a scale, or JSON
+  fields) or a `Judge` (higher order: earlier evaluations compared, scored or reconciled); kinds are
+  registered by name, so a plugin adds its own by subclassing, and an argument crosses processes as
+  a dict. An answer is an `Evaluation` (`assistants/evaluation.py`: the text, the verdict and fields
+  parsed, what it cost by the vendor's own figure or the table's prices, the usage, how it ended),
+  kept in the main file's `evaluations` table (`storage/evaluations.py`). The library's `assistants.evaluate`,
+  `evaluate_all`, `judge` and `default_assistant` (`LIMINAL_ASSISTANT`, else the first set up) are what a
+  plugin or the app calls: a plugin never imports an AI package.
+- **Free, caps, offline.** The free plan is the default; where a vendor's free plan reaches no API
+  (Anthropic: a Claude.ai subscription is not an API key; xAI: no free credits) the plugin says so and
+  sends nothing until the plan the key is on is chosen; OpenAI lists a Free usage tier, so Codex's
+  free plan sends. The caps are per machine (the machine ledgers, every database together): 50
+  requests and 200,000 tokens a day, 1,024 output tokens an answer, the cheapest model; raised on the
+  Plugins view. Nothing is sent from an offline copy, and every error is scrubbed of the key and the
+  account before it is logged or shown.
+- **Connect and the weekly check.** Connect (the plugin's capability scan, `capabilities <name>`, the
+  Plugins view, the key script) tries the key on the vendor's models list, sends one answer of a few
+  tokens for the limits the server sends, names the plan they show (applied where you set none, as a
+  feed's scan is) and compares the models listed and the vendor's own cost figure with the tables;
+  each package's weekly CI run (`LIMINAL_VENDOR_PAGES=1`) reads the vendor's public pages again
+  (`assistants/verify.py`) and fails when a written-in price or limit is gone: a change of plans is
+  a new release of that plugin.
+- **The app**: the "AI assistants" group on the Plugins view (Setup with the key hidden and the
+  account in the open, Plan with the plan, model and caps, the written-in tables, Limits, Connect,
+  Usage today here and on the machine, the last answers, a Try it box), `POST /api/ai/evaluate` and
+  `GET /api/ai/evaluations` (the fetcher's page serves them too), `liminal ai ask|models|connect|evaluations|judge`,
+  the key script's assistants section.
+
 ## Stocks abroad, VIX futures and more forex (2026-11-02)
 
 The user: "are there any other public sources for 'bars'/data for stocks on foreign exchanges?",
