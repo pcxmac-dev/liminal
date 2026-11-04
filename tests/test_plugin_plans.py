@@ -101,11 +101,11 @@ def test_alpaca_tells_its_plans_apart_by_the_latest_fifteen_minutes():
         (path, params), = source.client.asked
         assert path == "/v2/stocks/bars" and params["feed"] == "sip" and params["end"].startswith("2026-10-27T15:00")
         source.is_entitled = lambda *a, **k: True
-        found = alpaca.scan(source)
+        found = alpaca.ALPACA.scan(source)
         assert isinstance(found, Scanned) and found.plan == {"ALPACA_PLAN": plan}
     keyless = AlpacaSource(_AlpacaClient(False), now=lambda: now)
     keyless.is_entitled = lambda res, ticker, asset="stock": asset == "crypto"
-    assert alpaca.scan(keyless) == [("stock minute bars, every exchange (SIP), from 2016", False, "refused (keys or plan)"),
+    assert alpaca.ALPACA.scan(keyless) == [("stock minute bars, every exchange (SIP), from 2016", False, "refused (keys or plan)"),
                                     ("crypto minute bars, no key", True, "")]  # no stocks: nothing tells the plan
 
 

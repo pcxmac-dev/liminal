@@ -138,7 +138,7 @@ def test_tiingo_scans_its_plan_and_reports_the_blue_ocean_add_on(store):
             return [{"close": 1}] * 3
 
     source = type("Source", (), {"client": Client()})()
-    found = tiingo.scan(source, today=date(2026, 10, 27)).results
+    found = tiingo.TIINGO.scan(source, today=date(2026, 10, 27)).results
     assert [ok for _, ok, _ in found] == [True, True, False, True, True, True, True]
     assert "BOATS entitlement" in found[2][2] and found[4][2] == "2 bars for 2026-10-26"
     assert source.client.paths[2] == "/boats/AAPL/prices"

@@ -23,15 +23,16 @@ BUILT_IN: list[str] = []  # none left in sources/plugins/ (2026-11-01): every pr
 # Released on their own (pyproject.toml: the `plugins` extra) and installed beside the app: the suite
 # sees them as the user's app does (tests/conftest.py), each with its distribution's version.
 PACKAGED = {  # name: (its distribution's version, the contract it needs, its entry point's value)
-    "bitstamp": ("1.3.1", "1.6", "liminal_plugin_bitstamp:PLUGIN"), "coinbase": ("1.3.1", "1.6", "liminal_plugin_coinbase:PLUGIN"),
-    "bitfinex": ("1.2.1", "1.6", "liminal_plugin_bitfinex:PLUGIN"),
-    "cboe": ("1.3.1", "1.12", "liminal_plugin_cboe"), "cboefutures": ("1.3.1", "1.12", "liminal_plugin_cboe"),
-    "tiingo": ("1.5.1", "1.12", "liminal_plugin_tiingo"), "tiingofx": ("1.5.1", "1.12", "liminal_plugin_tiingo"),
-    "alpaca": ("1.4.1", "1.11", "liminal_plugin_alpaca"), "boats": ("1.4.1", "1.11", "liminal_plugin_alpaca"),
-    "massive": ("1.4.1", "1.11", "liminal_plugin_massive"), "twse": ("1.0.0", "1.12", "liminal_plugin_twse"),
-    "b3": ("1.0.1", "1.12", "liminal_plugin_b3"),
-    "alphavantage": ("1.0.0", "1.12", "liminal_plugin_alphavantage"), "jquants": ("1.0.0", "1.12", "liminal_plugin_jquants"),
-    "twelvedata": ("1.0.0", "1.12", "liminal_plugin_twelvedata")}
+    # every plugin a class on plugin API 2.0 at 0.2.0 (the user, 2026-11-03: "after the rewrite, lets go to version 0.2.0")
+    "bitstamp": ("0.2.0", "2.0", "liminal_plugin_bitstamp:PLUGIN"), "coinbase": ("0.2.0", "2.0", "liminal_plugin_coinbase:PLUGIN"),
+    "bitfinex": ("0.2.0", "2.0", "liminal_plugin_bitfinex:PLUGIN"),
+    "cboe": ("0.2.0", "2.0", "liminal_plugin_cboe"), "cboefutures": ("0.2.0", "2.0", "liminal_plugin_cboe"),
+    "tiingo": ("0.2.0", "2.0", "liminal_plugin_tiingo"), "tiingofx": ("0.2.0", "2.0", "liminal_plugin_tiingo"),
+    "alpaca": ("0.2.0", "2.0", "liminal_plugin_alpaca"), "boats": ("0.2.0", "2.0", "liminal_plugin_alpaca"),
+    "massive": ("0.2.0", "2.0", "liminal_plugin_massive"), "twse": ("0.2.0", "2.0", "liminal_plugin_twse"),
+    "b3": ("0.2.0", "2.0", "liminal_plugin_b3"),
+    "alphavantage": ("0.2.0", "2.0", "liminal_plugin_alphavantage"), "jquants": ("0.2.0", "2.0", "liminal_plugin_jquants"),
+    "twelvedata": ("0.2.0", "2.0", "liminal_plugin_twelvedata")}
 TIINGO_BOATS = "tiingoboats"  # Tiingo's Blue Ocean feed, live: its package's
 IEX_FEED = "iex"  # Alpaca's IEX stream, live: its package's
 FEEDS = ["massive", "alpaca", "boats", "bitstamp", "coinbase", "bitfinex", "cboe", "cboefutures", "tiingo", "tiingofx",
@@ -227,10 +228,10 @@ def test_every_plugin_is_versioned_for_this_apps_contract():
     # too; Federal declares the SEC's GOV_CONTACT and the CFTC's dataset (1.4), as the dataset
     # libraries their datasets; Federal's feeds their parsers (1.7); Massive's headlines are released
     # with Massive, which declares where they are (1.8: the main file's news)
-    want = {"massive-news": ("1.4.1", "1.11"),  # Massive's headlines: released with Massive's package
+    want = {"massive-news": ("0.2.0", "2.0"),  # Massive's headlines: released with Massive's package
             **{n: (v, a) for n, (v, a, _) in PACKAGED.items()},  # the packages: their distributions' versions
-            **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("1.4.1", "1.7")),  # its package's
-            "french": ("1.1.1", "1.4"), "datahub": ("1.1.1", "1.4")}  # the dataset libraries: packages too
+            **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("0.2.0", "2.0")),  # its package's
+            "french": ("0.2.0", "2.0"), "datahub": ("0.2.0", "2.0")}  # the dataset libraries: packages too
     assert {p.name: (p.version, p.api) for p in plugins_} == want
     assert all(registry.api_refusal(p.api, record=p.is_record) is None for p in plugins_)
     assert registry.PLUGIN_API == "2.0" and registry.RECORD_API == "1.12"  # the classes' contract, the records'
@@ -362,21 +363,21 @@ def test_the_plugins_command_shows_each_plugins_version_and_origin(monkeypatch, 
     # the agencies are Federal's parts; Massive's headlines are in Massive's row; the dataset libraries
     assert list(pubs) == ["federal", "french", "datahub"]
     assert [r["name"] for r in pubs["federal"]["parts"]] == ["fed", "nyfed", "sec", "bls", "fedreg", "cftc"]
-    assert (pubs["federal"]["version"], pubs["federal"]["api"]) == ("1.4.1", "1.7")
+    assert (pubs["federal"]["version"], pubs["federal"]["api"]) == ("0.2.0", "2.0")
     assert pubs["federal"]["parts"][-1]["datasets"] == ["cftc-cot-legacy"] and len(pubs["french"]["datasets"]) == 4
     assert [k["name"] for k in pubs["federal"]["keys"]] == ["GOV_CONTACT"]  # the SEC's, set for the plugin
     massive = next(r for r in out["providers"] if r["name"] == "massive")
-    assert [(r["name"], r["version"], r["account"]) for r in massive["publishers"]] == [("massive-news", "1.4.1", "massive")]
+    assert [(r["name"], r["version"], r["account"]) for r in massive["publishers"]] == [("massive-news", "0.2.0", "massive")]
     assert cli.main(["plugins"]) == 0
     text = capsys.readouterr().out
     assert text.startswith(f"Plugin API {registry.PLUGIN_API}")
-    assert "[1.2.1 for plugin API 1.6, package: liminal-plugin-bitfinex (liminal_plugin_bitfinex:PLUGIN)]" in text
-    assert any(line.startswith("federal") and "[1.4.1 for plugin API 1.7, package: liminal-plugin-federal (liminal_plugin_federal)]" in line
+    assert "[0.2.0 for plugin API 2.0, package: liminal-plugin-bitfinex (liminal_plugin_bitfinex:PLUGIN)]" in text
+    assert any(line.startswith("federal") and "[0.2.0 for plugin API 2.0, package: liminal-plugin-federal (liminal_plugin_federal)]" in line
                and "you set: GOV_CONTACT" in line
                for line in text.splitlines())
     assert any(line.strip().startswith("and Federal Reserve (fed):") for line in text.splitlines())
-    assert "[1.4.1 for plugin API 1.11, package: liminal-plugin-alpaca (liminal_plugin_alpaca)]" in text
-    assert "[1.3.1 for plugin API 1.6, package: liminal-plugin-bitstamp (liminal_plugin_bitstamp:PLUGIN)]" in text
+    assert "[0.2.0 for plugin API 2.0, package: liminal-plugin-alpaca (liminal_plugin_alpaca)]" in text
+    assert "[0.2.0 for plugin API 2.0, package: liminal-plugin-bitstamp (liminal_plugin_bitstamp:PLUGIN)]" in text
     assert any(line.strip().startswith("and Massive headlines (publisher massive-news):") for line in text.splitlines())
     assert not any(line.startswith("massive-news") for line in text.splitlines())
 
@@ -390,7 +391,7 @@ def test_the_plugins_view_shows_each_plugins_version_and_origin(tmp_path):
     assert out["api"] == registry.PLUGIN_API
     assert {(p["version"], p["api"], p["origin"]) for p in out["plugins"]} == {
         *((v, a, f"package: liminal-plugin-{registry.plugin_of(n)} ({e})") for n, (v, a, e) in PACKAGED.items())}
-    assert {(p["version"], p["api"]) for p in out["publishers"]} == {("1.4.1", "1.7"), ("1.4.1", "1.11"), ("1.1.1", "1.4")}
+    assert {(p["version"], p["api"]) for p in out["publishers"]} == {("0.2.0", "2.0")}
 
 
 def test_unknown_providers_are_refused_by_name():
@@ -491,7 +492,7 @@ def test_the_scan_verifies_the_rate_kept_against_its_servers_and_the_lower_is_us
     n, s = alpaca.rate_window(settings)
     kept_pm = n * 60 / s
     lower = SimpleNamespace(client=SimpleNamespace(limits_seen={"X-RateLimit-Limit": str(int(kept_pm // 2))}))
-    bare = replace(alpaca, scan=None)  # its own scan's requests left out: only the limits row
+    bare = alpaca.with_(scan=None)  # its own scan's requests left out: only the limits row
     found = bare.run_scan(lower, settings)
     row = found.results[-1]
     assert row[0] == "its server's rate limit" and row[1] is False and "used from now on" in row[2]

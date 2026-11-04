@@ -29,7 +29,7 @@ def test_the_federal_agencies_are_parts_of_one_plugin():
         assert importlib.util.find_spec(f"liminal_plugin_{gone}") is None, gone  # no package of their own either
     pubs = publishers()
     assert list(pubs)[:7] == ["federal", *AGENCIES]  # the plugin's record first, its agencies after it
-    assert all(pubs[n].part_of == "federal" and (pubs[n].version, pubs[n].api) == ("1.4.1", "1.7") for n in AGENCIES)
+    assert all(pubs[n].part_of == "federal" and (pubs[n].version, pubs[n].api) == ("0.2.0", "2.0") for n in AGENCIES)
     assert pubs["federal"].feeds == () and pubs["federal"].part_of == ""
     assert registry.publisher_parts("federal") == AGENCIES and registry.publisher_of("sec") == "federal"
     assert registry.publisher_of("massive-news") == "massive" and registry.publisher_parts("massive-news") == []
@@ -38,7 +38,7 @@ def test_the_federal_agencies_are_parts_of_one_plugin():
     assert [k.name for k in registry.plugin_keys("federal")] == ["GOV_CONTACT"] == [k.name for k in registry.plugin_keys("sec")]
     # each agency keeps what it was: its feeds (their keys name the state kept), its hosts and checks
     assert [f.key for f in pubs["fed"].feeds] == ["fed-press", "fed-speeches"] and pubs["sec"].policy.contact
-    assert pubs["fed"].calendar is not None and pubs["nyfed"].moments is not None
+    assert pubs["fed"].has_calendar and pubs["nyfed"].has_moments
     # the CFTC: its Commitments of Traders, a dataset; nothing of its own to read (its feeds are off)
     assert pubs["cftc"].feeds == () and pubs["cftc"].dataset_names == ("cftc-cot-legacy",)
     from liminal_lib import datasets

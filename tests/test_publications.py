@@ -184,8 +184,8 @@ def test_the_fed_is_read_at_2pm_on_fomc_days_and_otherwise_every_30_minutes():
     assert r.next_read(p, press, last, after) == datetime(2026, 12, 9, 14, 1, 30, tzinfo=ET)
     plain = {"at": datetime(2026, 12, 10, 13, 50, tzinfo=ET).isoformat(), "status": "ok"}
     assert r.next_read(p, press, last, plain) == datetime(2026, 12, 10, 14, 20, tzinfo=ET)  # an ordinary day
-    assert fed.moments(date(2026, 11, 18))  # the October minutes: three weeks after the decision
-    assert not fed.moments(date(2026, 11, 19))
+    assert fed.PUBLISHER.moments(date(2026, 11, 18))  # the October minutes: three weeks after the decision
+    assert not fed.PUBLISHER.moments(date(2026, 11, 19))
     assert set(fed.FOMC_DECISIONS) >= {date(2026, 10, 28), date(2026, 12, 9), date(2027, 6, 9)}
 
 
@@ -251,7 +251,7 @@ def massive_news(monkeypatch):
     import liminal_plugin_massive as massive
 
     fake = FakeNews()
-    monkeypatch.setattr(massive, "build", lambda settings, budget, max_retries=4: fake)
+    monkeypatch.setattr(massive.PLUGIN, "build", lambda settings, budget, max_retries=4: fake)  # its headlines build on it
     settings = load_settings(env={"MASSIVE_API_KEY": "k"}, env_file=None)
     return fake, settings, publishers()["massive-news"]
 
@@ -462,12 +462,12 @@ def test_one_publishers_failing_calendar_never_takes_the_plugins_view_down(store
 
     from liminal_app.gui.server import ChartApp
 
-    bad = replace(publishers()["fed"], calendar=lambda today: [{"when": "2026-11-05T08:30:00", "what": "naive"}])
+    bad = publishers()["fed"].with_(calendar=lambda today: [{"when": "2026-11-05T08:30:00", "what": "naive"}])
     monkeypatch.setattr(publications, "_today_moments", lambda pub, now: [])
     out = publications.view(GovDB(None), None, store, publishers={"fed": bad})
     assert out[0]["calendar"] == []  # a naive time: none shown, no error
     assert gov.upcoming({"fed": bad}, NOW.date(), NOW) == []
-    broken = replace(publishers()["fed"], calendar=lambda today: 1 / 0)
+    broken = publishers()["fed"].with_(calendar=lambda today: 1 / 0)
     out = publications.view(GovDB(None), None, store, publishers={"fed": broken, "bls": publishers()["bls"]})
     assert "ZeroDivisionError" in out[0]["error"] and out[1]["name"] == "bls"
     app = ChartApp(store)
