@@ -676,6 +676,7 @@
 
   // -- an AI assistant (p.ai: its tables, caps, usage and last answers) ---------------------------
   const usd = (c) => (c == null ? '–' : c < 0.01 ? `$${c.toFixed(6)}` : `$${c.toFixed(4)}`);
+  const price = (c) => (c == null ? '–' : `$${c >= 1 ? String(c) : c.toFixed(c < 0.01 ? 3 : 2)}`);  // per million tokens
   const aiTry = { busy: false, answer: null, error: '' };
 
   function aiTablesHtml(p) {
@@ -686,7 +687,7 @@
         <td class="small">${esc(x.price || '')}${x.spendCap ? `<div class="p-muted">${esc(x.spendCap)}</div>` : ''}</td>
         <td class="small p-muted">${esc(x.note || '')}</td></tr>`).join('');
     const models = a.models.map((m) => `<tr class="${m.id === a.model ? 'pl-current' : ''}"><td><b>${esc(m.title)}</b><div class="p-muted small"><code>${esc(m.id)}</code>${m.id === a.model ? ' · chosen' : ''}</div></td>
-        <td class="num">${usd(m.inputUsd)}</td><td class="num">${usd(m.outputUsd)}</td><td class="num">${m.cachedUsd != null ? usd(m.cachedUsd) : '–'}</td>
+        <td class="num">${price(m.inputUsd)}</td><td class="num">${price(m.outputUsd)}</td><td class="num">${price(m.cachedUsd)}</td>
         <td class="num">${m.context ? num(m.context) : '–'}</td><td class="small p-muted">${m.reasoning ? 'thinks first · ' : ''}${esc(m.note || '')}</td></tr>`).join('');
     const sources = a.sources.map((x) => `<div class="small"><a href="${esc(safeUrl(x.url) || '#')}" target="_blank" rel="noopener noreferrer">${esc(x.url.replace(/^https:\/\//, ''))}</a> <span class="p-muted">${esc(x.holds)}</span></div>`).join('');
     return `<h4>${esc(a.vendor)}'s plans, as written in</h4>
