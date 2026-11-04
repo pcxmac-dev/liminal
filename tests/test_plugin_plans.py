@@ -10,15 +10,15 @@ from pathlib import Path
 
 import pytest
 
-from liminal_app import cli
-from liminal_lib import collector, sourcing
-from liminal_lib.config import Settings, load_settings, with_detected
-from liminal_plugin_massive import TIERS
-from liminal_lib.errors import NotEntitled
-from liminal_lib.sources import build_source, feed_profiles, providers
-from liminal_plugin_alpaca.client import AlpacaSource
-from liminal_lib.sources.registry import Scanned
-from liminal_lib.storage import Store
+from liminal_charts import cli
+from liminal_libs import collector, sourcing
+from liminal_libs.config import Settings, load_settings, with_detected
+from plugin_integrator_massive import TIERS
+from liminal_libs.errors import NotEntitled
+from liminal_libs.sources import build_source, feed_profiles, providers
+from plugin_integrator_alpaca.client import AlpacaSource
+from liminal_libs.sources.registry import Scanned
+from liminal_libs.storage import Store
 
 KEYS = {"MASSIVE_API_KEY": "k", "ALPACA_API_KEY_ID": "i", "ALPACA_API_SECRET_KEY": "s"}
 
@@ -92,7 +92,7 @@ class _AlpacaClient:
 
 
 def test_alpaca_tells_its_plans_apart_by_the_latest_fifteen_minutes():
-    import liminal_plugin_alpaca as alpaca
+    import plugin_integrator_alpaca as alpaca
 
     now = datetime(2026, 10, 27, 15, 0, tzinfo=timezone.utc)
     for refuse, plan in ((True, "basic"), (False, "algo_trader_plus")):
@@ -110,7 +110,7 @@ def test_alpaca_tells_its_plans_apart_by_the_latest_fifteen_minutes():
 
 
 def test_massive_finds_its_stocks_plan_and_leaves_the_other_classes_to_you():
-    import liminal_plugin_massive as massive
+    import plugin_integrator_massive as massive
 
     reach = {"day_3y": True, "day_6y": True, "day_11y": False, "day_21y": False, "second": True, "trades": True,
              "quotes": False}
@@ -122,7 +122,7 @@ def test_massive_finds_its_stocks_plan_and_leaves_the_other_classes_to_you():
 
 
 def test_tiingos_plan_is_your_choice_and_sets_its_limits():
-    import liminal_plugin_tiingo as tiingo
+    import plugin_integrator_tiingo as tiingo
 
     keys = {**KEYS, "TIINGO_API_KEY": "t"}
     starter, power = (load_settings(env={**keys, **extra}, env_file=None) for extra in ({}, {"TIINGO_PLAN": "power"}))
@@ -167,8 +167,8 @@ class _TiingoClient:
 
 
 def test_tiingos_scan_tells_starter_from_a_paid_plan_by_the_news_api(store):
-    from liminal_lib.errors import SourceError
-    import liminal_plugin_tiingo as tiingo
+    from liminal_libs.errors import SourceError
+    import plugin_integrator_tiingo as tiingo
 
     tiingo_p = providers()["tiingo"]
     paid = tiingo_p.run_scan(type("S", (), {"client": _TiingoClient(news=None)})())
@@ -196,8 +196,8 @@ def test_tiingos_scan_tells_starter_from_a_paid_plan_by_the_news_api(store):
 
 
 def test_a_paid_tiingo_key_is_power_unless_you_say_commercial(tmp_path):
-    from liminal_app.gui import plugins
-    import liminal_plugin_tiingo as tiingo
+    from liminal_charts.gui import plugins
+    import plugin_integrator_tiingo as tiingo
 
     scans = {"tiingo": {"at": "x", "results": [], "plan": {"TIINGO_PLAN": "power"},
                         "alike": {"TIINGO_PLAN": ["commercial"]}}}
@@ -250,7 +250,7 @@ def test_a_scan_runs_beside_a_sync_holding_the_run_lock(tmp_path, monkeypatch):
 
 
 def _app(tmp_path, offline=False):
-    from liminal_app.gui.server import ChartApp
+    from liminal_charts.gui.server import ChartApp
 
     tmp_path.mkdir(parents=True, exist_ok=True)
     env = {**KEYS, "LIMINAL_DB": str(tmp_path / "m.db"), **({"LIMINAL_OFFLINE": "1"} if offline else {})}
@@ -275,7 +275,7 @@ def test_the_chart_app_rescans_in_a_process_of_its_own_one_at_a_time(tmp_path):
     app._spawn = lambda args: spawned.append(args) or _Proc()
     try:
         out = app.start_rescan("alpaca")
-        assert out["started"] and spawned[0][-3:] == ["liminal_app", "capabilities", "alpaca"]
+        assert out["started"] and spawned[0][-3:] == ["liminal_charts", "capabilities", "alpaca"]
         with pytest.raises(RuntimeError, match="already running"):
             app.start_rescan()
         assert app.plugins()["running"]["name"] == "alpaca"
@@ -313,7 +313,7 @@ def test_the_chart_app_takes_up_a_plan_a_scan_found(tmp_path):
 
 
 def test_the_plugins_view_shows_each_plugin_its_plan_keys_and_part(tmp_path):
-    from liminal_lib.symbols import resolve
+    from liminal_libs.symbols import resolve
 
     store, app = _app(tmp_path)
     try:
@@ -354,8 +354,8 @@ def test_the_plugins_view_shows_each_plugin_its_plan_keys_and_part(tmp_path):
 
 
 def test_a_plan_you_set_that_the_scan_disagrees_with_is_shown(tmp_path):
-    from liminal_app.gui import plugins
-    from liminal_lib.sources import feed_profiles
+    from liminal_charts.gui import plugins
+    from liminal_libs.sources import feed_profiles
 
     s = load_settings(env={**KEYS, "ALPACA_PLAN": "algo_trader_plus"}, env_file=None)
     with Store(tmp_path / "m.db") as store:
@@ -368,7 +368,7 @@ def test_a_plan_you_set_that_the_scan_disagrees_with_is_shown(tmp_path):
 
 
 def test_the_page_has_its_plug_and_view():
-    static = Path(__file__).resolve().parents[1] / "src" / "liminal_app" / "gui" / "static"
+    static = Path(__file__).resolve().parents[1] / "src" / "liminal_charts" / "gui" / "static"
     html = (static / "index.html").read_text(encoding="utf-8")
     assert 'id="railPlugins"' in html and 'id="viewPlugins"' in html and 'src="plugins.js"' in html
     assert "plug:" in (static / "icons.js").read_text(encoding="utf-8")
@@ -384,7 +384,7 @@ def test_the_page_has_its_plug_and_view():
 
 def test_the_key_script_offers_each_plan_and_a_rescan():
     src = (Path(__file__).resolve().parents[1] / "tools" / "set-key.ps1").read_text(encoding="utf-8")
-    assert "function Set-Plan" in src and "-m liminal_app capabilities $p.name" in src
+    assert "function Set-Plan" in src and "-m liminal_charts capabilities $p.name" in src
     assert "[switch]$Rescan" in src and "$choices -notcontains $pick" in src
 
 
@@ -418,7 +418,7 @@ class _Registry:
 def test_a_chosen_plan_is_saved_where_the_key_script_saves_it():
     import os
 
-    from liminal_lib.config import save_user_variable
+    from liminal_libs.config import save_user_variable
 
     reg = _Registry()
     save_user_variable("TIINGO_PLAN", "commercial", registry=reg)
@@ -429,8 +429,8 @@ def test_a_chosen_plan_is_saved_where_the_key_script_saves_it():
 
 
 def _choosing_app(tmp_path, monkeypatch, offline=False):
-    from liminal_lib import config
-    from liminal_app.gui.server import ChartApp
+    from liminal_libs import config
+    from liminal_charts.gui.server import ChartApp
 
     env = {**KEYS, "TIINGO_API_KEY": "t", "LIMINAL_DB": str(tmp_path / "m.db"), **({"LIMINAL_OFFLINE": "1"} if offline else {})}
     saved: dict[str, str] = {}
@@ -449,7 +449,7 @@ def _choosing_app(tmp_path, monkeypatch, offline=False):
 
 
 def test_the_plugins_view_chooses_a_plan_the_scan_cannot_tell(tmp_path, monkeypatch):
-    import liminal_plugin_tiingo as tiingo
+    import plugin_integrator_tiingo as tiingo
 
     store, app, wrote = _choosing_app(tmp_path, monkeypatch)
     try:
@@ -495,7 +495,7 @@ def test_the_plan_route_takes_only_this_apps_pages(tmp_path, monkeypatch):
     from http.client import HTTPConnection
     from http.server import ThreadingHTTPServer
 
-    from liminal_app.gui.server import make_handler
+    from liminal_charts.gui.server import make_handler
 
     store, app, wrote = _choosing_app(tmp_path, monkeypatch)
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(app, [0]))
@@ -524,7 +524,7 @@ def test_the_plan_route_takes_only_this_apps_pages(tmp_path, monkeypatch):
 
 
 def test_the_page_offers_each_plan_as_a_choice():
-    static = Path(__file__).resolve().parents[1] / "src" / "liminal_app" / "gui" / "static"
+    static = Path(__file__).resolve().parents[1] / "src" / "liminal_charts" / "gui" / "static"
     js = (static / "plugins.js").read_text(encoding="utf-8")
     assert "/api/plugins/plan" in js and "select.pl-choose" in js and "window.confirm(ask)" in js
     assert "This offline copy of the app saves no settings" in js and "headers: WRITE_HEADERS" in js
@@ -532,7 +532,7 @@ def test_the_page_offers_each_plan_as_a_choice():
 
 # -- Alpaca's Blue Ocean folded into its plugin; "scanning" while a rescan runs ----------------------
 def test_the_plugins_view_folds_blue_ocean_into_alpacas_entry(tmp_path):
-    from liminal_lib.symbols import resolve
+    from liminal_libs.symbols import resolve
 
     store, app = _app(tmp_path)
     try:
@@ -558,7 +558,7 @@ def test_the_plugins_view_folds_blue_ocean_into_alpacas_entry(tmp_path):
 def test_a_rescan_says_scanning_on_each_plugin_it_has_still_to_ask(tmp_path):
     """The user, 2026-10-29: "when i hit rescan all, i want the status of each plug in to say
     scanning, not 'ready'"."""
-    from liminal_app.gui import plugins
+    from liminal_charts.gui import plugins
 
     s = load_settings(env=KEYS, env_file=None)
     since = "2026-10-29T13:00:00+00:00"
@@ -594,7 +594,7 @@ def test_a_rescan_says_scanning_on_each_plugin_it_has_still_to_ask(tmp_path):
 def test_a_scan_kept_in_local_time_is_compared_with_the_rescans_start():
     from datetime import timedelta
 
-    from liminal_app.gui.plugins import _asked_since
+    from liminal_charts.gui.plugins import _asked_since
 
     now = datetime.now()  # a scan's time without an offset is local, as the scans keep it
     utc = datetime.now(timezone.utc)
@@ -604,7 +604,7 @@ def test_a_scan_kept_in_local_time_is_compared_with_the_rescans_start():
 
 
 def test_the_page_says_scanning_and_lists_a_plugins_feeds():
-    static = Path(__file__).resolve().parents[1] / "src" / "liminal_app" / "gui" / "static"
+    static = Path(__file__).resolve().parents[1] / "src" / "liminal_charts" / "gui" / "static"
     js = (static / "plugins.js").read_text(encoding="utf-8")
     assert "scanning: 'scanning…'" in js and "' · scanning…'" not in js  # the chip says it, not the plan line
     assert "function feedsHtml(p)" in js and "<th>Feed</th>" in js and 'class="pl-feedrow"' in js

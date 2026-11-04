@@ -9,17 +9,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from liminal_app import cli
-from liminal_lib import collector
-from liminal_lib.collector import ET, sync
-from liminal_lib.config import load_settings
-from liminal_plugin_massive import TIERS
-from liminal_app.gui import server
-from liminal_app.gui.activity import limits
-from liminal_app.gui.server import ChartApp
-from liminal_lib.ratelimit import KvLedger, RateLimiter, describe, window_state
-from liminal_plugin_massive.client import MassiveClient
-from liminal_lib.storage import Store
+from liminal_charts import cli
+from liminal_libs import collector
+from liminal_libs.collector import ET, sync
+from liminal_libs.config import load_settings
+from plugin_integrator_massive import TIERS
+from liminal_charts.gui import server
+from liminal_charts.gui.activity import limits
+from liminal_charts.gui.server import ChartApp
+from liminal_libs.ratelimit import KvLedger, RateLimiter, describe, window_state
+from plugin_integrator_massive.client import MassiveClient
+from liminal_libs.storage import Store
 
 from .conftest import FakeResponse, FakeSession, FakeSource
 
@@ -184,7 +184,7 @@ def test_an_offline_copy_of_the_app_starts_no_runs(tmp_path, monkeypatch):
 
 
 def test_pausing_stops_background_fetching_before_its_next_request_and_resumes(tmp_path):
-    from liminal_lib.errors import Paused
+    from liminal_libs.errors import Paused
 
     now = datetime(2026, 10, 24, 18, tzinfo=timezone.utc)
     with Store(tmp_path / "m.db") as store:
@@ -297,8 +297,8 @@ def test_opening_an_up_to_date_symbol_asks_for_nothing(tmp_path, monkeypatch):
     # and no "next in line" (it read so for hours while a long sync ran)
     from datetime import datetime as dt
 
-    from liminal_lib import collector
-    from liminal_lib.collector import ET
+    from liminal_libs import collector
+    from liminal_libs.collector import ET
 
     store = Store(tmp_path / "m.db", check_same_thread=False)
     store.watch("massive", ["SPCX"], "minute", exchange="XNAS")

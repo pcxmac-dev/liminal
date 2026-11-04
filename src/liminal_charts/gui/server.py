@@ -22,14 +22,14 @@ from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
 
-from liminal_lib import config, freshness, live, mongo, sourcing
-from liminal_lib.config import Settings, load_settings
-from liminal_lib.storage import LayoutLimit, Store
-from liminal_lib.storage.markets import mic_names
-from liminal_lib.storage.requests import KINDS as REQUEST_KINDS, OPEN as OPEN_REQUEST, read_status
+from liminal_libs import config, freshness, live, mongo, sourcing
+from liminal_libs.config import Settings, load_settings
+from liminal_libs.storage import LayoutLimit, Store
+from liminal_libs.storage.markets import mic_names
+from liminal_libs.storage.requests import KINDS as REQUEST_KINDS, OPEN as OPEN_REQUEST, read_status
 from . import activity, astro, web
 from .bars import CALENDAR, PRICE_BASED, TIME_TYPES, BarEngine, Style, _BoundedCache, resample
-from liminal_lib.calc.derivatives import Model
+from liminal_libs.calc.derivatives import Model
 from .stats import details_subset, key_stats
 from .web import MAX_BODY, PROFILE_COOKIE, PROFILE_HEADER, STATIC, WRITE_HEADER, fetcher_page  # noqa: F401 (shared with the front, web.py)
 
@@ -397,7 +397,7 @@ class ChartApp:
     def _feed_quality(self, feed: str, store: Store | None = None) -> float:
         """A feed's best quality over asset classes (display priority between feeds). Read through
         the connection of whoever asks, under its own lock: the engine its reader, the app `store`."""
-        from liminal_lib.composite import quality_of
+        from liminal_libs.composite import quality_of
 
         store = store or self.store
         return max((quality_of(store, feed, a) for a in ("stock", "crypto", "index", "fx", "future")), default=1.0)
@@ -407,8 +407,8 @@ class ChartApp:
         """The models of an asset traded on several exchanges: the gold-standard reference (one
         exchange), the composite across exchanges, the consolidated tape, and each exchange's quality.
         Read through `store` under `lock` (the app's own by default)."""
-        from liminal_lib.composite import exchange_feeds, quality_of, reference_feed
-        from liminal_lib.sources import feed_profiles
+        from liminal_libs.composite import exchange_feeds, quality_of, reference_feed
+        from liminal_libs.sources import feed_profiles
 
         feeds = feeds if feeds is not None else feed_profiles(self.settings)
         exch = {f: v for f, v in exchange_feeds(feeds, asset).items() if f in sources}
@@ -429,8 +429,8 @@ class ChartApp:
         each symbol's state without the per-symbol download plan (the Fetcher shows that)."""
         from collections import defaultdict
 
-        from liminal_lib.composite import reference
-        from liminal_lib.sources import feed_profiles
+        from liminal_libs.composite import reference
+        from liminal_libs.sources import feed_profiles
 
         # Its own connections and lock (a second or more for thousands of symbols): under the shared
         # lock the layouts, watchlists and the first chart waited behind it on every page load.
@@ -765,14 +765,14 @@ class ChartApp:
 
     def watch(self, ticker: str) -> dict:
         """Add a directory listing to the watchlist (the fetcher then collects it)."""
-        from liminal_lib.symbols import resolve
+        from liminal_libs.symbols import resolve
 
         with self._lock:
             row = next((r for r in self.store.directory() if r["ticker"] == ticker.upper()), None)
             if row is None:
                 raise LookupError(f"{ticker} is not in the directory")
             spec = resolve(f"{row['ticker']}::{row['exchange']}" if row["kind"] == "stock" and row["exchange"] else row["ticker"])
-            from liminal_lib.sources import providers, supports
+            from liminal_libs.sources import providers, supports
 
             for feed in providers():  # each span is still downloaded by one feed only
                 if supports(feed, spec):
@@ -794,7 +794,7 @@ class ChartApp:
     def gov(self) -> dict:
         """The Gov view: the agencies' newest, the current regulatory parameters and each
         source's state (gov.py; fetched by the sync, read here from gov/gov.db)."""
-        from liminal_lib import gov
+        from liminal_libs import gov
 
         with self._gov_lock:
             if self._gov_db is None:
@@ -806,7 +806,7 @@ class ChartApp:
         scrape checks, limits as last verified, schedule; a plugin of several (Federal) with its parts,
         and the datasets a part publishes as the Datasets view has them (the CFTC's Commitments of
         Traders). Read from gov/gov.db, the kills and the datasets' files: no requests."""
-        from liminal_lib import gov, publications
+        from liminal_libs import gov, publications
 
         with self._gov_lock:
             if self._gov_db is None:
@@ -817,7 +817,7 @@ class ChartApp:
             held = {d["name"]: d for d in self.datasets()["datasets"]}
             for p in out:
                 p["datasetRows"] = [held[n] for n in p["datasets"] if n in held]
-        from liminal_lib.sources.registry import database_row, key_row, plugin_databases, plugin_keys, publisher_of
+        from liminal_libs.sources.registry import database_row, key_row, plugin_databases, plugin_keys, publisher_of
 
         for p in out:  # what you set for it (its parts' too, for a plugin of several): set or not, never a value
             p["keys"] = [key_row(k, self.settings) for k in plugin_keys(p["name"])]
@@ -829,8 +829,8 @@ class ChartApp:
     def start_recheck(self, name: str) -> dict:
         """Verify a publisher's limits now (publications.recheck_now) in a thread: robots.txt read
         again and each feed asked once, never within its floor."""
-        from liminal_lib import publications
-        from liminal_lib.sources import publishers
+        from liminal_libs import publications
+        from liminal_libs.sources import publishers
 
         if self.settings.offline:
             raise RuntimeError("offline (LIMINAL_OFFLINE): this copy of the app sends no requests")
@@ -860,8 +860,8 @@ class ChartApp:
 
     def pause_publisher(self, name: str, on: bool) -> dict:
         """Pause a publisher by hand (until resumed), or resume it."""
-        from liminal_lib import publications
-        from liminal_lib.sources import publishers
+        from liminal_libs import publications
+        from liminal_libs.sources import publishers
 
         if name not in publishers():
             raise LookupError(f"no publisher named {name}")
@@ -876,7 +876,7 @@ class ChartApp:
         serve() starts it, every 30 s, and every 2 s while the view is open."""
         with self._monitor_lock:
             if self._monitor is None:
-                from liminal_lib.resources import Monitor
+                from liminal_libs.resources import Monitor
 
                 self._monitor = Monitor(Path(self.store.path).parent)
             return self._monitor
@@ -890,8 +890,8 @@ class ChartApp:
 
     def venues(self) -> dict:
         """The Exchanges view's venues (venues.summary): each with its state now and its insight."""
-        from liminal_lib.sources import feed_profiles
-        from liminal_lib import sourcing
+        from liminal_libs.sources import feed_profiles
+        from liminal_libs import sourcing
         from . import venues
 
         hit = getattr(self, "_venues_cache", None)
@@ -907,7 +907,7 @@ class ChartApp:
 
     def venue(self, vid: str) -> dict:
         """One venue's products (venues.products) for the Exchanges view's middle column."""
-        from liminal_lib.sources import feed_profiles
+        from liminal_libs.sources import feed_profiles
         from . import venues
 
         feeds = feed_profiles(self.settings)
@@ -919,7 +919,7 @@ class ChartApp:
     def plugins(self) -> dict:
         """The Plugins view (plugins.view): every provider plugin, its plan and where that came from,
         its limits, capabilities and last scan, its part in the delivery scheme; the rescan going now."""
-        from liminal_lib.sources import feed_profiles
+        from liminal_libs.sources import feed_profiles
         from . import plugins
 
         running = self._rescan_running()
@@ -951,20 +951,20 @@ class ChartApp:
         """Run `capabilities` (one provider's scan, or every one set up here) in its own process: a
         few requests each, within the feeds' machine-wide rate windows and daily caps, so it runs
         beside a sync. The plans it finds count here within SETTINGS_TTL_S."""
-        from liminal_lib.sources import providers
+        from liminal_libs.sources import providers
 
         if self.settings.offline:
             raise RuntimeError("offline (LIMINAL_OFFLINE): this copy of the app sends no requests")
         if self._halted():
             raise RuntimeError("fetching is halted: resume it first")
-        from liminal_lib.sources.registry import assistants
+        from liminal_libs.sources.registry import assistants
 
         scanned = providers().get(name) or assistants().get(name) if name is not None else None
         if name is not None and (scanned is None or not scanned.has_scan):
             raise LookupError(f"{name} has no capability scan")
         if self._rescan_running():
             raise RuntimeError("a rescan is already running")
-        args = [sys.executable, "-m", "liminal_app", "capabilities", *([name] if name else [])]
+        args = [sys.executable, "-m", "liminal_charts", "capabilities", *([name] if name else [])]
         proc = self._spawn(args)
         self._rescan = (proc, {"name": name, "since": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                                "pid": proc.pid})
@@ -977,8 +977,8 @@ class ChartApp:
         config.save_user_variable), or with None removed, leaving it to the plugin's scan or its
         default. Only a plan variable with choices, to one of them: never a key. The app uses it at
         its next look at the settings, the sync from its next run."""
-        from liminal_lib.sources import providers
-        from liminal_lib.sources.registry import assistants
+        from liminal_libs.sources import providers
+        from liminal_libs.sources.registry import assistants
 
         if self.settings.offline:
             raise RuntimeError("offline (LIMINAL_OFFLINE): this copy of the app saves no settings")
@@ -1002,8 +1002,8 @@ class ChartApp:
         script saves it (a user environment variable, config.save_user_variable), or with None
         removed. Only a variable the plugin declares (registry.plugin_keys). Its value is never
         logged, kept anywhere else or sent back: the answer says only whether it is set."""
-        from liminal_lib.sources import keys, providers, publishers
-        from liminal_lib.sources.registry import assistants, plugin_keys
+        from liminal_libs.sources import keys, providers, publishers
+        from liminal_libs.sources.registry import assistants, plugin_keys
 
         if self.settings.offline:
             raise RuntimeError("offline (LIMINAL_OFFLINE): this copy of the app saves no settings")
@@ -1024,8 +1024,8 @@ class ChartApp:
     def _claimed_elsewhere(plugin: str, variable: str) -> str | None:
         """Why a plugin may not set a variable another plugin declares too (one package's KeyVar
         naming Massive's key), or None: each variable is one plugin's, its feeds' and parts' included."""
-        from liminal_lib.sources import providers, publishers
-        from liminal_lib.sources.registry import assistants, plugin_of, publisher_of
+        from liminal_libs.sources import providers, publishers
+        from liminal_libs.sources.registry import assistants, plugin_of, publisher_of
 
         def top(name: str) -> str:
             return publisher_of(name) if name in publishers() else plugin_of(name)
@@ -1037,16 +1037,16 @@ class ChartApp:
     def _save_variable(self, name: str, value: str | None) -> None:
         config.save_user_variable(name, value)
 
-    # -- the AI assistants (plugin API 2.0; liminal_lib.assistants) ---------------------------------
+    # -- the AI assistants (plugin API 2.0; liminal_libs.assistants) ---------------------------------
     def evaluate(self, body: dict, session=None) -> dict:
         """An argument evaluated by an AI assistant plugin (the Plugins view's Try it, POST
-        /api/ai/evaluate, `liminal ai ask`): the body's `argument` (arguments.argument_from_dict: a
+        /api/ai/evaluate, `liminal-charts ai ask`): the body's `argument` (arguments.argument_from_dict: a
         question or a judge, its inputs by evaluation id) or its simple form (`question`, `answer`,
         `scale`, `fields`, `context` strings), sent to `assistant` (else the default) with `model`
         (else its plan's), recorded in the main file's evaluations. Offline: nothing sent. At most
         two answers in flight (the vendors are slow): the rest wait."""
-        from liminal_lib import assistants as ai
-        from liminal_lib.assistants import argument_from_dict
+        from liminal_libs import assistants as ai
+        from liminal_libs.assistants import argument_from_dict
 
         if self.settings.offline:
             raise RuntimeError("offline (LIMINAL_OFFLINE): this copy of the app sends nothing to an assistant")
@@ -1173,7 +1173,7 @@ class ChartApp:
     # -- schemes and replay (calc/schemes.py, window.py; docs/ARCHITECTURE.md) --------
     def schemes(self) -> dict:
         """The built-in schemes and their settings, for the Analysis panel."""
-        from liminal_lib.calc.schemes import SCHEMES
+        from liminal_libs.calc.schemes import SCHEMES
 
         return {"schemes": [{"key": s.key, "label": s.label, "about": s.about, "params": [
             {"key": p.key, "label": p.label, "default": p.default, "lo": p.lo, "hi": p.hi, "step": p.step,
@@ -1185,7 +1185,7 @@ class ChartApp:
 
     @_heavy
     def scheme(self, q: dict[str, str]) -> dict:
-        from liminal_lib.calc.schemes import Costs
+        from liminal_libs.calc.schemes import Costs
 
         self._windowed(q, "schemes run")
         given = json.loads(q.get("params") or "{}")
@@ -1253,7 +1253,7 @@ class ChartApp:
         """Where the symbol's stored bars end (ms, any session: its 1-second and minute bars): those
         of the feeds of the whole market where one holds it, not a feed of one exchange's share
         (IEX's session, which the whole market's replaces once a sync stores it)."""
-        from liminal_lib.live import PARTIAL_FEEDS
+        from liminal_libs.live import PARTIAL_FEEDS
 
         if not self.window.handles(source, ticker):
             return None
@@ -1487,7 +1487,7 @@ class ChartApp:
         # open page, and the symbol list and watchlists waited 17 s behind it), and one answer for the
         # polls that arrive within ACTIVITY_TTL_S of each other: one kept per feed, for the lines and
         # open symbol it was made for (free text in the key kept an answer for every value sent).
-        from liminal_lib.sources import providers
+        from liminal_libs.sources import providers
 
         source = q.get("source") or "massive"
         source = source if source in providers() else "massive"  # a feed this app has (a page may remember an old one)
@@ -1537,7 +1537,7 @@ class ChartApp:
             return queue.plugin_status(self._status_store, self.settings, self.store.path, name)
 
     def _gov_conn(self):
-        from liminal_lib import gov
+        from liminal_libs import gov
 
         with self._gov_lock:
             if self._gov_db is None:
@@ -1549,8 +1549,8 @@ class ChartApp:
         MongoDB server's state (mongo.status: installed, running, its memory and the app's data)."""
         import sqlite3
 
-        from liminal_lib import mongo
-        from liminal_lib.storage import history
+        from liminal_libs import mongo
+        from liminal_libs.storage import history
 
         duck = None
         if history.available():
@@ -1562,7 +1562,7 @@ class ChartApp:
     def plugin_stores(self, name: str) -> dict:
         """A plugin's stores by data type for its page (stores.py): each with its engines, its pick,
         where it should be and is, and how far a move has gone; and the engines here."""
-        from liminal_lib import stores
+        from liminal_libs import stores
 
         gconn = self._gov_conn()
         with self._status_lock:
@@ -1575,8 +1575,8 @@ class ChartApp:
         optimal data store for the data type". Documents move at once (copied, counted, then used
         there: MongoDB started if it is the one); bars a few closed months each hour (the sync's
         `history run`). Nothing is removed from the store left."""
-        from liminal_lib import stores
-        from liminal_lib.storage import Store
+        from liminal_libs import stores
+        from liminal_libs.storage import Store
 
         if self.settings.offline:
             raise RuntimeError("offline (LIMINAL_OFFLINE): this copy of the app saves no settings")
@@ -1594,7 +1594,7 @@ class ChartApp:
 
     def datasets(self) -> dict:
         """The research datasets: what is held, its span, files fetched and closed, quality."""
-        from liminal_lib import datasets
+        from liminal_libs import datasets
 
         with self._datasets_lock:  # its own connections: never behind (or in front of) the shared lock
             rows = datasets.status(self._datasets_store)
@@ -1604,7 +1604,7 @@ class ChartApp:
 
     def dataset_series(self, name: str) -> dict:
         """A dataset's series (or, for the COT report, its markets) for the viewer's picker."""
-        from liminal_lib import datasets
+        from liminal_libs import datasets
 
         if name not in datasets.DATASETS:
             raise LookupError(f"no dataset {name}")
@@ -1616,7 +1616,7 @@ class ChartApp:
                     "members": len(self.store.constituents(ds.provider, "S&P 500"))}
 
     def dataset_values(self, name: str, series: str) -> dict:
-        from liminal_lib import datasets
+        from liminal_libs import datasets
 
         if name not in datasets.DATASETS:
             raise LookupError(f"no dataset {name}")
@@ -1642,7 +1642,7 @@ class ChartApp:
         return out
 
     def _feeds(self) -> list[dict]:
-        from liminal_lib.sources import feed_profiles, providers
+        from liminal_libs.sources import feed_profiles, providers
 
         profiles = feed_profiles(self.settings)
         with self._lock:
@@ -1673,7 +1673,7 @@ class ChartApp:
             raise RuntimeError("fetching is halted: resume it first")
         if activity.lock_owner(self.store.path):
             raise RuntimeError("a run is already in progress")
-        args = [sys.executable, "-m", "liminal_app", "scan", "--probe", "--fetch", "--all-sources"]
+        args = [sys.executable, "-m", "liminal_charts", "scan", "--probe", "--fetch", "--all-sources"]
         if ticker:
             with self._lock:
                 watched = {w["ticker"] for w in self.store.watchlist()}
@@ -1689,7 +1689,7 @@ class ChartApp:
     def inventory(self, ticker: str) -> dict:
         """The symbol's data feed by feed and frame by frame (inventory.py): what each feed sent,
         what was built here from its finer data (*derived) and what is not built yet."""
-        from liminal_lib import inventory
+        from liminal_libs import inventory
 
         t = ticker.upper()
         rank = self.engine.sources_for(t)
@@ -1723,7 +1723,7 @@ class ChartApp:
 
     def _count_rows(self, ticker: str) -> None:
         """Count a symbol's bars frame by frame (inventory.row_counts) on connections of this thread."""
-        from liminal_lib import inventory
+        from liminal_libs import inventory
 
         reader = None
         try:
@@ -1741,7 +1741,7 @@ class ChartApp:
 
     def pruned(self, ticker: str, source: str | None = None) -> dict:
         """A symbol's bad data (baddata.py): each feed's pruned list, newest first, and its counts."""
-        from liminal_lib import baddata
+        from liminal_libs import baddata
 
         t = ticker.upper()
         with self._panel_lock:  # its own connections: a symbol's list can hold millions of kept bars
@@ -1772,7 +1772,7 @@ class ChartApp:
         if self._derive_proc is not None and self._derive_proc.poll() is None:
             raise RuntimeError("a build of derived frames is already running")
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        self._derive_proc = subprocess.Popen([sys.executable, "-m", "liminal_app", "derive", "--tickers", ticker.upper()],
+        self._derive_proc = subprocess.Popen([sys.executable, "-m", "liminal_charts", "derive", "--tickers", ticker.upper()],
                                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                              stdin=subprocess.DEVNULL, creationflags=flags)
         return {"started": True, "pid": self._derive_proc.pid}
@@ -1783,7 +1783,7 @@ class ChartApp:
         resumed ({"paused": true, "halt": true}: the open symbol's too), or resume ({"paused":
         false}): then a sync starts at once, as the hourly one would (it starts the feeds not
         fetching; one paused mid-run stopped at its next request)."""
-        from liminal_lib import collector
+        from liminal_libs import collector
 
         paused = bool(body.get("paused"))
         with self._lock:
@@ -1796,7 +1796,7 @@ class ChartApp:
     def set_updates_pause(self, body: dict) -> dict:
         """Pause the updates of the symbols not picked ({"days": n}, 1-30) or resume them
         ({"days": 0}): history and the picked symbols (opened, or on a watchlist) go on."""
-        from liminal_lib import collector
+        from liminal_libs import collector
 
         days = float(body.get("days") or 0)
         if days and not 1 <= days <= 30:
@@ -1805,7 +1805,7 @@ class ChartApp:
             return {"updatesPause": collector.set_updates_pause(self.store, days)}
 
     def _halted(self) -> bool:
-        from liminal_lib import collector
+        from liminal_libs import collector
 
         with self._lock:
             return bool((collector.pause_state(self.store) or {}).get("halt"))
@@ -1819,10 +1819,10 @@ class ChartApp:
         what each plan has published); on a feed that is fetching, the request waits in the database
         and that feed's run takes the symbol next. Within every feed's limits either way: one fetching
         process per feed at a time (its run lock), and limiters that share their window across processes."""
-        from liminal_lib import collector
+        from liminal_libs import collector
 
-        from liminal_lib.freshness import expected
-        from liminal_lib.sources import feed_profiles
+        from liminal_libs.freshness import expected
+        from liminal_libs.sources import feed_profiles
 
         ticker = ticker.upper()
         now = datetime.now(timezone.utc)
@@ -1886,8 +1886,8 @@ class ChartApp:
         """A stock opened in the chart goes on every set-up feed that can carry it and does not yet
         (watching puts a symbol on every feed that can: one added since, such as Blue Ocean's
         overnight feed, takes the symbols as they are opened). Returns whether any was added."""
-        from liminal_lib.sources import supports
-        from liminal_lib.symbols import resolve
+        from liminal_libs.sources import supports
+        from liminal_libs.symbols import resolve
 
         if row["asset"] != "stock":
             return False
@@ -1935,7 +1935,7 @@ NOT_COLLECTING = ("blocked", "closed", "retired")
 def feed_labels() -> dict[str, str]:
     """How the page names each feed (registry.label, live.LIVE_LABELS): a feed of a plugin's keys
     by that plugin, alpaca (blue ocean), never as a source of its own; each poll of /api/activity."""
-    from liminal_lib.sources import providers, registry
+    from liminal_libs.sources import providers, registry
 
     return {**{n: registry.label(n) for n in providers()}, **live.LIVE_LABELS}
 
@@ -1964,7 +1964,7 @@ FUTURES_MOVE_BARS = 5  # day bars read a front: its session's bar and the one be
 def stored_ticker(symbol: str) -> str:
     """The name a symbol is stored under, from the text typed (SPCX::NASDAQ: SPCX; TSE:7203: 7203.T;
     EUR/USD: EURUSD), or the text itself when the library cannot read it (the fetcher then says why)."""
-    from liminal_lib.symbols import resolve
+    from liminal_libs.symbols import resolve
 
     try:
         return resolve(symbol).ticker
@@ -2167,7 +2167,7 @@ def make_handler(app: ChartApp, port_ref: list[int]):
                 if method == "POST" and parts == ["", "api", "fetching"]:
                     return self._json(app.set_fetching(body))
                 if method == "POST" and parts == ["", "api", "ai", "evaluate"]:
-                    from liminal_lib.errors import BudgetExhausted, NotEntitled, SourceError, Unauthorized
+                    from liminal_libs.errors import BudgetExhausted, NotEntitled, SourceError, Unauthorized
 
                     try:
                         return self._json(app.evaluate(body), HTTPStatus.CREATED)
@@ -2412,7 +2412,7 @@ def make_handler(app: ChartApp, port_ref: list[int]):
 
 def _log_to(db_path):
     """The app's log (logs/liminal.log beside the database), as the fetcher writes it."""
-    from liminal_lib.logs import log_to
+    from liminal_libs.logs import log_to
 
     return log_to(db_path)
 

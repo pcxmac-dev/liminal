@@ -9,13 +9,13 @@ from datetime import datetime, timezone
 
 import pytest
 
-from liminal_app import cli
-from liminal_lib.config import load_settings
-from liminal_lib.sessions import ET
-from liminal_lib.sources import is_archive, providers
-from liminal_lib.sources.archive import venue_view
-from liminal_lib.sources.registry import get
-from liminal_lib.sources.stream import session_at
+from liminal_charts import cli
+from liminal_libs.config import load_settings
+from liminal_libs.sessions import ET
+from liminal_libs.sources import is_archive, providers
+from liminal_libs.sources.archive import venue_view
+from liminal_libs.sources.registry import get
+from liminal_libs.sources.stream import session_at
 
 
 def test_session_at_finds_blue_oceans_night_on_both_sides_of_midnight():
@@ -35,7 +35,7 @@ def test_session_at_finds_blue_oceans_night_on_both_sides_of_midnight():
 def test_a_venues_view_carries_its_plugins_plan_and_caps():
     p = get("coinbase")
     if p is None:
-        pytest.skip("liminal-plugin-coinbase is not installed")
+        pytest.skip("plugin-integrator-coinbase is not installed")
     base = load_settings(env={}, env_file=None)
     v = venue_view("coinbase")(base)
     assert v.tier == p.tier and (v.max_requests_per_run, v.max_requests_per_day) == (p.per_run, p.per_day)

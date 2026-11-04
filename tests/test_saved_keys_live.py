@@ -7,11 +7,11 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from liminal_app import cli
-from liminal_lib import config
-from liminal_lib.config import load_settings
-from liminal_app.gui import activity
-from liminal_app.gui.server import ChartApp
+from liminal_charts import cli
+from liminal_libs import config
+from liminal_libs.config import load_settings
+from liminal_charts.gui import activity
+from liminal_charts.gui.server import ChartApp
 
 NOW = datetime(2026, 10, 26, 5, 0, tzinfo=timezone.utc)
 

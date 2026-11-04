@@ -5,10 +5,10 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from liminal_lib.collector import ET, sync
-from liminal_plugin_massive import TIERS
-from liminal_lib.models import Exchange, Stock, country, parse_symbol
-from liminal_lib.storage import Store
+from liminal_libs.collector import ET, sync
+from plugin_integrator_massive import TIERS
+from liminal_libs.models import Exchange, Stock, country, parse_symbol
+from liminal_libs.storage import Store
 
 from .conftest import FakeSource
 
@@ -131,8 +131,8 @@ def test_a_feed_without_identity_is_not_shared_and_never_blanks_a_listing(store)
     # record, logo link and all)
     from datetime import date as _date
 
-    from liminal_lib import collector
-    from liminal_lib.models import Stock
+    from liminal_libs import collector
+    from liminal_libs.models import Stock
 
     from .conftest import FakeSource
 

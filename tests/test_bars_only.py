@@ -10,10 +10,10 @@ from contextlib import closing
 import pandas as pd
 import pytest
 
-from liminal_app import cli
-from liminal_lib import collector, live
-from liminal_lib.config import load_settings
-from liminal_lib.storage import Store, TicksBlocked, set_tick_access
+from liminal_charts import cli
+from liminal_libs import collector, live
+from liminal_libs.config import load_settings
+from liminal_libs.storage import Store, TicksBlocked, set_tick_access
 
 MIN = 60_000
 
@@ -83,15 +83,15 @@ def test_the_sync_builds_nothing_from_ticks_it_does_not_read(with_ticks):
 
 
 def test_rebuilding_from_ticks_is_refused_in_bars_only_mode(with_ticks):
-    from liminal_lib import baddata
+    from liminal_libs import baddata
 
     with Store(with_ticks, ticks=False) as s, pytest.raises(TicksBlocked):
         baddata.repair_from_ticks(s, "alpaca", log=lambda *_: None)
 
 
 def test_a_bars_volume_profile_without_trades_is_spread_from_its_seconds(tmp_path):
-    from liminal_app.gui.bars import BarEngine
-    from liminal_app.gui.window import WindowReader
+    from liminal_charts.gui.bars import BarEngine
+    from liminal_charts.gui.window import WindowReader
 
     hour = int(pd.Timestamp("2026-10-12 10:00", tz="America/New_York").timestamp() * 1000)
     with Store(tmp_path / "m.db", check_same_thread=False, ticks=False) as s:

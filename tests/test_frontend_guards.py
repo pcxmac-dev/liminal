@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from liminal_app.gui import server
+from liminal_charts.gui import server
 
 STATIC = Path(server.__file__).parent / "static"
 
@@ -356,7 +356,7 @@ def test_views_restored_on_opening_the_page_load_their_content():
 
 
 def test_every_symbol_state_has_its_name_and_icon():
-    from liminal_app.gui.activity import STATE_RANK
+    from liminal_charts.gui.activity import STATE_RANK
 
     icons = _js("icons.js")
     labels = icons.split("const DATA_LABEL = {", 1)[1].split("};", 1)[0]

@@ -4,17 +4,17 @@ Working notes so work can resume in a fresh session. Newest first.
 
 ## Plugins into their own repositories (2026-11-01)
 
-- The user: "all the plugins should be liminal-plugin-xxxx and have a separate repo". Done:
-  `liminal-plugin-cboe` 1.2.0 (the pilot), `liminal-plugin-bitstamp` 1.3.0 (its trade stream too),
-  `liminal-plugin-coinbase` 1.3.0 and `liminal-plugin-bitfinex` 1.2.0 (`sources.archive.venue_view`
-  reads a plugin's plan and caps from its record), `liminal-plugin-tiingo` 1.4.0 (its forex and its
+- The user: "all the plugins should be plugin-integrator-xxxx and have a separate repo". Done:
+  `plugin-integrator-cboe` 1.2.0 (the pilot), `plugin-integrator-bitstamp` 1.3.0 (its trade stream too),
+  `plugin-integrator-coinbase` 1.3.0 and `plugin-integrator-bitfinex` 1.2.0 (`sources.archive.venue_view`
+  reads a plugin's plan and caps from its record), `plugin-integrator-tiingo` 1.4.0 (its forex and its
   Blue Ocean poller; plugin API 1.10: `sources.stream.session_at`, `sources.registry.MachineLedger`;
   `config.PUBLIC_FEEDS` and the `tiingo_api_key` setting are gone, a plugin's key is in `Settings.env`),
-  the dataset libraries `liminal-plugin-french` 1.1.0 and `liminal-plugin-datahub` 1.1.0 (the mirrors'
-  submodules stay in `data/github/`), the publishers `liminal-plugin-federal` 1.4.0 (the six agencies),
-  `liminal-plugin-alpaca` 1.4.0 (Blue Ocean and the IEX stream too; plugin API 1.11: a plugin's own
+  the dataset libraries `plugin-integrator-french` 1.1.0 and `plugin-integrator-datahub` 1.1.0 (the mirrors'
+  submodules stay in `data/github/`), the publishers `plugin-integrator-federal` 1.4.0 (the six agencies),
+  `plugin-integrator-alpaca` 1.4.0 (Blue Ocean and the IEX stream too; plugin API 1.11: a plugin's own
   settings, `Provider.settings` and `Settings.plugin`, so `AlpacaSettings` left `config.py`),
-  `liminal-plugin-massive` 1.4.0 (its headlines too; the last built-in: its key, `TIERS`, `tier_for`
+  `plugin-integrator-massive` 1.4.0 (its headlines too; the last built-in: its key, `TIERS`, `tier_for`
   and caps are its own settings, the app's base `Settings` have no feed's plan, `plan` is a
   feed's capabilities scan). `sources/plugins/` is empty: every data provider is a package;
   each a public repository under pcxmac-dev, installed from its tag by the `plugins` extra, its
@@ -37,12 +37,12 @@ Working notes so work can resume in a fresh session. Newest first.
   browser's saved settings under `liminal:` (moved from `massive:` once, by app.js), the chart
   app's title "Liminal Charts", the scheduled tasks `LiminalSync` and `LiminalCharts`, the
   repository `pcxmac-dev/liminal` and its folder `C:\Users\ciara\source\liminal`, the plugin
-  packages `liminal-plugin-<name>`. Kept: the Massive data provider's names (the plugin `massive`,
+  packages `plugin-integrator-<name>`. Kept: the Massive data provider's names (the plugin `massive`,
   `MASSIVE_API_KEY`, `MASSIVE_TIER*`, `MASSIVE_RPM`, `MASSIVE_BASE_URL`, its caps, `feeds/massive.db`).
   `tests/test_names.py` keeps the app free of the old names and the old settings read.
-- **Cboe is the first plugin package** (283db7b): `liminal-plugin-cboe` 1.2.0 in its own repository,
+- **Cboe is the first plugin package** (283db7b): `plugin-integrator-cboe` 1.2.0 in its own repository,
   installed by the `plugins` extra. The user, the same day: "all the plugins should be
-  liminal-plugin-xxxx and have a separate repo": the others follow (docs/ARCHITECTURE.md:
+  plugin-integrator-xxxx and have a separate repo": the others follow (docs/ARCHITECTURE.md:
   Providers are plugins, the plan).
 
 ## State (2026-10-27)

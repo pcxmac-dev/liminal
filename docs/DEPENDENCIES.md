@@ -4,7 +4,7 @@ Everything the app relies on that it does not own: where it comes from, how and 
 fetched, what it costs, how it goes stale, and what is still missing. Keep this current when a
 dependency is added or changes.
 
-**Health check:** `liminal deps` checks every item below against its live state
+**Health check:** `liminal-charts deps` checks every item below against its live state
 (last success, age, coverage) and prints OK / WARN / FAIL with the action to take. The Fetcher view
 shows the same checks.
 
@@ -98,7 +98,7 @@ VWAP, trade count; box stats; margin of error 5 bps or 1 cent per price, 5 % vol
 comparison, never the bars. Audits are spot checks, not inspections of whole datasets: each
 compares one random hour of a span, and a run's audits stop once they have used 2 % of its request
 cap (`audit.AUDIT_SHARE`). They run after new data (queued for the other feed) and at random
-(`AUDITS_PER_RUN`, `AUDITS_RANDOM_PER_RUN`), or with `liminal audit`.
+(`AUDITS_PER_RUN`, `AUDITS_RANDOM_PER_RUN`), or with `liminal-charts audit`.
 
 ### Research datasets (`datasets.py`)
 

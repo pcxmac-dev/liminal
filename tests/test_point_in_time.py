@@ -7,12 +7,12 @@ from datetime import datetime
 
 import numpy as np
 
-from liminal_lib import freshness
-from liminal_plugin_massive import TIERS
+from liminal_libs import freshness
+from plugin_integrator_massive import TIERS
 
-from liminal_plugin_alpaca import ALPACA_TIERS  # the plugin's plans
-from liminal_lib.storage import Store
-from liminal_lib.storage import feeds as feeds_mod
+from plugin_integrator_alpaca import ALPACA_TIERS  # the plugin's plans
+from liminal_libs.storage import Store
+from liminal_libs.storage import feeds as feeds_mod
 
 ET = freshness.ET
 

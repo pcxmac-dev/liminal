@@ -8,10 +8,10 @@ import sqlite3
 
 import pytest
 
-from liminal_app import cli
-from liminal_lib import derive, live, wsclient
-from liminal_lib.storage import Store
-from liminal_lib.wsclient import OP_TEXT, WebSocketClosed
+from liminal_charts import cli
+from liminal_libs import derive, live, wsclient
+from liminal_libs.storage import Store
+from liminal_libs.wsclient import OP_TEXT, WebSocketClosed
 
 from .test_live import _client, _server_frame
 
@@ -83,7 +83,7 @@ def test_backups_keep_the_newest_and_never_touch_other_files(tmp_path):
 
 
 def test_the_log_is_rotated_and_old_ones_are_capped(tmp_path, monkeypatch):
-    from liminal_lib import logs  # the library's: every program of Liminal logs with it
+    from liminal_libs import logs  # the library's: every program of Liminal logs with it
 
     monkeypatch.setattr(logs, "LOG_MAX_BYTES", 100)
     log = cli.Logger(tmp_path / "liminal.log")

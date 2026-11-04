@@ -13,11 +13,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from liminal_lib import collector, killswitch
-from liminal_lib.proc import pid_alive
-from liminal_lib.sources import feed_profiles, providers, publishers
-from liminal_lib.sources.registry import label, plugin_feeds, plugin_of, publisher_of, publisher_parts
-from liminal_lib.symbols import ASSETS, resolve
+from liminal_libs import collector, killswitch
+from liminal_libs.proc import pid_alive
+from liminal_libs.sources import feed_profiles, providers, publishers
+from liminal_libs.sources.registry import label, plugin_feeds, plugin_of, publisher_of, publisher_parts
+from liminal_libs.symbols import ASSETS, resolve
 from .activity import ET, fetching_feeds, limits, log_path, log_tail, symbol_status
 
 RESOLUTIONS = ("day", "minute", "second")  # the bars a feed sends, coarsest first

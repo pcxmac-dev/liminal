@@ -10,7 +10,7 @@ SCRIPT = Path(__file__).resolve().parents[1] / "tools" / "set-key.ps1"
 
 def test_its_menu_is_the_provider_plugins_not_a_list_of_its_own():
     src = SCRIPT.read_text(encoding="utf-8")
-    assert "-m liminal_app plugins --json" in src  # the app's plugins, names only (no key's value)
+    assert "-m liminal_charts plugins --json" in src  # the app's plugins, names only (no key's value)
     assert "ValidateSet" not in src
     assert not re.search(r"'(MASSIVE|ALPACA|APCA|TIINGO)_[A-Z_]+'", src)  # no provider's key written in
 

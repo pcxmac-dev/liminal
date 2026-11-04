@@ -7,10 +7,10 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, timedelta
 
-from liminal_lib import freshness
-from liminal_lib.collector import ET, sync
-from liminal_plugin_massive import TIERS
-from liminal_lib.live import WATCHLISTS_KEY
+from liminal_libs import freshness
+from liminal_libs.collector import ET, sync
+from plugin_integrator_massive import TIERS
+from liminal_libs.live import WATCHLISTS_KEY
 
 from .conftest import FakeSource
 
@@ -63,7 +63,7 @@ def test_during_a_session_only_symbols_on_a_watchlist_are_updated(store):
 
 
 def test_the_fetcher_does_not_call_every_stock_new_during_the_session(store):
-    from liminal_app.gui import activity
+    from liminal_charts.gui import activity
 
     wed_noon = datetime(2026, 10, 21, 12, 0, tzinfo=ET)
     item = {"ticker": "OTHER", "asset": "stock", "resolution": "minute", "listed_from": None,

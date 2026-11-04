@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from liminal_lib import collector, freshness
-from liminal_lib.collector import ET, sync
-from liminal_plugin_massive import TIERS
+from liminal_libs import collector, freshness
+from liminal_libs.collector import ET, sync
+from plugin_integrator_massive import TIERS
 
 from .conftest import FakeSource
 

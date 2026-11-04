@@ -5,25 +5,25 @@ from typing import Iterator
 
 import pytest
 
-from liminal_lib import live
-from liminal_lib.errors import NotEntitled
-from liminal_lib.models import Exchange, Instrument, country
-from liminal_lib.sources.base import DataSource
-from liminal_lib.storage import Store
+from liminal_libs import live
+from liminal_libs.errors import NotEntitled
+from liminal_libs.models import Exchange, Instrument, country
+from liminal_libs.sources.base import DataSource
+from liminal_libs.storage import Store
 
 
 @pytest.fixture(autouse=True, scope="session")
 def plugins_as_installed_packages():
     """The suite sees the plugins as installed packages (their entry points), which a test's fakes
     stand in for (test_plugins.py: `installed`), not through the workspace's plugin directory beside
-    this checkout (liminal_lib.layout.plugins_dir: the real plugins would load next to the fakes).
+    this checkout (liminal_libs.layout.plugins_dir: the real plugins would load next to the fakes).
     tests/test_workspace.py covers that loading on its own."""
     import os
     import tempfile
     from pathlib import Path
 
-    from liminal_lib import layout
-    from liminal_lib.sources import registry
+    from liminal_libs import layout
+    from liminal_libs.sources import registry
 
     before = os.environ.get(layout.PLUGINS_VAR)
     os.environ[layout.PLUGINS_VAR] = str(Path(tempfile.gettempdir()) / "liminal-tests-no-plugin-directory")
@@ -41,8 +41,8 @@ def no_saved_keys(monkeypatch):
     """Tests never read the user's real API keys: neither the saved user environment variables nor
     the process's own (a shell started after the keys were saved has them), for every provider
     plugin's keys and plans. A test that wants one sets it."""
-    from liminal_lib import config
-    from liminal_lib.sources.registry import variables
+    from liminal_libs import config
+    from liminal_libs.sources.registry import variables
 
     monkeypatch.setattr(config, "saved_user_keys", lambda: {})
     for name in variables():
@@ -54,7 +54,7 @@ def no_found_limits(monkeypatch):
     """A feed's limiter keeps inside the limits its servers' headers gave on its account's last
     scans, read from the database the settings name (registry.found_limits): tests never read the
     real one's; test_plugins.py tests the reading on its own."""
-    from liminal_lib.sources import registry
+    from liminal_libs.sources import registry
 
     monkeypatch.setattr(registry, "found_limits", lambda name, settings: [])
 
@@ -66,10 +66,10 @@ def installed_plugins_seen_fakes_forgotten():
     every plugin leaving sources/plugins/ (2026-11-01), their records are the fixtures where a test
     names a feed. A plugin's own tests are in its repository. A test's fake entry points
     (test_plugins.py: `installed`) are forgotten before the next test: the plugins are found again."""
-    from liminal_lib.sources import registry
+    from liminal_libs.sources import registry
 
     if registry._providers is not None and any(
-            not p.origin.startswith(("built in", "package: liminal-plugin-", "plugins/liminal-plugin-"))
+            not p.origin.startswith(("built in", "package: plugin-", "plugins/plugin-"))
             for p in (*registry._providers.values(), *registry._publishers.values())):
         registry._providers = None
 
@@ -79,8 +79,8 @@ def no_agency_requests(monkeypatch):
     """Tests never read the publishers' real feeds: the hourly sync without a recorder reads them
     (cli._fetch_gov, publications.run_due), and the Plugins view's Recheck (recheck_now);
     test_publications.py drives publications.Reader with fake answers instead."""
-    from liminal_app import cli
-    from liminal_lib import publications
+    from liminal_charts import cli
+    from liminal_libs import publications
 
     monkeypatch.setattr(cli, "_fetch_gov", lambda settings, log, force=False: None)
     monkeypatch.setattr(publications, "run_due", lambda settings, log, force=False, now=None: None)
@@ -91,7 +91,7 @@ def no_agency_requests(monkeypatch):
 def no_cached_movers():
     """The big movers are cached per process for a few minutes (collector.big_movers): each test
     starts without another test's."""
-    from liminal_lib import collector
+    from liminal_libs import collector
 
     collector._movers_cache.clear()
 
@@ -99,7 +99,7 @@ def no_cached_movers():
 @pytest.fixture(autouse=True)
 def read_only_restored():
     """cli.main sets the process's read-only mode from LIMINAL_READONLY: never left on for the next test."""
-    from liminal_lib.storage import read_only, set_read_only
+    from liminal_libs.storage import read_only, set_read_only
 
     was = read_only()
     yield
@@ -110,7 +110,7 @@ def read_only_restored():
 def tick_access_restored():
     """cli.main sets the process's tick access from BARS_ONLY (off by default): a test that runs a
     command must not leave the stores of the tests after it unable to open tick files."""
-    from liminal_lib.storage import set_tick_access, tick_access
+    from liminal_libs.storage import set_tick_access, tick_access
 
     was = tick_access()
     yield
@@ -127,7 +127,7 @@ def no_recorders(monkeypatch, tmp_path):
     monkeypatch.setattr(live, "attach", lambda db_path, log=print: None)  # nor attach to (and so start) one
     # Nor see or end the machine's processes: a test recorder holding its locks reaps "other"
     # recorders (live.reap_strays), and once ended the user's real one.
-    from liminal_lib import proc
+    from liminal_libs import proc
 
     monkeypatch.setattr(proc, "processes", lambda: [])
 
@@ -141,7 +141,7 @@ def no_recorders(monkeypatch, tmp_path):
     import subprocess
     from types import SimpleNamespace
 
-    from liminal_app.gui import server
+    from liminal_charts.gui import server
 
     def no_spawn(args, **kw):
         raise AssertionError(f"a test tried to start a process: {args}")
@@ -151,13 +151,13 @@ def no_recorders(monkeypatch, tmp_path):
     # Nor from the command line: the hourly sync starts each feed's run in a process of its own
     # (cli.start_feed), and a test's `sync` once started five, which sent Alpaca two requests on the
     # user's keys. A test that wants to see which would start replaces start_feed.
-    from liminal_app import cli
+    from liminal_charts import cli
 
     monkeypatch.setattr(cli, "start_feed", lambda name, db_path: no_spawn(["host", f"feed-{name}"]))
     monkeypatch.setattr(cli, "start_history", lambda db_path: no_spawn(["host", "history"]))
     # Nor start, see or write to a MongoDB server: one may run on this machine with the user's
     # documents. Mongo is "not installed" unless a test installs its stand-in (tests/test_stores.py).
-    from liminal_lib import mongo
+    from liminal_libs import mongo
 
     monkeypatch.setattr(mongo, "_spawn", no_spawn)
     monkeypatch.setattr(mongo, "binary", lambda: None)
@@ -171,7 +171,7 @@ def no_recorders(monkeypatch, tmp_path):
     monkeypatch.setattr(mongo, "database", no_server)
     # Nor start a resident host (host.py: the recorder, Mongo's keeper, a feed's run as its own
     # process), nor attach to the user's: the pipes' key and sockets live in the test's own folder.
-    from liminal_lib import host
+    from liminal_libs import host
 
     monkeypatch.setenv("LIMINAL_IPC_DIR", str(tmp_path / "ipc"))
     monkeypatch.setattr(host, "start_host", lambda name, db_path: no_spawn(["host", name]))
@@ -218,7 +218,7 @@ class FakeSource(DataSource):
         self.trade_calls: list[dict] = []
 
     def _spend(self):
-        from liminal_lib.errors import BudgetExhausted
+        from liminal_libs.errors import BudgetExhausted
 
         if self.budget is not None and self._requests >= self.budget:
             raise BudgetExhausted("fake cap")

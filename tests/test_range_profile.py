@@ -6,11 +6,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from liminal_lib import derive
-from liminal_lib.calc.profile import major_prices
-from liminal_app.gui.server import ChartApp
-from liminal_app.gui.window import WindowReader
-from liminal_lib.storage import Store
+from liminal_libs import derive
+from liminal_libs.calc.profile import major_prices
+from liminal_charts.gui.server import ChartApp
+from liminal_charts.gui.window import WindowReader
+from liminal_libs.storage import Store
 
 ET = "America/New_York"
 

@@ -8,8 +8,8 @@ import json
 import threading
 from dataclasses import replace
 
-from liminal_lib.config import load_settings
-from liminal_app.gui import server
+from liminal_libs.config import load_settings
+from liminal_charts.gui import server
 
 
 class FakeFetcher:

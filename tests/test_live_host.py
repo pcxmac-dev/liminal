@@ -1,4 +1,4 @@
-"""The live recorder as a resident host (host.py, `liminal host live`): started by the chart app
+"""The live recorder as a resident host (host.py, `liminal-charts host live`): started by the chart app
 when a chart has a symbol open, let go once nothing has been open for a while, and never started
 by the hourly sync any more (the user, 2026-11-01: no processes or open databases when the app is
 not in use). Nothing here starts a process: the host and the recorder are stand-ins."""
@@ -10,11 +10,11 @@ from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
-from liminal_app import cli
-from liminal_lib import host as hosting, live
-from liminal_lib.config import load_settings
-from liminal_app.gui.server import ChartApp
-from liminal_lib.storage import Store
+from liminal_charts import cli
+from liminal_libs import host as hosting, live
+from liminal_libs.config import load_settings
+from liminal_charts.gui.server import ChartApp
+from liminal_libs.storage import Store
 
 
 def until(cond, within=5.0) -> bool:
@@ -42,7 +42,7 @@ def _settings(tmp_path):
 
 
 def test_the_host_command_runs_the_recorder_until_its_clients_are_gone_and_frees_its_locks(tmp_path, monkeypatch):
-    """`liminal host live`: the recorder under a Host, stopping on the host's stop event; the locks
+    """`liminal-charts host live`: the recorder under a Host, stopping on the host's stop event; the locks
     released after the recorder's own final flush (its run returns once stopped)."""
     settings = _settings(tmp_path)
     events: list[str] = []

@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from liminal_lib import collector, provenance
-from liminal_lib.storage import Store
+from liminal_libs import collector, provenance
+from liminal_libs.storage import Store
 
 
 def _ticks(store, source="alpaca", ticker="BTCUSD"):
@@ -60,8 +60,8 @@ def test_bars_built_before_provenance_are_moved_apart(store):
 
 
 def test_composite_and_quality_record_how_they_were_made(store):
-    from liminal_lib import composite
-    from liminal_lib.symbols import resolve
+    from liminal_libs import composite
+    from liminal_libs.symbols import resolve
 
     from .test_composite import T0, _feeds
 
@@ -85,8 +85,8 @@ def test_composite_and_quality_record_how_they_were_made(store):
 def test_an_audit_records_its_tolerances_and_inputs(store):
     from datetime import date
 
-    from liminal_lib import audit
-    from liminal_lib.symbols import resolve
+    from liminal_libs import audit
+    from liminal_libs.symbols import resolve
 
     from .test_feeds import Other, _log, _minutes
 
@@ -104,8 +104,8 @@ def test_an_audit_records_its_tolerances_and_inputs(store):
 
 
 def test_indicators_say_how_they_were_derived_and_whether_they_look_ahead(tmp_path):
-    from liminal_lib.calc.derivatives import Model
-    from liminal_app.gui.bars import BarEngine
+    from liminal_libs.calc.derivatives import Model
+    from liminal_charts.gui.bars import BarEngine
 
     from .test_gui import _store_with_bars
 

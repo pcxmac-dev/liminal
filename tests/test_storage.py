@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from liminal_lib.storage import Store, feeds_backup_dir
+from liminal_libs.storage import Store, feeds_backup_dir
 
 
 def _trade(ns: int, seq: int = 1, price: float = 10.0) -> dict:
@@ -71,7 +71,7 @@ def test_interrupted_run_still_counts_its_requests(store):
 
 
 def test_client_reports_every_request():
-    from liminal_plugin_massive.client import MassiveClient
+    from plugin_integrator_massive.client import MassiveClient
 
     from .conftest import FakeResponse, FakeSession
 
@@ -84,7 +84,7 @@ def test_client_reports_every_request():
 
 
 def test_series_caches_refresh_on_own_and_other_writes(tmp_path, monkeypatch):
-    from liminal_lib.storage import feeds
+    from liminal_libs.storage import feeds
 
     a = Store(tmp_path / "m.db")
     b = Store(tmp_path / "m.db")  # e.g. the collector, writing while the chart app reads
@@ -127,7 +127,7 @@ def test_backup_and_integrity(tmp_path):
 def test_history_written_newest_first_does_not_leave_pages_half_empty():
     # feeds send history newest first; written in that order a WITHOUT ROWID table split its
     # pages half full (1.76 times the disk): each write is stored oldest first
-    from liminal_lib.storage import Store
+    from liminal_libs.storage import Store
 
     def pages(descending: bool) -> int:
         s = Store(":memory:")
@@ -145,7 +145,7 @@ def test_history_written_newest_first_does_not_leave_pages_half_empty():
 
 
 def test_another_instruments_rows_are_moved_to_the_archive_never_deleted(tmp_path):
-    from liminal_lib.storage import Store
+    from liminal_libs.storage import Store
 
     with Store(tmp_path / "m.db", ticks=True) as s:
         old, new = 1_600_000_000_000, 1_700_000_000_000
@@ -167,7 +167,7 @@ def test_another_instruments_rows_are_moved_to_the_archive_never_deleted(tmp_pat
 
 
 def test_write_ahead_logs_are_cut_back_once_checkpointed(tmp_path):
-    from liminal_lib.storage import Store
+    from liminal_libs.storage import Store
 
     with Store(tmp_path / "m.db") as s:
         s.upsert_bars("massive", "AAPL", "minute", 1, [{"t": 1, "o": 1, "h": 1, "l": 1, "c": 1, "v": 1}])

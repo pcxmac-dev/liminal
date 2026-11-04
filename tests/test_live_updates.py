@@ -8,9 +8,9 @@ import time
 import pandas as pd
 import pytest
 
-from liminal_app.gui.bars import BarEngine
-from liminal_app.gui.server import ChartApp
-from liminal_lib.storage import Store
+from liminal_charts.gui.bars import BarEngine
+from liminal_charts.gui.server import ChartApp
+from liminal_libs.storage import Store
 
 ET = "America/New_York"
 

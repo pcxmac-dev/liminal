@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from liminal_lib.sessions import (CT, ET, MarketCalendar, Overrides, is_nyse_holiday, jobs_report_good_friday,
+from liminal_libs.sessions import (CT, ET, MarketCalendar, Overrides, is_nyse_holiday, jobs_report_good_friday,
                                       nyse_early_close, sessions_from_events)
 
 CAL = MarketCalendar()
@@ -127,7 +127,7 @@ def test_nyse_rules_agree_with_exchange_calendars_every_day_2000_2027():
 def test_crypto_sessions_are_utc_days_every_day():
     from datetime import date, datetime, timezone
 
-    from liminal_lib.sessions import MarketCalendar
+    from liminal_libs.sessions import MarketCalendar
 
     cal = MarketCalendar()
     days = cal.sessions("crypto", date(2026, 12, 24), date(2026, 12, 27))  # Christmas and a weekend
@@ -140,8 +140,8 @@ def test_crypto_sessions_are_utc_days_every_day():
 def test_crypto_freshness_on_the_free_plan_is_the_previous_utc_day():
     from datetime import datetime, timezone
 
-    from liminal_lib import freshness
-    from liminal_plugin_massive import TIERS
+    from liminal_libs import freshness
+    from plugin_integrator_massive import TIERS
 
     exp = freshness.expected("crypto", TIERS["free"], datetime(2026, 10, 24, 4, 17, tzinfo=timezone.utc))  # a Saturday
     assert exp.latest == datetime(2026, 10, 23, 23, 59, tzinfo=timezone.utc)

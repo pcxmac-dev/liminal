@@ -9,15 +9,15 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 import requests
 
-from liminal_lib import collector
-from liminal_lib.collector import ET, sync
-from liminal_lib.config import load_settings
-from liminal_plugin_massive import TIERS
-from liminal_lib.errors import BudgetExhausted, NotEntitled, Paused, SourceError
-from liminal_lib.models import Instrument
-from liminal_lib.sources import rate_window
-from liminal_plugin_massive.client import MassiveClient
-from liminal_lib.storage import Store
+from liminal_libs import collector
+from liminal_libs.collector import ET, sync
+from liminal_libs.config import load_settings
+from plugin_integrator_massive import TIERS
+from liminal_libs.errors import BudgetExhausted, NotEntitled, Paused, SourceError
+from liminal_libs.models import Instrument
+from liminal_libs.sources import rate_window
+from plugin_integrator_massive.client import MassiveClient
+from liminal_libs.storage import Store
 
 from .conftest import FakeResponse, FakeSession, FakeSource
 

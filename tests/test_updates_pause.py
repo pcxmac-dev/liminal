@@ -8,12 +8,12 @@ import json
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 
-from liminal_lib import collector
-from liminal_lib.collector import ET, sync
-from liminal_lib.config import load_settings
-from liminal_plugin_massive import TIERS
-from liminal_app.gui import activity
-from liminal_lib.live import WATCHLISTS_KEY
+from liminal_libs import collector
+from liminal_libs.collector import ET, sync
+from liminal_libs.config import load_settings
+from plugin_integrator_massive import TIERS
+from liminal_charts.gui import activity
+from liminal_libs.live import WATCHLISTS_KEY
 
 from .conftest import FakeSource
 
@@ -95,7 +95,7 @@ def test_the_fetcher_lists_an_opened_symbol_as_next_and_says_why_others_wait(sto
 
 
 def test_the_updates_command_pauses_and_resumes(tmp_path, monkeypatch, capsys):
-    from liminal_app import cli
+    from liminal_charts import cli
 
     monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "m.db"))
     monkeypatch.setenv("MASSIVE_API_KEY", "k")
@@ -121,7 +121,7 @@ def test_an_opened_symbol_found_up_to_date_has_its_request_met(store):
 def test_a_stock_nobody_traded_late_is_current_once_synced_after_the_session(store):
     # TMO's last trade on Friday was 16:37: short of the plan's last minute (19:59) for good, but
     # synced on Saturday, after the session was published, it is complete: not "new" all weekend
-    from liminal_lib.collector import ET as _ET
+    from liminal_libs.collector import ET as _ET
 
     tier = TIERS["advanced"]
     sat = datetime(2026, 10, 24, 21, 27, tzinfo=_ET)

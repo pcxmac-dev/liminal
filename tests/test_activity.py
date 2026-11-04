@@ -2,13 +2,13 @@
 import calendar
 from datetime import date, datetime, timedelta, timezone
 
-from liminal_lib.collector import ET, sync
-from liminal_lib.config import load_settings
-from liminal_plugin_massive import TIERS
-from liminal_app.gui import activity as act
-from liminal_app.gui.server import ChartApp
-from liminal_lib.storage import Store
-from liminal_lib.symbols import resolve
+from liminal_libs.collector import ET, sync
+from liminal_libs.config import load_settings
+from plugin_integrator_massive import TIERS
+from liminal_charts.gui import activity as act
+from liminal_charts.gui.server import ChartApp
+from liminal_libs.storage import Store
+from liminal_libs.symbols import resolve
 
 from .conftest import FakeSource
 
@@ -116,9 +116,9 @@ def test_activity_sees_a_live_run(tmp_path, monkeypatch):
 def test_every_source_has_a_state_and_the_status_bar_knows_when_none_can_fetch(tmp_path):
     from datetime import datetime, timezone
 
-    from liminal_lib.config import load_settings
-    from liminal_app.gui.activity import can_fetch, health, limits
-    from liminal_lib.storage import Store
+    from liminal_libs.config import load_settings
+    from liminal_charts.gui.activity import can_fetch, health, limits
+    from liminal_libs.storage import Store
 
     now = datetime(2026, 10, 24, 18, tzinfo=timezone.utc)
     settings = load_settings(env={"MASSIVE_API_KEY": "k", "MASSIVE_MAX_REQUESTS_PER_DAY": "100"}, env_file=None)
@@ -147,9 +147,9 @@ def test_the_fetcher_shows_the_rows_most_worth_seeing_and_counts_the_rest(tmp_pa
     import json
     from datetime import datetime, timezone
 
-    from liminal_lib.config import load_settings
-    from liminal_app.gui.activity import activity
-    from liminal_lib.storage import Store
+    from liminal_libs.config import load_settings
+    from liminal_charts.gui.activity import activity
+    from liminal_libs.storage import Store
 
     settings = load_settings(env={"MASSIVE_API_KEY": "k"}, env_file=None)
     with Store(tmp_path / "m.db") as store:
@@ -189,7 +189,7 @@ def test_the_status_keeps_its_symbol_rows_a_while_and_rebuilds_them_when_another
 def test_the_fetcher_shows_every_feed_fetching_side_by_side(tmp_path):
     import os
 
-    from liminal_lib import proc
+    from liminal_libs import proc
 
     db = tmp_path / "liminal.db"
     settings = load_settings(env={"LIMINAL_DB": str(db), "MASSIVE_API_KEY": "k"}, env_file=None)

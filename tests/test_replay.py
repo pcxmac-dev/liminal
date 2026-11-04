@@ -11,10 +11,10 @@ from http.server import ThreadingHTTPServer
 import pandas as pd
 import pytest
 
-from liminal_lib import derive
-from liminal_lib.calc import schemes as sc
-from liminal_app.gui.server import ChartApp, make_handler
-from liminal_lib.storage import Store
+from liminal_libs import derive
+from liminal_libs.calc import schemes as sc
+from liminal_charts.gui.server import ChartApp, make_handler
+from liminal_libs.storage import Store
 
 ET = "America/New_York"
 DAYS = ("2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-19", "2026-10-20")
@@ -77,7 +77,7 @@ def test_a_scheme_refuses_bad_settings_and_too_many_bars(store):
         app.scheme({**q, "fee": "-1"})
     with pytest.raises(ValueError):
         app.scheme({**q, "scheme": "martingale"})
-    from liminal_app.gui import window
+    from liminal_charts.gui import window
 
     old = window.SCHEME_MAX_BARS
     window.SCHEME_MAX_BARS = 100

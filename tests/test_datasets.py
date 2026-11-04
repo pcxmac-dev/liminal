@@ -9,13 +9,13 @@ from pathlib import Path
 import pytest
 import requests
 
-from liminal_lib import datasets
-from liminal_lib.datasets import DATASETS, due_files, fetch, status
-from liminal_lib.sources import dataset as sdk
-from liminal_lib.storage import Store
+from liminal_libs import datasets
+from liminal_libs.datasets import DATASETS, due_files, fetch, status
+from liminal_libs.sources import dataset as sdk
+from liminal_libs.storage import Store
 
-import liminal_plugin_federal.cftc as cftc  # the CFTC's URL and publication rule: its package's
-import liminal_plugin_french as french  # the library's URL: its package's
+import plugin_integrator_federal.cftc as cftc  # the CFTC's URL and publication rule: its package's
+import plugin_integrator_french as french  # the library's URL: its package's
 
 TODAY = date(2026, 10, 23)
 
@@ -24,7 +24,7 @@ TODAY = date(2026, 10, 23)
 def fetched_on_today(monkeypatch):
     """Files are recorded as fetched on TODAY, the day the tests schedule from, not on the real
     date: refresh cadences compare the two (on a later real date files looked fetched since)."""
-    from liminal_lib.storage import datasets as stored
+    from liminal_libs.storage import datasets as stored
 
     monkeypatch.setattr(stored, "_now", lambda: f"{TODAY.isoformat()}T16:00:00+00:00")
 
@@ -182,7 +182,7 @@ def test_shiller_zeros_are_missing_and_what_a_new_version_drops_is_withdrawn(sto
 def test_chart_app_lists_datasets_and_maps_members_by_gics(tmp_path):
     import json
 
-    from liminal_app.gui.server import ChartApp
+    from liminal_charts.gui.server import ChartApp
 
     s = Store(tmp_path / "m.db", check_same_thread=False)
     fetch(s, ["sp500-constituents"], today=TODAY, session=_Session(_web), log=lambda *_: None)
@@ -196,7 +196,7 @@ def test_chart_app_lists_datasets_and_maps_members_by_gics(tmp_path):
 
 
 def test_viewer_endpoints(tmp_path):
-    from liminal_app.gui.server import ChartApp
+    from liminal_charts.gui.server import ChartApp
 
     s = Store(tmp_path / "m.db", check_same_thread=False)
     fetch(s, ["cftc-cot-legacy", "french-3-factors-daily"], today=TODAY, session=_Session(_web), log=lambda *_: None)

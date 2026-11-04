@@ -8,11 +8,11 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from liminal_lib import gov, killswitch, publications
-from liminal_lib.gov import GovDB
-from liminal_lib.sessions import ET
-from liminal_lib.sources import providers, publishers
-from liminal_lib.sources.publisher import Feed, Policy, Publisher
+from liminal_libs import gov, killswitch, publications
+from liminal_libs.gov import GovDB
+from liminal_libs.sessions import ET
+from liminal_libs.sources import providers, publishers
+from liminal_libs.sources.publisher import Feed, Policy, Publisher
 
 RSS = """<?xml version="1.0"?><rss version="2.0"><channel><item><title>FOMC statement</title>
 <link>https://www.federalreserve.gov/a.htm</link><guid>a</guid><pubDate>Wed, 28 Oct 2026 18:00:00 GMT</pubDate></item></channel></rss>"""
@@ -58,7 +58,7 @@ NOW = datetime(2026, 10, 26, 6, 0, tzinfo=timezone.utc)
 def test_each_agency_is_a_publisher_of_its_own_and_massives_headlines_sit_in_its_module():
     pubs = publishers()
     assert {"fed", "nyfed", "sec", "bls", "fedreg", "massive-news"} <= set(pubs)
-    assert all(p.origin == "built in" or p.origin.startswith("package: liminal-plugin-") for p in pubs.values())
+    assert all(p.origin == "built in" or p.origin.startswith("package: plugin-integrator-") for p in pubs.values())
     assert pubs["massive-news"].kind == "vendor" and pubs["massive-news"].account == "massive"
     assert "fed" not in providers() and "massive" in providers()  # publishers are not feeds
     keys = [f.key for p in pubs.values() for f in p.feeds]
@@ -71,7 +71,7 @@ def test_each_agency_is_a_publisher_of_its_own_and_massives_headlines_sit_in_its
 
 
 def test_a_module_with_only_a_publisher_loads_and_a_feed_key_taken_is_left_out(monkeypatch):
-    from liminal_lib.sources import registry
+    from liminal_libs.sources import registry
 
     from importlib.metadata import entry_points
 
@@ -171,7 +171,7 @@ def test_rate_limit_headers_are_kept_and_a_429_holds_it_off():
 
 # -- when ---------------------------------------------------------------------------------------------------
 def test_the_fed_is_read_at_2pm_on_fomc_days_and_otherwise_every_30_minutes():
-    import liminal_plugin_federal.fed as fed
+    import plugin_integrator_federal.fed as fed
 
     p = publishers()["fed"]
     press, speeches = p.feed("fed-press"), p.feed("fed-speeches")
@@ -247,8 +247,8 @@ class FakeNews:
 
 @pytest.fixture
 def massive_news(monkeypatch):
-    from liminal_lib.config import load_settings
-    import liminal_plugin_massive as massive
+    from liminal_libs.config import load_settings
+    import plugin_integrator_massive as massive
 
     fake = FakeNews()
     monkeypatch.setattr(massive.PLUGIN, "build", lambda settings, budget, max_retries=4: fake)  # its headlines build on it
@@ -267,7 +267,7 @@ def test_massives_headlines_are_read_on_its_key_and_counted_on_its_day(store, ma
 
 
 def test_a_429_on_massives_headlines_kills_massives_fetching(store, massive_news):
-    from liminal_lib.errors import RateLimited
+    from liminal_libs.errors import RateLimited
 
     fake, settings, p = massive_news
     fake.fail = RateLimited(429, "too many", 300)
@@ -370,7 +370,7 @@ def test_a_parsers_surprise_is_noted_and_never_stops_the_publishers_after_it():
         def json(self):
             return {"refRates": ["x"]}  # JSON of another shape: AttributeError deep in the parser
 
-    from liminal_plugin_federal.nyfed import parse
+    from plugin_integrator_federal.nyfed import parse
 
     nyfed = Publisher("ny", "NY", "", (Feed("ny-r", "NY", "R", "https://markets.example.gov/r.json", "nyfed", parse=parse),),
                       Policy(hosts=("markets.example.gov",), min_minutes=5, per_day=40), order=1)
@@ -433,7 +433,7 @@ def test_robots_txt_is_followed_through_its_own_redirects_and_a_move_elsewhere_r
 
 
 def test_a_recheck_sends_nothing_while_paused_killed_or_fetching_is_paused(store):
-    from liminal_lib import collector
+    from liminal_libs import collector
 
     site = Site()
     r = reader(site, store=store)
@@ -449,7 +449,7 @@ def test_a_recheck_sends_nothing_while_paused_killed_or_fetching_is_paused(store
 
 
 def test_an_account_kill_shows_as_stopped_with_it_not_as_paused_by_you(store):
-    from liminal_app.gui.server import ChartApp
+    from liminal_charts.gui.server import ChartApp
 
     killswitch.strike(store, "massive", "fetch", "by hand", minutes=240, shared=False)
     app = ChartApp(store)
@@ -460,7 +460,7 @@ def test_an_account_kill_shows_as_stopped_with_it_not_as_paused_by_you(store):
 def test_one_publishers_failing_calendar_never_takes_the_plugins_view_down(store, monkeypatch):
     from dataclasses import replace
 
-    from liminal_app.gui.server import ChartApp
+    from liminal_charts.gui.server import ChartApp
 
     bad = publishers()["fed"].with_(calendar=lambda today: [{"when": "2026-11-05T08:30:00", "what": "naive"}])
     monkeypatch.setattr(publications, "_today_moments", lambda pub, now: [])
@@ -476,7 +476,7 @@ def test_one_publishers_failing_calendar_never_takes_the_plugins_view_down(store
 
 # -- the views, the recorder ------------------------------------------------------------------------------------
 def test_the_plugins_view_lists_the_publishers_with_their_checks(store):
-    from liminal_app.gui.server import ChartApp
+    from liminal_charts.gui.server import ChartApp
 
     app = ChartApp(store)
     out = {p["name"]: p for p in app.plugins()["publishers"]}
@@ -491,7 +491,7 @@ def test_the_plugins_view_lists_the_publishers_with_their_checks(store):
 
 
 def test_the_recorder_reads_the_publications_in_a_thread_of_its_own(tmp_path, monkeypatch):
-    from liminal_lib import live
+    from liminal_libs import live
 
     passes = []
     rec = live.Recorder(tmp_path / "m.db", coins=(), publications=object())

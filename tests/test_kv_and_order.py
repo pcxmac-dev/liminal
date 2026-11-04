@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from liminal_lib import collector
-from liminal_app.gui import activity
-from liminal_lib.storage import Store
+from liminal_libs import collector
+from liminal_charts.gui import activity
+from liminal_libs.storage import Store
 
 
 @pytest.fixture

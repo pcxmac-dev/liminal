@@ -13,14 +13,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from liminal_lib.assistants import AssistantPlugin, Caps, Model, Plan, ResponsesAssistant, Source
-from liminal_lib.config import load_settings
-from liminal_lib.ratelimit import fingerprint
-from liminal_lib.sources import registry
-from liminal_lib.storage import Store
+from liminal_libs.assistants import AssistantPlugin, Caps, Model, Plan, ResponsesAssistant, Source
+from liminal_libs.config import load_settings
+from liminal_libs.ratelimit import fingerprint
+from liminal_libs.sources import registry
+from liminal_libs.storage import Store
 
-from liminal_app import cli
-from liminal_app.gui.server import ChartApp
+from liminal_charts import cli
+from liminal_charts.gui.server import ChartApp
 
 NOW = datetime(2026, 11, 3, 15, 0, tzinfo=timezone.utc)
 KEY, EMAIL = "sk-acme-secret-000", "me@example.com"
@@ -88,7 +88,7 @@ def installed(monkeypatch, tmp_path):
 
 
 def _app(tmp_path, monkeypatch, **env):
-    from liminal_lib import config
+    from liminal_libs import config
 
     saved: dict[str, str] = {}
     base = {"LIMINAL_DB": str(tmp_path / "m.db"), **env}

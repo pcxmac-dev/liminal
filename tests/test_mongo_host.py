@@ -1,4 +1,4 @@
-"""The MongoDB server under a keeper host (mongo.py, `liminal host mongo`): a process attaches to the
+"""The MongoDB server under a keeper host (mongo.py, `liminal-charts host mongo`): a process attaches to the
 keeper when its documents live in MongoDB, the keeper starts the server for the first client and
 shuts it down cleanly once the last one is gone (the user, 2026-11-01: "attached software like
 duckdb or what ever should be controlled by the plugin"; no processes when the app is not in use).
@@ -12,9 +12,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from liminal_app import cli
-from liminal_lib import host as hosting, mongo
-from liminal_lib.config import load_settings
+from liminal_charts import cli
+from liminal_libs import host as hosting, mongo
+from liminal_libs.config import load_settings
 
 
 class FakeAttachment:
@@ -69,7 +69,7 @@ def test_nothing_is_attached_without_a_server_installed_or_from_a_reading_copy(t
     with pytest.raises(RuntimeError, match="not installed"):
         mongo.attach(tmp_path)
     monkeypatch.setattr(mongo, "binary", lambda: tmp_path / "mongod.exe")
-    from liminal_lib.storage import common
+    from liminal_libs.storage import common
 
     monkeypatch.setattr(common, "read_only", lambda: True)
     with pytest.raises(RuntimeError, match="read-only"):

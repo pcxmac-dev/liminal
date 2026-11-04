@@ -1,4 +1,8 @@
-# liminal
+# liminal-charts
+
+The charts app of Liminal (the package `liminal_charts`, the command `liminal-charts`; named liminal-app
+until 2026-11-03, when the naming by system came: apps `liminal-<app>`, the library `liminal-libs`,
+plugins `plugin-<app>-<name>`; liminal-libs' INTEGRATION.md says how the repositories fit together).
 
 Collects stock market data at the finest resolution your plan allows, keeps it
 in a local database, and analyses and charts it. Two feeds plug in behind the same interface:
@@ -36,7 +40,7 @@ then accuracy measured in audits, then `SOURCE_PRIORITY`. The app shows where ea
 **Audits** are the only second downloads: another feed's copy of a stored span is compared bar
 by bar (timing to the second, OHLC, high-low range, volume, VWAP, trade count, as box stats with a
 small margin of error) and only the comparison is kept. They run after new data arrives and at
-random (`AUDITS_PER_RUN`, `AUDITS_RANDOM_PER_RUN`), or with `liminal audit
+random (`AUDITS_PER_RUN`, `AUDITS_RANDOM_PER_RUN`), or with `liminal-charts audit
 [TICKER] [--day D] [--list]`; results are in the Fetcher view.
 
 ## What it collects
@@ -68,10 +72,10 @@ nothing and the next run continues where it left off.
 python -m pip install -e ".[dev,plugins]"
 ```
 
-`plugins` installs the provider plugins, each a package of its own (`liminal-plugin-<name>`, a
+`plugins` installs the provider plugins, each a package of its own (`plugin-integrator-<name>`, a
 repository under [pcxmac-dev](https://github.com/pcxmac-dev), listed in `pyproject.toml`); the AI
-assistant plugins (`platform-plugin-claude`, `-grok`, `-codex`: evaluations of standardized
-arguments on your own API key, the Plugins view's "AI assistants" group, `liminal ai ask ...`) are
+assistant plugins (`plugin-platform-claude`, `-grok`, `-codex`: evaluations of standardized
+arguments on your own API key, the Plugins view's "AI assistants" group, `liminal-charts ai ask ...`) are
 among them. Every
 data provider is one, Massive included: without them the app has no feeds.
 
@@ -81,8 +85,8 @@ where the app reads keys. Without a name it shows a menu of the data providers (
 app, so a new provider appears by itself), their keys and which are set: pick one to set, replace or
 remove its keys. With a provider's name (`tiingo`) or one key's variable (`TIINGO_API_KEY`) it goes
 straight there; `-Remove` deletes, `-List` only shows. Restart running processes (the sync, the
-chart app) after setting a key. `liminal plugins` lists the same providers;
-`liminal sourcing` shows each one's report (plan, limits, what it provides) and
+chart app) after setting a key. `liminal-charts plugins` lists the same providers;
+`liminal-charts sourcing` shows each one's report (plan, limits, what it provides) and
 which source delivers what, by cost and capability (docs/ARCHITECTURE.md, "Which source delivers what").
 
 ```powershell
@@ -112,11 +116,11 @@ and replaced) and every dataset value is kept in every published version, so a s
 as it stood at any moment (`as_of`), for backtests that see only what was known then. Results
 computed here (bars built from ticks, the composite model, quality scores, audits) are kept apart
 from what the sources published and record how they were made: inputs, code version (git commit)
-and settings (`liminal provenance`).
+and settings (`liminal-charts provenance`).
 Every standard frame (1 s to 1 year) is kept for every series: the ones a feed sends as it sent
 them, the others built here, upward only, from that feed's finer bars and marked derived (a gap
 in the finer data stays a gap). The sync builds a symbol's frames as soon as its fetch is stored.
-`liminal inventory TICKER` (and "Data by feed" in the chart's side panel) shows,
+`liminal-charts inventory TICKER` (and "Data by feed" in the chart's side panel) shows,
 feed by feed and frame by frame, what was sent, what was derived and from what, and what is not
 built yet.
 A database from before this layout is moved once with `admin split-feeds` (it backs up first,
@@ -144,8 +148,8 @@ liminal gui                  # chart app in your browser (localhost only)
 
 ## Three programs, three repositories (2026-11-01)
 
-- [liminal-lib](https://github.com/pcxmac-dev/liminal-lib): the library every program builds on (the stores, the
-  plugin contract, the collector, the scheme, the hosts), imported as `liminal_lib` by the app, the integrator
+- [liminal-libs](https://github.com/pcxmac-dev/liminal-libs): the library every program builds on (the stores, the
+  plugin contract, the collector, the scheme, the hosts), imported as `liminal_libs` by the app, the integrator
   and every plugin.
 - [liminal-integrator](https://github.com/pcxmac-dev/liminal-integrator): the fetcher. A stack of requests in
   front (a symbol opened in the chart, or asked for), for each an assessment of the work over the plugins set up
@@ -153,7 +157,7 @@ liminal gui                  # chart app in your browser (localhost only)
   standing pass once new data can exist; its own page (the data and monitoring views) and the data API at
   http://127.0.0.1:8785, kept there by `fetcher` or the service you install at logon while the fetcher runs only
   as long as a page is in touch; with `--daemon` the fetcher is held for good and collects what it can on its own.
-- this repository, [liminal-app](https://github.com/pcxmac-dev/liminal-app) (package `liminal_app`, command
+- this repository, [liminal-charts](https://github.com/pcxmac-dev/liminal-charts) (package `liminal_charts`, command
   `liminal`): the chart page, served by a front (`gui/front.py`) that funnels every request of its pages to the
   fetcher, started if none answers; the command line; the suite proper runs here.
 
@@ -163,7 +167,7 @@ workspace the data is in `~/LiminalData` and the plugins are the installed packa
 
 ## Chart app
 
-`liminal gui` serves a TradingView-style chart on http://127.0.0.1:8765 using
+`liminal-charts gui` serves a TradingView-style chart on http://127.0.0.1:8765 using
 [KLineChart](https://github.com/klinecharts/KLineChart) 10.1.0 (Apache-2.0, bundled, works offline).
 
 - Intervals from 1s (when ticks or second bars are stored) to monthly, built exactly from the finest
@@ -199,7 +203,7 @@ workspace the data is in `~/LiminalData` and the plugins are the installed packa
 | `sources/base.py` | `DataSource` interface every provider implements |
 | `sources/registry.py` | The plugin registry and contract (`Provider`, `PLUGIN_API`) |
 | `sources/http.py` | The HTTP client every plugin's builds on (auth headers, rate limit, caps, retries) |
-| `sources/plugins/` | Empty: every data provider is a package of its own, `liminal-plugin-<name>` (its client, streams, datasets); a local module dropped here still loads |
+| `sources/plugins/` | Empty: every data provider is a package of its own, `plugin-integrator-<name>` (its client, streams, datasets); a local module dropped here still loads |
 | `coverage.py` | One feed per span: what a feed may download, given the ledger and the ranking |
 | `audit.py` | Feed-against-feed audits: comparison, box stats, verdicts |
 | `composite.py` | Composite and reference models across exchanges; quality scores |

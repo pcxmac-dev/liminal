@@ -3,15 +3,15 @@
     Sets or removes a data provider's API keys as user environment variables, typed hidden.
 
 .DESCRIPTION
-    Every data provider is a plugin of the app (liminal_lib.sources.registry), and so is every AI
-    assistant (liminal_lib.assistants: claude, grok, codex). The script asks the app which there
-    are (python -m liminal_app plugins --json: names only, never a key's value) and offers a menu:
+    Every data provider is a plugin of the app (liminal_libs.sources.registry), and so is every AI
+    assistant (liminal_libs.assistants: claude, grok, codex). The script asks the app which there
+    are (python -m liminal_charts plugins --json: names only, never a key's value) and offers a menu:
     each provider and assistant, its keys and whether they are set. An assistant's account (the
     email or name its key belongs to) is a detail of yours, typed in the open, not a key.
     Pick one to set or replace its keys, or to remove them, to choose its plan, or to rescan it;
     a provider added as a plugin appears here by itself.
 
-    Each plugin refreshes its own plan info: a rescan (python -m liminal_app capabilities
+    Each plugin refreshes its own plan info: a rescan (python -m liminal_charts capabilities
     <name>, a few requests) asks the provider what the key really gets, and a plan it finds is used
     wherever you have not set one. A plan you choose here always wins; Tiingo's API cannot tell
     its plans apart (starter, power, commercial), so its plan (TIINGO_PLAN) is only what you choose.
@@ -61,13 +61,13 @@ function Get-Providers {
     $py = Get-Python
     Push-Location $Root
     try {
-        $json = & $py -m liminal_app plugins --json
+        $json = & $py -m liminal_charts plugins --json
         $code = $LASTEXITCODE
     } finally {
         Pop-Location
     }
     if ($code -ne 0 -or -not $json) {
-        throw "Could not list the providers ($py -m liminal_app plugins --json)."
+        throw "Could not list the providers ($py -m liminal_charts plugins --json)."
     }
     $listed = ($json | Out-String) | ConvertFrom-Json
     $script:PluginApi = $listed.api
@@ -147,7 +147,7 @@ function Invoke-Rescan($p) {
     $py = Get-Python
     Push-Location $Root
     try {
-        & $py -m liminal_app capabilities $p.name
+        & $py -m liminal_charts capabilities $p.name
     } finally {
         Pop-Location
     }

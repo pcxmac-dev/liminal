@@ -9,11 +9,11 @@ from datetime import date, datetime, timedelta
 
 import pandas as pd
 
-from liminal_lib import baddata, collector, derive
-from liminal_lib.config import Tier
-from liminal_lib.models import Exchange, Stock, country
-from liminal_lib.sessions import ET
-from liminal_lib.symbols import resolve
+from liminal_libs import baddata, collector, derive
+from liminal_libs.config import Tier
+from liminal_libs.models import Exchange, Stock, country
+from liminal_libs.sessions import ET
+from liminal_libs.symbols import resolve
 
 from .conftest import FakeSource
 
@@ -78,8 +78,8 @@ def test_day_bars_of_a_listing_abroad_are_its_local_days_stamped_at_midnight_new
 def test_the_live_view_names_listings_abroad_as_end_of_day_without_a_session_feed(store):
     from datetime import timezone
 
-    from liminal_app.gui import activity
-    from liminal_lib.config import load_settings
+    from liminal_charts.gui import activity
+    from liminal_libs.config import load_settings
 
     store.watch("massive", ["AAPL"], "minute", exchange="XNAS")
     store.watch_spec("twse", resolve("2330.TW"), "day")
@@ -95,9 +95,9 @@ def test_the_live_view_names_listings_abroad_as_end_of_day_without_a_session_fee
 def test_a_request_is_put_under_the_stored_ticker_however_it_is_typed(tmp_path):
     from types import SimpleNamespace
 
-    from liminal_app.gui.server import ChartApp, stored_ticker
-    from liminal_lib.config import load_settings
-    from liminal_lib.storage import Store
+    from liminal_charts.gui.server import ChartApp, stored_ticker
+    from liminal_libs.config import load_settings
+    from liminal_libs.storage import Store
 
     assert stored_ticker("TWSE:2330") == "2330.TW" and stored_ticker("SPCX::NASDAQ") == "SPCX" and stored_ticker("EUR/USD") == "EURUSD"
     s = Store(tmp_path / "m.db", check_same_thread=False)

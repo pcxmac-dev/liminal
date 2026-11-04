@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import pytest
 
-from liminal_lib.config import ConfigError, load_settings
-from liminal_lib.errors import BudgetExhausted, NotEntitled, RateLimited, SourceError
-from liminal_lib.ratelimit import RateLimiter
-from liminal_plugin_massive.client import MassiveClient
+from liminal_libs.config import ConfigError, load_settings
+from liminal_libs.errors import BudgetExhausted, NotEntitled, RateLimited, SourceError
+from liminal_libs.ratelimit import RateLimiter
+from plugin_integrator_massive.client import MassiveClient
 
 from .conftest import FakeResponse, FakeSession
 
@@ -119,7 +119,7 @@ def test_env_file_does_not_override_environment(tmp_path):
 
 
 def test_keys_saved_after_a_process_started_are_read(monkeypatch):
-    from liminal_lib import config
+    from liminal_libs import config
 
     monkeypatch.delenv("ALPACA_API_KEY_ID", raising=False)
     monkeypatch.setattr(config, "saved_user_keys", lambda: {"ALPACA_API_KEY_ID": "PKSAVED", "MASSIVE_API_KEY": "saved"})

@@ -10,8 +10,8 @@ from contextlib import closing
 
 import pytest
 
-from liminal_lib.storage import Store
-from liminal_lib.storage import feeds as feeds_mod
+from liminal_libs.storage import Store
+from liminal_libs.storage import feeds as feeds_mod
 
 MIN = 60_000
 

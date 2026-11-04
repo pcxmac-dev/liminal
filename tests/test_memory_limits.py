@@ -9,13 +9,13 @@ import threading
 
 import pytest
 
-from liminal_lib import live, memory
-from liminal_lib.config import load_settings
-from liminal_app.gui import server
-from liminal_app.gui.bars import CACHE_SHARES, CHART_CACHE_BYTES, BarEngine
-from liminal_app.gui.window import WindowReader
-from liminal_lib.storage import Store
-from liminal_lib.sources import stream
+from liminal_libs import live, memory
+from liminal_libs.config import load_settings
+from liminal_charts.gui import server
+from liminal_charts.gui.bars import CACHE_SHARES, CHART_CACHE_BYTES, BarEngine
+from liminal_charts.gui.window import WindowReader
+from liminal_libs.storage import Store
+from liminal_libs.sources import stream
 
 MB = 2**20
 
@@ -99,23 +99,23 @@ def test_the_recorders_backlog_is_a_byte_budget():
 def test_numpy_loads_with_one_thread_unless_told_otherwise(monkeypatch):
     import importlib
 
-    import liminal_app
+    import liminal_charts
 
     for name in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS"):
         monkeypatch.delenv(name, raising=False)
-    importlib.reload(liminal_app)  # what the package sets as it loads, before anything imports numpy
+    importlib.reload(liminal_charts)  # what the package sets as it loads, before anything imports numpy
     assert os.environ["OPENBLAS_NUM_THREADS"] == os.environ["OMP_NUM_THREADS"] == "1"
     monkeypatch.setenv("OPENBLAS_NUM_THREADS", "4")
-    importlib.reload(liminal_app)
+    importlib.reload(liminal_charts)
     assert os.environ["OPENBLAS_NUM_THREADS"] == "4"  # the environment's own value is kept
 
 
 # -- admin memory ---------------------------------------------------------------------------------
 def _fake_machine(monkeypatch, reads: dict[int, list[int]]):
     """The app's processes, their counters and the machine's, as the system's calls would give them."""
-    from liminal_lib import proc
+    from liminal_libs import proc
 
-    cmd = '"C:\\venv\\Scripts\\python.exe" -m liminal_app '
+    cmd = '"C:\\venv\\Scripts\\python.exe" -m liminal_charts '
     monkeypatch.setattr(proc, "processes", lambda: [
         (100, 1, cmd + "gui --no-browser --port 8765"), (101, 100, cmd + "gui --no-browser --port 8765"),  # launcher, child
         (200, 1, cmd + "--source massive sync"), (300, 1, cmd + "live"), (400, 1, "python other.py")])

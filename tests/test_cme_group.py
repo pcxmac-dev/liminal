@@ -8,12 +8,12 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from liminal_lib import collector, initializer
-from liminal_lib.collector import ET, sync
-from liminal_lib.config import load_settings
-from liminal_plugin_massive import TIERS
-from liminal_lib.storage import Store
-from liminal_lib.symbols import resolve
+from liminal_libs import collector, initializer
+from liminal_libs.collector import ET, sync
+from liminal_libs.config import load_settings
+from plugin_integrator_massive import TIERS
+from liminal_libs.storage import Store
+from liminal_libs.symbols import resolve
 
 from .conftest import FakeSource
 
@@ -74,7 +74,7 @@ def test_cme_groups_products_are_watched_as_continuous_futures(store):
 
 
 def test_the_cli_takes_cme_for_all_four_exchanges(tmp_path, monkeypatch, capsys):
-    from liminal_app import cli
+    from liminal_charts import cli
 
     monkeypatch.setenv("LIMINAL_DB", str(tmp_path / "m.db"))
     monkeypatch.setenv("MASSIVE_API_KEY", "k")
@@ -119,7 +119,7 @@ def test_less_traded_futures_are_refreshed_weekly(store, monkeypatch):
 
 
 def test_official_schedules_are_asked_for_the_picked_and_the_first_futures(store, monkeypatch):
-    from liminal_lib.live import WATCHLISTS_KEY
+    from liminal_libs.live import WATCHLISTS_KEY
 
     monkeypatch.setattr(collector, "FUTURES_SCHEDULES", 2)
     for t in ("ES1!", "CL1!", "GC1!", "ZN1!"):

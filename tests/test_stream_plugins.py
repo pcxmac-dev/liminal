@@ -9,10 +9,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from liminal_lib import live
-from liminal_lib.config import load_settings
-from liminal_lib.sources import providers, registry
-from liminal_lib.sources.stream import Live
+from liminal_libs import live
+from liminal_libs.config import load_settings
+from liminal_libs.sources import providers, registry
+from liminal_libs.sources.stream import Live
 
 ALPACA_KEYS = {"ALPACA_API_KEY_ID": "PKTESTKEY", "ALPACA_API_SECRET_KEY": "test-secret"}
 

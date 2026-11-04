@@ -37,8 +37,8 @@ from dataclasses import replace
 
 from datetime import date, datetime
 
-from liminal_lib.sources import providers
-from liminal_lib.sources.registry import (PLUGIN_API, assistants, database_row, errors, key_row, label, plugin_databases,
+from liminal_libs.sources import providers
+from liminal_libs.sources.registry import (PLUGIN_API, assistants, database_row, errors, key_row, label, plugin_databases,
                                           plugin_feeds, plugin_keys, plugin_of, publisher_parts)
 
 GROUPS = ("Feeds with keys", "Public feeds", "AI assistants")
@@ -148,7 +148,7 @@ def _assistant_entry(p, store, settings, scans: dict, running: dict | None) -> d
     its plan, model and caps, the vendor's written-in tables, its last Connect, what it spent today
     here and on the whole machine, and its last answers (the user, 2026-11-03: the three AI plugins
     "compliant with the rest of the plugin structure (setup / connecting methods / etc)")."""
-    from liminal_lib.ratelimit import MachineLedger
+    from liminal_libs.ratelimit import MachineLedger
 
     own = p.own(settings)
     plan = p.plan_of(own.plan) if own else p.free_plan
@@ -211,7 +211,7 @@ def view(store, settings, feeds: dict, scheme, scans: dict, running: dict | None
          today: date | None = None) -> dict:
     """Every plugin for the view (see the module's docstring); `running`: the rescan going now
     ({"name": one provider or None for all, "since": iso}) or None."""
-    from liminal_lib import killswitch
+    from liminal_libs import killswitch
 
     today = today or scheme.today
     counts = store.watch_counts()

@@ -11,11 +11,11 @@ from http.server import ThreadingHTTPServer
 import pandas as pd
 import pytest
 
-from liminal_lib import derive
-from liminal_app.gui.server import WRITE_HEADER, ChartApp, make_handler
-from liminal_lib.storage import Store
-from liminal_app.trading import paper
-from liminal_app.trading.paper import PaperBook, day_end
+from liminal_libs import derive
+from liminal_charts.gui.server import WRITE_HEADER, ChartApp, make_handler
+from liminal_libs.storage import Store
+from liminal_charts.trading import paper
+from liminal_charts.trading.paper import PaperBook, day_end
 
 ET = "America/New_York"
 MIN = 60_000

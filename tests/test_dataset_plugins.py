@@ -10,11 +10,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from liminal_lib import datasets, killswitch, publications
-from liminal_lib.sources import publishers, registry
-from liminal_lib.sources.dataset import Dataset, Parsed
-from liminal_lib.sources.publisher import Policy, Publisher
-from liminal_lib.storage import Store
+from liminal_libs import datasets, killswitch, publications
+from liminal_libs.sources import publishers, registry
+from liminal_libs.sources.dataset import Dataset, Parsed
+from liminal_libs.sources.publisher import Policy, Publisher
+from liminal_libs.storage import Store
 
 from .test_datasets import TODAY, _cot, _Resp, _Session, _zip
 
@@ -126,7 +126,7 @@ def test_the_datasets_list_names_each_ones_plugin(tmp_path):
 def test_the_plugins_view_lists_the_dataset_libraries_apart():
     from pathlib import Path
 
-    js = (Path(__file__).resolve().parents[1] / "src" / "liminal_app" / "gui" / "static" / "plugins.js").read_text(encoding="utf-8")
+    js = (Path(__file__).resolve().parents[1] / "src" / "liminal_charts" / "gui" / "static" / "plugins.js").read_text(encoding="utf-8")
     assert "const setsOnly = (p) => !p.feeds.length && !p.parts.length && p.datasets.length > 0;" in js
     assert "`<h4 class=\"ex-group\">Datasets</h4>${sets}`" in js  # a group of their own, after the news
     assert "${tile('Datasets', num(p.datasets.length), 'fetched with datasets fetch')}" in js

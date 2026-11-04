@@ -5,14 +5,14 @@ from datetime import date, datetime, timezone
 import pandas as pd
 import pytest
 
-from liminal_lib import collector
-from liminal_lib.collector import ET, build_from_ticks, sync
-from liminal_plugin_massive import TIERS
+from liminal_libs import collector
+from liminal_libs.collector import ET, build_from_ticks, sync
+from plugin_integrator_massive import TIERS
 
-from liminal_plugin_alpaca import ALPACA_TIERS  # the plugin's plans
-from liminal_lib.coverage import FeedProfile, ms, plan
-from liminal_lib.symbols import resolve
-from liminal_lib.ticks import build_bars, eligibility
+from plugin_integrator_alpaca import ALPACA_TIERS  # the plugin's plans
+from liminal_libs.coverage import FeedProfile, ms, plan
+from liminal_libs.symbols import resolve
+from liminal_libs.ticks import build_bars, eligibility
 
 from .conftest import FakeResponse, FakeSession, FakeSource
 
@@ -116,7 +116,7 @@ def test_a_minute_cut_by_a_stopped_run_is_built_when_its_ticks_are_complete(stor
 
 
 def test_alpaca_crypto_ticks_need_no_key():
-    from liminal_plugin_alpaca.client import AlpacaClient, AlpacaSource
+    from plugin_integrator_alpaca.client import AlpacaClient, AlpacaSource
 
     session = FakeSession([FakeResponse(200, {"trades": {"BTC/USD": [
         {"i": 7, "p": 81658, "s": 0.0004, "t": "2026-10-22T12:00:00.200261576Z", "tks": "B"}]}, "next_page_token": None})])
@@ -131,7 +131,7 @@ def test_alpaca_crypto_ticks_need_no_key():
 
 
 def test_charts_read_seconds_by_window_on_a_minute_base(store):
-    from liminal_app.gui.bars import MERGED, BarEngine
+    from liminal_charts.gui.bars import MERGED, BarEngine
 
     t0 = datetime(2026, 10, 20, 10, 0, tzinfo=ET)
     ticks = _ticks(t0, 600)  # ten minutes of one tick a second
@@ -191,7 +191,7 @@ def test_prior_reference_and_derivatively_priced_prints_make_no_spikes(store):
 
 
 def test_merged_daily_bars_combine_feeds_day_by_day(store):
-    from liminal_app.gui.bars import MERGED, BarEngine
+    from liminal_charts.gui.bars import MERGED, BarEngine
 
     day = lambda d: ms(datetime(2026, 10, d, tzinfo=ET))  # noqa: E731
     store.upsert_bars("alpaca", "SPCX", "minute", 1, [{"t": day(19) + 36_000_000, "o": 1, "h": 1, "l": 1, "c": 1, "v": 1}])

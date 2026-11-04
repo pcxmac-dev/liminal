@@ -7,14 +7,14 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from liminal_app import cli
-from liminal_lib import initializer
-from liminal_lib.collector import ET, sync
-from liminal_lib.config import load_settings
-from liminal_plugin_massive import TIERS, tier_for
-from liminal_lib.errors import NotEntitled
-from liminal_plugin_massive.client import MassiveSource
-from liminal_lib.storage import Store
+from liminal_charts import cli
+from liminal_libs import initializer
+from liminal_libs.collector import ET, sync
+from liminal_libs.config import load_settings
+from plugin_integrator_massive import TIERS, tier_for
+from liminal_libs.errors import NotEntitled
+from plugin_integrator_massive.client import MassiveSource
+from liminal_libs.storage import Store
 
 from .conftest import FakeSource
 
@@ -139,8 +139,8 @@ def test_the_plan_change_check_stays_quiet_without_the_massive_plugin(store):
 
 
 def test_an_unlimited_plan_reaches_back_to_where_its_history_begins():
-    from liminal_lib.collector import history_floor
-    from liminal_lib.sources import provider
+    from liminal_libs.collector import history_floor
+    from liminal_libs.sources import provider
 
     assert history_floor(TIERS["advanced"], TODAY) == date(2003, 9, 10)  # all of Massive's stock history
     assert history_floor(TIERS["developer"], TODAY) == date(2016, 10, 25)  # ten years, a day inside

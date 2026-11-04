@@ -4,7 +4,7 @@ The user, 2026-11-01: "the concept is to be able to use the app, which connects 
 database access"; "so the app needs to funnel requests through the fetcher to the databases"; "i can
 look at the fetcher to see what the data looks like, i can use the 'app' to see what i want to do".
 
-`liminal gui` runs this: a local server (127.0.0.1) serving the chart page and its scripts, with
+`liminal-charts gui` runs this: a local server (127.0.0.1) serving the chart page and its scripts, with
 every /api/ request of its pages passed on to the fetcher's data API (fetcher.py: the host
 `fetcher`, attached here and started if none answers, its port learnt from it). No database is
 opened here. A page in touch keeps the fetcher held; with none in touch for LIMINAL_QUIET_SECONDS
@@ -29,8 +29,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from liminal_lib import config, host
-from liminal_lib.logs import log_to
+from liminal_libs import config, host
+from liminal_libs.logs import log_to
 from . import web
 from .web import MAX_BODY, PROFILE_HEADER, WRITE_HEADER
 

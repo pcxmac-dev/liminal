@@ -7,9 +7,9 @@ import json
 import pandas as pd
 import pytest
 
-from liminal_lib import baddata, derive
-from liminal_lib.collector import build_from_ticks
-from liminal_lib.storage import Store
+from liminal_libs import baddata, derive
+from liminal_libs.collector import build_from_ticks
+from liminal_libs.storage import Store
 
 ET = "America/New_York"
 
@@ -134,7 +134,7 @@ def test_a_rebuild_keeps_every_bar_it_changes_on_the_pruned_list(tmp_path):
 
 
 def test_the_chart_shows_filtered_data_unless_asked_for_all_of_it(store):
-    from liminal_app.gui.server import ChartApp
+    from liminal_charts.gui.server import ChartApp
 
     _set(store, "2026-10-19 17:08", h=75.0, l=30.0, v=120)
     baddata.scan_series(store, "massive", "SPCX", "minute", "stock")
@@ -151,9 +151,9 @@ def test_the_chart_shows_filtered_data_unless_asked_for_all_of_it(store):
 
 
 # -- rule 3: a feed's own bar against its own finer bars; the fetch's second answer; audits ----
-from liminal_lib.collector import verify_fetched  # noqa: E402
-from liminal_plugin_massive import TIERS  # noqa: E402
-from liminal_lib.coverage import FeedProfile  # noqa: E402
+from liminal_libs.collector import verify_fetched  # noqa: E402
+from plugin_integrator_massive import TIERS  # noqa: E402
+from liminal_libs.coverage import FeedProfile  # noqa: E402
 
 
 def _day(store, day: str, **bar):

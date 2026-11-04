@@ -1,6 +1,6 @@
 """The Watchlist's Vol column reads the last session's volume (the user, 2026-10-31: "lets add volume to
 the watchlist")."""
-from liminal_app.gui.server import _market
+from liminal_charts.gui.server import _market
 
 
 def test_the_snapshot_carries_the_last_sessions_volume(store):

@@ -7,10 +7,10 @@ import json
 
 import pytest
 
-from liminal_lib import live
-from liminal_lib.config import ConfigError, load_settings
-from liminal_lib.storage import Store
-from liminal_lib.sources import stream
+from liminal_libs import live
+from liminal_libs.config import ConfigError, load_settings
+from liminal_libs.storage import Store
+from liminal_libs.sources import stream
 
 T0 = 1_792_764_000_000  # 2026-10-23 14:00 UTC, ms
 
@@ -117,7 +117,7 @@ def test_always_streams_every_coin_from_the_start(tmp_path):
 def test_the_recorder_builds_only_what_it_recorded(tmp_path, monkeypatch):
     """With nothing streamed it reads nothing: it rebuilt every coin's frames each minute, so it read
     what the sync's backfill changed (0.5 to 1 GB a minute with no stream connected)."""
-    from liminal_lib import derive
+    from liminal_libs import derive
 
     calls = []
     monkeypatch.setattr(derive, "run", lambda store, sources=None, tickers=None, log=None: calls.append(tickers) or 7)
@@ -132,7 +132,7 @@ def test_the_recorder_builds_only_what_it_recorded(tmp_path, monkeypatch):
 
 
 def test_the_status_says_idle_not_down(tmp_path, capsys):
-    from liminal_app import cli
+    from liminal_charts import cli
 
     with Store(tmp_path / "m.db") as store:
         store.kv_set(live.STATUS_KEY, json.dumps({"streams": {

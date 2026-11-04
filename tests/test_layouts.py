@@ -7,8 +7,8 @@ from http.server import ThreadingHTTPServer
 
 import pytest
 
-from liminal_app.gui.server import ChartApp, make_handler
-from liminal_lib.storage import LayoutLimit, Store
+from liminal_charts.gui.server import ChartApp, make_handler
+from liminal_libs.storage import LayoutLimit, Store
 
 
 def test_store_layout_lifecycle(store):

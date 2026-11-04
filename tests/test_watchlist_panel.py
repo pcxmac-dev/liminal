@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from liminal_app.gui.server import ChartApp
-from liminal_lib.storage import Store
+from liminal_charts.gui.server import ChartApp
+from liminal_libs.storage import Store
 
 
 @pytest.fixture

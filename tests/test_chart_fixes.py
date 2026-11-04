@@ -11,11 +11,11 @@ from http.server import ThreadingHTTPServer
 import pandas as pd
 import pytest
 
-from liminal_lib import live
-from liminal_app.gui import charttypes
-from liminal_app.gui.bars import BarEngine, bar_end, calendar_key, merge_frames
-from liminal_app.gui.server import ChartApp, make_handler
-from liminal_lib.storage import Store
+from liminal_libs import live
+from liminal_charts.gui import charttypes
+from liminal_charts.gui.bars import BarEngine, bar_end, calendar_key, merge_frames
+from liminal_charts.gui.server import ChartApp, make_handler
+from liminal_libs.storage import Store
 
 ET = "America/New_York"
 
@@ -128,7 +128,7 @@ def test_a_feed_holding_a_symbol_it_does_not_watch_charts_it_as_the_symbols_clas
 
 
 def test_the_symbol_list_shows_the_state_of_the_feed_holding_the_data():
-    from liminal_app.gui.server import _symbol_state
+    from liminal_charts.gui.server import _symbol_state
 
     rows = {"massive": {"state": "backfilling"}, "alpaca": {"state": "current"}, "tiingo": {"state": "blocked"}}
     assert _symbol_state(rows, ["massive"])["state"] == "backfilling"  # not whichever feed came last
@@ -166,7 +166,7 @@ def test_a_zoomed_out_one_second_chart_pages_back_through_every_day(store):
 
 
 def test_the_series_cache_keeps_to_a_memory_budget(store, monkeypatch):
-    from liminal_app.gui import bars as gui_bars
+    from liminal_charts.gui import bars as gui_bars
 
     for i, t in enumerate(("AAA", "BBB", "CCC")):
         store.upsert_bars("massive", t, "minute", 1, [_bar(f"2026-10-20 10:{m:02d}", 10.0 + i) for m in range(50)])
@@ -184,7 +184,7 @@ def test_the_series_cache_keeps_to_a_memory_budget(store, monkeypatch):
 def test_open_symbol_goes_to_the_symbol_page_without_waiting_for_the_whole_list():
     from pathlib import Path
 
-    from liminal_app.gui import server
+    from liminal_charts.gui import server
 
     app = (Path(server.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
     opener = app.split("function openSymbol(", 1)[1].split("\n}\n", 1)[0]

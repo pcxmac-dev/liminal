@@ -8,8 +8,8 @@ import time
 import pandas as pd
 import pytest
 
-from liminal_lib import live
-from liminal_lib.storage import Store
+from liminal_libs import live
+from liminal_libs.storage import Store
 
 ET = "America/New_York"
 DAY_NS = 86_400_000_000_000
@@ -74,10 +74,10 @@ def test_a_bar_the_stream_joined_partway_through_is_never_claimed_whole(tmp_path
 def test_a_late_change_mid_history_reaches_the_composite(store):
     from datetime import datetime, timezone
 
-    from liminal_lib import composite
-    from liminal_lib.coverage import FeedProfile
-    from liminal_plugin_massive import TIERS
-    from liminal_lib.symbols import resolve
+    from liminal_libs import composite
+    from liminal_libs.coverage import FeedProfile
+    from plugin_integrator_massive import TIERS
+    from liminal_libs.symbols import resolve
 
     mk = lambda n, v: FeedProfile(n, TIERS["free"], frozenset({"crypto"}), venues={"crypto": v})  # noqa: E731
     feeds = {"coinbase": mk("coinbase", "coinbase"), "alpaca": mk("alpaca", "kraken")}
@@ -100,10 +100,10 @@ def test_a_late_change_mid_history_reaches_the_composite(store):
 def test_tiingos_symbols_a_month_are_the_keys_on_the_machine_its_forex_included(tmp_path):
     from datetime import datetime, timezone
 
-    from liminal_lib import collector
-    from liminal_lib.config import load_settings
-    from liminal_lib.ratelimit import MachineLedger
-    from liminal_lib.sources import providers
+    from liminal_libs import collector
+    from liminal_libs.config import load_settings
+    from liminal_libs.ratelimit import MachineLedger
+    from liminal_libs.sources import providers
 
     ledger, now = MachineLedger("tiingo:symbols", "k"), datetime(2026, 10, 28, tzinfo=timezone.utc)
     with Store(tmp_path / "a.db") as a, Store(tmp_path / "b.db") as b:
@@ -118,7 +118,7 @@ def test_tiingos_symbols_a_month_are_the_keys_on_the_machine_its_forex_included(
 
 
 def test_a_symbol_taken_off_the_watchlist_during_a_run_is_skipped_not_the_run_ended(store):
-    from liminal_lib import collector
+    from liminal_libs import collector
 
     said = []
     store.watch("massive", ["AAPL"], "minute")
@@ -130,9 +130,9 @@ def test_a_symbol_taken_off_the_watchlist_during_a_run_is_skipped_not_the_run_en
 def test_the_delivery_scheme_sees_a_paid_tiingo_plan_without_a_monthly_cap():
     from datetime import date
 
-    from liminal_lib import sourcing
-    from liminal_lib.config import load_settings
-    from liminal_lib.sources import feed_profiles
+    from liminal_libs import sourcing
+    from liminal_libs.config import load_settings
+    from liminal_libs.sources import feed_profiles
 
     for plan, cap in (("power", None), ("starter", 450)):
         settings = load_settings(env={"TIINGO_API_KEY": "k", "TIINGO_PLAN": plan}, env_file=None)
@@ -160,8 +160,8 @@ def test_a_finished_utc_day_of_a_round_the_clock_asset_counts_at_once(monkeypatc
     from datetime import datetime, timedelta, timezone
     from types import SimpleNamespace
 
-    from liminal_lib import coverage, freshness
-    from liminal_plugin_massive import TIERS
+    from liminal_libs import coverage, freshness
+    from plugin_integrator_massive import TIERS
 
     last = datetime(2026, 10, 28, 23, 59, tzinfo=timezone.utc)  # an end-of-day plan's newest: the day's last minute
     monkeypatch.setattr(freshness, "expected", lambda asset, tier, now, exchange=None: SimpleNamespace(latest=last))
@@ -176,8 +176,8 @@ def test_a_finished_utc_day_of_a_round_the_clock_asset_counts_at_once(monkeypatc
 def test_a_release_not_in_at_the_first_sync_after_it_is_asked_again_hourly(store):
     from datetime import date, datetime, timedelta, timezone
 
-    from liminal_lib import collector, freshness
-    from liminal_plugin_massive import TIERS
+    from liminal_libs import collector, freshness
+    from plugin_integrator_massive import TIERS
 
     tier = TIERS["free"]
     assert freshness.plan_delay(tier, "stock").kind == "eod"

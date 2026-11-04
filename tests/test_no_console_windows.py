@@ -8,11 +8,11 @@ import os
 import re
 from pathlib import Path
 
-import liminal_app
-from liminal_lib import datasets, proc, provenance
+import liminal_charts
+from liminal_libs import datasets, proc, provenance
 
-# the library's package (liminal-lib), the app's own, and the integrator's when it is installed
-ROOTS = [Path(proc.__file__).parent, Path(liminal_app.__file__).parent]
+# the library's package (liminal-libs), the app's own, and the integrator's when it is installed
+ROOTS = [Path(proc.__file__).parent, Path(liminal_charts.__file__).parent]
 try:
     import liminal_integrator
 

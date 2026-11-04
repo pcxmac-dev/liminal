@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 import requests
 
-from liminal_app import cli
-from liminal_lib.storage import Store
+from liminal_charts import cli
+from liminal_libs.storage import Store
 
 
 @pytest.fixture
@@ -158,7 +158,7 @@ def test_offline_copies_of_the_app_fetch_nothing(env, monkeypatch, capsys):
 def test_each_feed_has_its_own_run_lock_and_a_move_of_the_data_waits_for_them_all(env):
     import os
 
-    from liminal_lib import proc
+    from liminal_libs import proc
 
     db = env / "data" / "m.db"
     db.parent.mkdir(parents=True, exist_ok=True)

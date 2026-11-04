@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from liminal_lib.models import exchange_name, exchange_timezone, is_foreign
-from liminal_lib.sessions import ET, ENERGY_FUTURES, EQUITY_FUTURES, MarketCalendar, nyse_holidays
+from liminal_libs.models import exchange_name, exchange_timezone, is_foreign
+from liminal_libs.sessions import ET, ENERGY_FUTURES, EQUITY_FUTURES, MarketCalendar, nyse_holidays
 
 US_VENUE_TYPES = ("exchange",)
 CFE_FUTURES = ("VX", "VXM")  # Cboe Futures Exchange's products (VIX futures): not CME Globex's

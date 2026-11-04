@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from liminal_lib.storage import Store
+from liminal_libs.storage import Store
 
 STATIC = Path(__file__).parent / "gui" / "static"
 
@@ -50,7 +50,7 @@ def _asset_of(ticker: str, watched: dict) -> str:
     counted as a double download: 2026-11-03)."""
     if ticker in watched:
         return watched[ticker]
-    from liminal_lib.symbols import resolve
+    from liminal_libs.symbols import resolve
 
     try:
         return resolve(ticker).asset
@@ -87,7 +87,7 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
     out.append(Check("Massive API", "API key", "OK" if keyed else "FAIL",
                      "set" if keyed else "MASSIVE_API_KEY not set" if m else "the Massive plugin is not installed",
                      "" if keyed else "set MASSIVE_API_KEY (environment or .env)" if m
-                     else "pip install -e \".[plugins]\" (liminal-plugin-massive)"))
+                     else "pip install -e \".[plugins]\" (plugin-integrator-massive)"))
     runs = store.runs(50)
     ok = next((r for r in runs if r["status"] == "ok" and r["command"] == "sync"), None)
     out.append(_fresh("Massive API", "Scheduled sync", ok["finished_at"] if ok else None, now, 0.2, 1,
@@ -129,7 +129,7 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
                      f"{len(rules)} tape condition codes with bar rules" if rules else "none stored yet",
                      "" if rules or not have_ticks else
                      "fetched weekly with the Massive sync; until then bars from ticks count every trade"))
-    from liminal_lib.sources import providers
+    from liminal_libs.sources import providers
 
     for name, p in sorted(providers().items()):
         if not p.archival:
@@ -143,8 +143,8 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
         out.append(Check("Public archives", name, status, found + (f"; {p.key_hint} not set" if keyless else ""),
                          f"set {p.key_hint} (from {p.signup or p.title}) for {p.about}"
                          if keyless and rows else ""))
-    from liminal_lib.coverage import same_market
-    from liminal_lib.sources import feed_profiles
+    from liminal_libs.coverage import same_market
+    from liminal_libs.sources import feed_profiles
 
     profiles = feed_profiles(settings)
     assets = {w["ticker"]: w["asset"] for w in store.watchlist()}
@@ -186,7 +186,7 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
                          "replace the fund in gui/world.py (delisted or renamed)" if missing else ""))
 
     # -- icons ----------------------------------------------------------------------
-    from liminal_lib.collector import COMPANY_TYPES
+    from liminal_libs.collector import COMPANY_TYPES
 
     watched = [w["ticker"] for w in store.watchlist(source) if w["asset"] == "stock" and w.get("synced_at")]
     have = store.icon_tickers()
@@ -264,7 +264,7 @@ def checks(store: Store, settings, source: str = "massive", now: datetime | None
 
 def _nyse_rules_check(store: Store, source: str, now: datetime) -> Check:
     """The rule-based NYSE calendar (sessions.py) against the source's official upcoming list."""
-    from liminal_lib.sessions import MarketCalendar
+    from liminal_libs.sessions import MarketCalendar
 
     rules = MarketCalendar()  # rules only, no overrides
     official = store.market_holidays(source)

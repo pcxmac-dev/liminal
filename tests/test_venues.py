@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-from liminal_lib.config import load_settings
-from liminal_app.gui import venues
-from liminal_lib.sessions import ET, MarketCalendar
-from liminal_lib.sources import feed_profiles
-from liminal_lib.storage import Store
-from liminal_lib.symbols import resolve
+from liminal_libs.config import load_settings
+from liminal_charts.gui import venues
+from liminal_libs.sessions import ET, MarketCalendar
+from liminal_libs.sources import feed_profiles
+from liminal_libs.storage import Store
+from liminal_libs.symbols import resolve
 
 KEYS = {"MASSIVE_API_KEY": "k", "ALPACA_API_KEY_ID": "i", "ALPACA_API_SECRET_KEY": "s"}
 NOW = datetime(2026, 10, 27, 11, 0, tzinfo=ET)  # a Tuesday, the regular session
@@ -94,7 +94,7 @@ def test_a_stock_exchange_abroad_is_a_venue_of_its_own(tmp_path):
 
 
 def test_the_delivery_scheme_behind_each_venue(tmp_path):
-    from liminal_lib import sourcing
+    from liminal_libs import sourcing
 
     feeds = feed_profiles(load_settings(env=KEYS, env_file=None))
     with _store(tmp_path) as s:
@@ -117,7 +117,7 @@ def test_a_venues_products_for_the_middle_column(tmp_path):
 
 
 def test_the_chart_app_answers_for_the_exchanges_view(tmp_path):
-    from liminal_app.gui.server import ChartApp
+    from liminal_charts.gui.server import ChartApp
 
     with _store(tmp_path) as s:
         app = ChartApp(s, settings=load_settings(env=KEYS, env_file=None))
@@ -130,7 +130,7 @@ def test_the_chart_app_answers_for_the_exchanges_view(tmp_path):
 def test_the_page_has_its_rail_icon_and_view():
     from pathlib import Path
 
-    static = Path(__file__).resolve().parents[1] / "src" / "liminal_app" / "gui" / "static"
+    static = Path(__file__).resolve().parents[1] / "src" / "liminal_charts" / "gui" / "static"
     html = (static / "index.html").read_text(encoding="utf-8")
     assert 'id="railExchanges"' in html and 'id="viewExchanges"' in html and 'src="venues.js"' in html
     assert "scales:" in (static / "icons.js").read_text(encoding="utf-8")

@@ -12,10 +12,10 @@ from pathlib import Path
 
 import pytest
 
-from liminal_app import cli
-from liminal_lib import host as hosting
-from liminal_lib.config import load_settings
-from liminal_lib.storage import Store
+from liminal_charts import cli
+from liminal_libs import host as hosting
+from liminal_libs.config import load_settings
+from liminal_libs.storage import Store
 
 
 class FakeAttachment:
@@ -90,8 +90,8 @@ def test_the_history_host_ends_after_the_month_in_hand_once_let_go(tmp_path, mon
     (run,), (h,) = runs, FakeHost.made
     assert h.name == "history" and run.action == "run" and run.budget == cli.HISTORY_BUDGET_S and run._stop is h.stop
     # cmd_history's own stop check: the host's event, as well as a halt
-    from liminal_lib import proc
-    from liminal_lib.storage import history
+    from liminal_libs import proc
+    from liminal_libs.storage import history
 
     seen: list = []
 
@@ -154,7 +154,7 @@ def test_sync_by_hand_holds_the_fetcher_and_asks_it_for_a_pass_or_the_symbols(tm
 
 
 def test_the_fetcher_commands_and_its_host_are_the_integrators(tmp_path, monkeypatch):
-    """`liminal host fetcher`, `liminal fetcher ...` and `liminal service ...` answer through the
+    """`liminal-charts host fetcher`, `liminal-charts fetcher ...` and `liminal-charts service ...` answer through the
     integrator (liminal-integrator), installed beside the app; without it they say where it is."""
     import liminal_integrator.cli as integrator_cli
     import liminal_integrator.fetcher as integrator_fetcher
@@ -175,12 +175,12 @@ def test_the_fetcher_commands_and_its_host_are_the_integrators(tmp_path, monkeyp
 
 
 def test_the_fetcher_and_service_commands_apply_an_integrators_name_database_and_plugins(tmp_path, monkeypatch):
-    """`liminal fetcher --name paper --plugins none` and `liminal service install --name ...` apply the
+    """`liminal-charts fetcher --name paper --plugins none` and `liminal-charts service install --name ...` apply the
     integrator's name, database and plugin selection to this process first (the integrator's
     apply_instance, 1.4.0), and load the settings again for it; a name that cannot be one is said."""
     import liminal_integrator.cli as integrator_cli
     import liminal_integrator.fetcher as integrator_fetcher
-    from liminal_lib.sources import registry
+    from liminal_libs.sources import registry
 
     settings = _settings(tmp_path)
     for var in (integrator_fetcher.NAME_VAR, "LIMINAL_DB", registry.SELECTION_VAR):

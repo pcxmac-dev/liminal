@@ -5,13 +5,13 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from liminal_lib import sourcing
-from liminal_lib.config import load_settings
-from liminal_plugin_massive import TIERS
-from liminal_lib.coverage import FeedProfile, day_start_ms, plan
-from liminal_lib.sessions import ET
-from liminal_lib.sources import capacity, feed_profiles, providers, registry
-from liminal_lib.sources.registry import Capability, Limits, Provider, Report
+from liminal_libs import sourcing
+from liminal_libs.config import load_settings
+from plugin_integrator_massive import TIERS
+from liminal_libs.coverage import FeedProfile, day_start_ms, plan
+from liminal_libs.sessions import ET
+from liminal_libs.sources import capacity, feed_profiles, providers, registry
+from liminal_libs.sources.registry import Capability, Limits, Provider, Report
 
 TODAY = date(2026, 10, 27)
 NOW = datetime(2026, 10, 27, 12, 0, tzinfo=ET)
@@ -51,7 +51,7 @@ def test_every_plugin_reports_in_the_same_standard_form():
 def test_a_plugin_that_declares_nothing_reports_the_defaults_and_can_amend_its_report():
     from dataclasses import replace
 
-    from liminal_lib.config import Tier
+    from liminal_libs.config import Tier
 
     tier = Tier("acme-pro", requests_per_minute=60, history_years=5)
     plain = Provider(name="acme", title="Acme", build=lambda s, b: None, assets=frozenset({"stock", "fx"}))

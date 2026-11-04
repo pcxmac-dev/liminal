@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from liminal_app.gui import server
+from liminal_charts.gui import server
 
 APP_JS = (Path(server.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
 

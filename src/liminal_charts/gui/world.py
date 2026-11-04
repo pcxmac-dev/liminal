@@ -174,7 +174,7 @@ FX_HOURS = (time(8, 0), time(17, 0))  # a dealing centre's business hours, local
 def _calendar(name: str):
     """An exchange's own calendar: the library's (sessions.world_calendar, built once a process;
     the sessions of a listing outside the US will read the same)."""
-    from liminal_lib.sessions import world_calendar
+    from liminal_libs.sessions import world_calendar
 
     return world_calendar(name)
 
@@ -262,7 +262,7 @@ def fx_windows(e: Exchange, start: datetime, days: int = 14) -> list[tuple[datet
     """When a dealing centre is active from `start` on: its business hours (FX_HOURS local, on its
     local exchange's business days) inside the FX week as the data source quotes it (Sunday 17:00
     to Friday 17:00 New York; holiday early stops included). Adjacent pieces are merged."""
-    from liminal_lib.sessions import ET, MarketCalendar
+    from liminal_libs.sessions import ET, MarketCalendar
 
     from zoneinfo import ZoneInfo
 

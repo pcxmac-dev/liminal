@@ -31,8 +31,8 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 import pandas as pd
 
-from liminal_lib.calc.derivatives import Model, apply_model, segments
-from liminal_lib.sources.dataset import EPOCH
+from liminal_libs.calc.derivatives import Model, apply_model, segments
+from liminal_libs.sources.dataset import EPOCH
 from .bars import (CALENDAR, COLUMNS, MERGED, MODEL_SOURCES, PERIOD_SECONDS, PRICE_BASED, TIME_TYPES, Series, Style,
                    _aggregate, _BoundedCache, _filtered, _regular_close, _SizedCache, bar_end, bin_keys, calendar_key,
                    decimals, epoch_ms,
@@ -455,7 +455,7 @@ class WindowReader:
         """Every day of the series: the feeds' official daily bars first, the days built here where
         none was sent (one feed per day, best first), dated as each market dates its days. Not the
         days of a feed of one venue's share (IEX, Blue Ocean's nights) where a whole-market feed is there."""
-        from liminal_lib.live import PARTIAL_FEEDS
+        from liminal_libs.live import PARTIAL_FEEDS
 
         feeds = [f for f in feeds if f not in PARTIAL_FEEDS] or feeds
         with self.engine.lock:
@@ -495,7 +495,7 @@ class WindowReader:
         hit = self._levels.get(key)
         if hit and time.monotonic() - hit[0] < HISTORY_TTL_S:
             return hit[1]
-        from liminal_lib import datasets
+        from liminal_libs import datasets
 
         name, series, _ = spec
         try:
@@ -533,7 +533,7 @@ class WindowReader:
         days) and the dataset has, and sets the mean of those daily closes (the dataset's own
         measure) against the dataset's value: {months, median, max (percent, absolute), worst (the
         month, ms), flagged ([[month ms, percent], ...] beyond HISTORY_TOLERANCE_PCT), agrees}."""
-        from liminal_lib import datasets
+        from liminal_libs import datasets
 
         got = self._history_values(s.ticker)
         if got is None:
@@ -796,7 +796,7 @@ class WindowReader:
                key: str, given: dict | None = None, costs=None, long_only: bool = False) -> dict:
         """A scheme over the bars at the level starting from `from_ms` to `to_ms` (both included),
         with the warm-up bars before them its settings need, and nothing further back."""
-        from liminal_lib.calc import schemes as sc
+        from liminal_libs.calc import schemes as sc
 
         scheme = sc.SCHEMES.get(key)
         if scheme is None:
@@ -914,7 +914,7 @@ class WindowReader:
         """Volume and trades by price in the bar at `at_ms` (the newest without), as the series
         path gives it (BarEngine.profile), from that bar's window alone: the bar, its day, and the
         trades or finer bars inside it."""
-        from liminal_lib.calc.profile import from_bars, from_trades, nice_step
+        from liminal_libs.calc.profile import from_bars, from_trades, nice_step
         from .bars import _money, bar_end, calendar_key
 
         s = self.series(source, ticker)
@@ -992,7 +992,7 @@ class WindowReader:
         highlight, or the bars in view), spread from the finest bars that keep the read under RANGE_PROFILE_BARS (1-second,
         minutes, 30-minute bins, days), with its major prices (calc.profile.major_prices): the point of
         control, the value area, the high-volume nodes. Derived (bars spread over their ranges)."""
-        from liminal_lib.calc.profile import from_bars, major_prices, nice_step
+        from liminal_libs.calc.profile import from_bars, major_prices, nice_step
         from .bars import _money, bar_end, regular_mask
 
         s = self.series(source, ticker)

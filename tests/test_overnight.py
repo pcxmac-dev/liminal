@@ -9,15 +9,15 @@ from datetime import date, datetime, time
 import pandas as pd
 import pytest
 
-from liminal_lib import collector
-from liminal_lib.config import load_settings
-from liminal_lib.coverage import FeedProfile
-from liminal_lib.errors import NotEntitled
-from liminal_app.gui.bars import BarEngine, MERGED, calendar_key, in_session, session_hours
-from liminal_app.gui.markets import symbol_sessions
-from liminal_lib.sessions import ET, MarketCalendar
-from liminal_lib.sources import build_source, feed_profiles, providers, rate_window
-from liminal_lib.storage import Store
+from liminal_libs import collector
+from liminal_libs.config import load_settings
+from liminal_libs.coverage import FeedProfile
+from liminal_libs.errors import NotEntitled
+from liminal_charts.gui.bars import BarEngine, MERGED, calendar_key, in_session, session_hours
+from liminal_charts.gui.markets import symbol_sessions
+from liminal_libs.sessions import ET, MarketCalendar
+from liminal_libs.sources import build_source, feed_profiles, providers, rate_window
+from liminal_libs.storage import Store
 
 KEYS = {"MASSIVE_API_KEY": "k", "ALPACA_API_KEY_ID": "i", "ALPACA_API_SECRET_KEY": "s"}
 
@@ -119,9 +119,9 @@ def test_only_feeds_with_daily_bars_are_asked_for_them():
 
 
 def test_tiingo_scans_its_plan_and_reports_the_blue_ocean_add_on(store):
-    from liminal_app import cli
-    from liminal_lib import sourcing
-    import liminal_plugin_tiingo as tiingo  # its scan, with a date given
+    from liminal_charts import cli
+    from liminal_libs import sourcing
+    import plugin_integrator_tiingo as tiingo  # its scan, with a date given
 
     class Client:
         def __init__(self):
@@ -156,8 +156,8 @@ def test_tiingo_scans_its_plan_and_reports_the_blue_ocean_add_on(store):
 
 
 def test_a_stock_opened_in_the_chart_goes_on_the_overnight_feed(tmp_path):
-    from liminal_app.gui.server import ChartApp
-    from liminal_lib.symbols import resolve
+    from liminal_charts.gui.server import ChartApp
+    from liminal_libs.symbols import resolve
 
     with Store(tmp_path / "m.db") as store:
         store.watch_spec("massive", resolve("AAPL::XNAS"))
@@ -171,8 +171,8 @@ def test_a_stock_opened_in_the_chart_goes_on_the_overnight_feed(tmp_path):
 
 
 def test_a_sync_scans_a_feed_weekly_and_only_with_something_to_collect(store):
-    from liminal_app import cli
-    from liminal_lib import sourcing
+    from liminal_charts import cli
+    from liminal_libs import sourcing
 
     asked = []
     source = type("Source", (), {})()

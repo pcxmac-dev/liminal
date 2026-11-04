@@ -5,7 +5,11 @@ with what settings, and what was known at the time, so charts, analysis and back
 backtest can never see the future.
 
 The project was named massive until 2026-11-01 (PROGRESS.md: "Renamed liminal"); the Massive data
-provider, its plugin `massive`, keeps its name.
+provider, its plugin `massive`, keeps its name. The app is `liminal-charts` (the package
+`liminal_charts`, the command `liminal-charts`) since 2026-11-03, the naming by system (the user): apps
+are `liminal-<app>` (liminal-charts, liminal-integrator; liminal-platform, liminal-login, liminal-plugins
+at 0.3.0), the one library `liminal-libs`, plugins `plugin-<app>-<name>` (plugin-integrator-massive,
+plugin-platform-claude, plugin-charts-analysis at 0.3.0); liminal-libs' INTEGRATION.md is the brief.
 
 ## Principles
 
@@ -47,7 +51,7 @@ write: the frames built above the bar are rebuilt and the chart's caches see it.
 An entry can be released (put back) without losing the record that it was pruned, and a released
 entry is not pruned again. Pruning never mixes feeds: a feed's series is judged on its own. Reads of
 a series as it stood at a past moment (`as_of`) include bad data: it was there. (`baddata.py`;
-`liminal pruned`; the chart app's Data panel.)
+`liminal-charts pruned`; the chart app's Data panel.)
 
 What constitutes bad data (rules 1 to 3 are checked whenever a series is derived: after each
 symbol's fetch and in the live recorder, from where it changed; `pruned scan` checks stored history):
@@ -123,7 +127,7 @@ live recorder, whose "what changed since" read every bar's `stored_at`, had read
   up to 30 s, then are answered busy (503). The live recorder holds at most 64 MB of trades while the
   database refuses writes. numpy loads with one thread: OpenBLAS committed 757 MB per process, per
   CPU thread's buffer, almost none of it used.
-- **Measured apart.** `liminal admin memory` shows each app process's own memory
+- **Measured apart.** `liminal-charts admin memory` shows each app process's own memory
   (private bytes, working set) and disk reads, apart from Windows' file cache: active (held) and
   standby (handed back whenever anything needs it, counted as available).
 
@@ -182,24 +186,24 @@ concept is to be able to use the app, which connects to the fetcher for database
 app needs to funnel requests through the fetcher to the databases"; "i can look at the fetcher to
 see what the data looks like, i can use the 'app' to see what i want to do"; "make sure that the
 library calls contribute to code reuse"; "lets move the fetcher in to it's own repo called
-liminal-integrator"; "all lib calls will point to liminal-lib".
+liminal-integrator"; "all lib calls will point to liminal-libs".
 
-- **liminal-lib** (`liminal_lib`, [its repository](https://github.com/pcxmac-dev/liminal-lib)): every
+- **liminal-libs** (`liminal_libs`, [its repository](https://github.com/pcxmac-dev/liminal-libs)): every
   module of the app but its own (`gui/`, `cli.py`, `deps.py`, `trading/`): the stores, the plugin
   contract and registry, the collector and the scheme, the calendars, the hosts, the live recorder,
   the composites and derived frames, the datasets, the publishers, the settings, the log
   (`logs.py`). The two places the library reached into the GUI were turned around: the regular
   session's mask and close are the library's (`sessions.regular_mask`, `regular_close`), the market
   proxies are a parameter of `collector.sync` (`proxies`, the app's `gui/world.PROXIES`). The app
-  (package `liminal_app` since 2026-11-02, the user: "lets rename the app to liminal-app", "not
+  (package `liminal_charts` since 2026-11-02, the user: "lets rename the app to liminal-charts", "not
   liminal", "refactor"), its tests, the integrator and every plugin import the library as
-  `liminal_lib`; the alias package `liminal` that once mapped `liminal.<module>` onto it is gone. The
+  `liminal_libs`; the alias package `liminal` that once mapped `liminal.<module>` onto it is gone. The
   GitHub-hosted datasets' submodules stay in the app's repository (`LIMINAL_DATA_REPOS`). The suite
   proper still runs here, with the library installed; it moves there module by module.
 - **liminal-integrator** (`liminal_integrator`, [its repository](https://github.com/pcxmac-dev/liminal-integrator)):
   the fetcher, the resident host `fetcher` (one per database, `host.FETCHER`), up while someone holds
   it and gone once nobody does. `lib.py` is the one place naming the library (what it uses of
-  `liminal_lib`, by name; a piece it needs is added to the library, never written twice), and the
+  `liminal_libs`, by name; a piece it needs is added to the library, never written twice), and the
   app's page is its one dependency outside it (`lib.page`: `gui/server.serve_fetcher`).
   - *The requests* (`storage/requests.py`, the table `fetch_requests`): one row per ask (who asked:
     a chart page that opened the symbol, the request box on a page, the command line, the fetcher's
@@ -263,7 +267,7 @@ liminal-integrator"; "all lib calls will point to liminal-lib".
     stays one per database, the machine's ledgers shared by key. The integrator's `cli.apply_instance`
     applies the three before the settings load; the app's `fetcher` and `service` commands do the
     same (`cli._instance`) and load the settings again when anything changed.
-- **The app** (this repository): the chart front (`gui/front.py`, `liminal gui`): serves the chart page
+- **The app** (this repository): the chart front (`gui/front.py`, `liminal-charts gui`): serves the chart page
   and its scripts, attaches to the fetcher at the first page (`host.attach_fetcher`, started if none
   answers; its port learnt from its status over the pipe) and passes every `/api/` request of its
   pages to it, the profile cookie and the app's own headers with it, where it came from checked here
@@ -282,7 +286,7 @@ liminal-integrator"; "all lib calls will point to liminal-lib".
 - **The workspace** (the user, 2026-11-02: "common, app and store are the required folders, plugins
   as well, make sure the app is in the app folder, make sure the integrator is in the store w/ the
   databases, make sure plugins get loaded in to plugins, and lib is in common"): one folder holds
-  the four (`liminal_lib.layout`: `home`, LIMINAL_HOME or the folder above the library's checkout
+  the four (`liminal_libs.layout`: `home`, LIMINAL_HOME or the folder above the library's checkout
   when it has them): `common/` the library's checkout, `app/` the chart app's (its .venv inside),
   `store/` the integrator's with the databases in `store/data/` (`layout.data_dir`, the default
   main file; LIMINAL_DB still overrides), `plugins/` a checkout per plugin, each loaded from there
@@ -297,7 +301,7 @@ liminal-integrator"; "all lib calls will point to liminal-lib".
 Every data provider the fetcher uses is a plugin: one `FeedPlugin` (`sources/plugin.py`, plugin
 API 2.0; the `Provider` record of `sources/registry.py` before it, a subclass of the same class)
 holding everything the app knows about it, so nothing else names a provider to decide how to treat
-it. Every one is a package of its own since 2026-11-01 (`liminal-plugin-<name>`, a repository each
+it. Every one is a package of its own since 2026-11-01 (`plugin-integrator-<name>`, a repository each
 under pcxmac-dev, installed by the app's `plugins` extra): Massive with its headlines publisher,
 Alpaca with its overnight feed on Blue Ocean, Bitstamp, Coinbase, Bitfinex, Tiingo with its forex
 feed, Cboe; the publishers Federal (the federal agencies in one plugin: the Fed, New York Fed, SEC,
@@ -323,7 +327,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
 - **Keys and settings.** Keys stay in the user's environment variables only. `Settings.env` holds
   the variables the plugins declare (never in a repr), read from the saved user
   variables too (`config.saved_names`). `tools/set-key.ps1` asks the app for the plugins
-  (`liminal plugins --json`: names and whether set, never a value) and offers a
+  (`liminal-charts plugins --json`: names and whether set, never a value) and offers a
   menu per provider: set, replace or remove its keys, typed hidden.
 - **Read everywhere from the registry**: the sync's feed list and `--source` choices, feed profiles
   and the one-download-per-span rule, the Fetcher's tabs, rows, limits and health, `status`, `feeds`,
@@ -490,7 +494,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     `fetch(ctx, job)` one of them (`Fetched`: requests, rows, bytes, when asked again). The fetch
     queue (`fetch_queue` in the main file, `storage/queue.py`) holds one row per resource by plugin,
     part, kind and key: waiting, running (with its process), done, failed or held. `runner.py`
-    gives each such plugin a worker of its own (`liminal fetcher`), taking only
+    gives each such plugin a worker of its own (`liminal-charts fetcher`), taking only
     its own jobs and stopping between two for the fetching pause, its kill or pause, a StopRun; one
     plugin's failure stops its worker alone. Until a plugin fetches on its own, the app's paths keep
     the same queue: the bars sync (each symbol it plans waiting, then running, done or failed), the
@@ -501,7 +505,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     Step 1 of the plan: no plugin fetches on its own yet; the datasets, the news sources, the
     release documents and the feeds move into their plugins next, one at a time.
   - **2.0** (2026-11-03; the user: "all the plugins under liminal should basically follow
-    inheritance/oop paradigm") is the class contract (`sources/plugin.py`, liminal-lib 1.3.0). A
+    inheritance/oop paradigm") is the class contract (`sources/plugin.py`, liminal-libs 1.3.0). A
     plugin is an instance of a `FeedPlugin` or `PublisherPlugin` subclass (an `AssistantPlugin`'s,
     `assistants/plugin.py`): what it declares is a class attribute of the field's name (`name`,
     `assets`, `keys`, `provides` ...), what it does a method of the callback's name with `self`
@@ -562,7 +566,7 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     `version` empty shows its distribution's version. Its keys are declared as every plugin's
     (`KeyVar`), so the key script and the Plugins view offer them unasked.
 - **Splitting the built-ins into packages: the plan** (the user, 2026-10-31: "Yes, Cboe pilot
-  first"; Cboe split; 2026-11-01: "all the plugins should be liminal-plugin-xxxx and have a separate
+  first"; Cboe split; 2026-11-01: "all the plugins should be plugin-integrator-xxxx and have a separate
   repo": the others next, one repository each).
   1. *In this repository first*, so each plugin can leave without taking app code with it (each a
      minor of the API where it adds to the contract):
@@ -598,37 +602,37 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
      `.[dev,plugins]`; a package's CI installs the app from git (`MASSIVE_REF`).
   3. *A pilot first*: Cboe (one keyless feed, a closed archive, the smallest), to prove the path
      (install, entry point, version shown, its tests, its CI) before the others. Done 2026-10-31:
-     [liminal-plugin-cboe](https://github.com/pcxmac-dev/liminal-plugin-cboe) 1.2.0, its plan
+     [plugin-integrator-cboe](https://github.com/pcxmac-dev/plugin-integrator-cboe) 1.2.0, its plan
      and caps out of `config.PUBLIC_FEEDS` into it, `sources/plugins/cboe.py` gone; here it is
-     installed editable from its clone beside the app's (`C:\Users\ciara\source\liminal-plugin-cboe`).
-  4. *Then each of the others* (the user, 2026-11-01: "all the plugins should be liminal-plugin-xxxx
-     and have a separate repo"), the same way, one at a time: `liminal-plugin-bitstamp` 1.3.0
-     (2026-11-01, its trade stream with it); `liminal-plugin-coinbase` 1.3.0 and
-     `liminal-plugin-bitfinex` 1.2.0 (2026-11-01: `sources.archive.venue_view` reads the plan and
-     caps from the plugin's record, no longer from `config.PUBLIC_FEEDS`); `liminal-plugin-tiingo`
+     installed editable from its clone beside the app's (`C:\Users\ciara\source\plugin-integrator-cboe`).
+  4. *Then each of the others* (the user, 2026-11-01: "all the plugins should be plugin-integrator-xxxx
+     and have a separate repo"), the same way, one at a time: `plugin-integrator-bitstamp` 1.3.0
+     (2026-11-01, its trade stream with it); `plugin-integrator-coinbase` 1.3.0 and
+     `plugin-integrator-bitfinex` 1.2.0 (2026-11-01: `sources.archive.venue_view` reads the plan and
+     caps from the plugin's record, no longer from `config.PUBLIC_FEEDS`); `plugin-integrator-tiingo`
      1.4.0 (2026-11-01, its forex feed and its Blue Ocean poller with it: API 1.10 gives a poller
      the session calendar (`sources.stream.session_at`) and a plugin the machine-wide ledger
      (`sources.registry.MachineLedger`); its key read from `Settings.env`, the app's
      `tiingo_api_key` field and `config.PUBLIC_FEEDS` gone); the dataset libraries
-     `liminal-plugin-french` 1.1.0 and `liminal-plugin-datahub` 1.1.0 (2026-11-01; Datahub's
+     `plugin-integrator-french` 1.1.0 and `plugin-integrator-datahub` 1.1.0 (2026-11-01; Datahub's
      mirrors' git submodules stay in the app's `data/github/`, where `LIMINAL_DATA_REPOS` points:
-     the plugin names each repository and file); the publishers `liminal-plugin-federal` 1.4.0
+     the plugin names each repository and file); the publishers `plugin-integrator-federal` 1.4.0
      (2026-11-01, the six agencies with it; New York time from `sources.archive.ET`);
-     `liminal-plugin-alpaca` 1.4.0 (2026-11-01, Blue Ocean and the IEX stream with it: API 1.11 gives a
+     `plugin-integrator-alpaca` 1.4.0 (2026-11-01, Blue Ocean and the IEX stream with it: API 1.11 gives a
      plugin its own settings, `Provider.settings` built when the app's load and reached with
      `Settings.plugin(name)`, so Alpaca's keys, plan, feed, venue and caps left `config.py`);
-     `liminal-plugin-massive` 1.4.0 (2026-11-01, its headlines with it; the last: its key, plans
+     `plugin-integrator-massive` 1.4.0 (2026-11-01, its headlines with it; the last: its key, plans
      (`TIERS`, `tier_for`) and caps are its own settings too, the app's base `Settings` keep no
      feed's plan (`NO_PLAN` until a feed's view sets one), `plan` is the capabilities scan of one
      feed, and `sources/plugins/` is empty).
 
-  The repositories, under `pcxmac-dev`, all made: `liminal-plugin-massive` (Massive and its
-  headlines publisher, on its key; made), `liminal-plugin-alpaca` (Alpaca with its overnight feed on Blue
-  Ocean, reached through Alpaca's API, keys and limits; made), `liminal-plugin-tiingo` (Tiingo with its
-  forex feed: one key and account; made), `liminal-plugin-coinbase` (made), `liminal-plugin-bitstamp` (made),
-  `liminal-plugin-bitfinex` (made), `liminal-plugin-cboe` (made), and the publishers `liminal-plugin-federal`
-  (the federal agencies, one plugin; made), the dataset libraries `liminal-plugin-french` (made) and
-  `liminal-plugin-datahub` (made), and, later, a state regulators' plugin of its own.
+  The repositories, under `pcxmac-dev`, all made: `plugin-integrator-massive` (Massive and its
+  headlines publisher, on its key; made), `plugin-integrator-alpaca` (Alpaca with its overnight feed on Blue
+  Ocean, reached through Alpaca's API, keys and limits; made), `plugin-integrator-tiingo` (Tiingo with its
+  forex feed: one key and account; made), `plugin-integrator-coinbase` (made), `plugin-integrator-bitstamp` (made),
+  `plugin-integrator-bitfinex` (made), `plugin-integrator-cboe` (made), and the publishers `plugin-integrator-federal`
+  (the federal agencies, one plugin; made), the dataset libraries `plugin-integrator-french` (made) and
+  `plugin-integrator-datahub` (made), and, later, a state regulators' plugin of its own.
 
 ## AI assistants are plugins (2026-11-03)
 
@@ -638,7 +642,7 @@ Codex via API key, an email / account name", "used to evaluate certain standardi
 other plugins or apps", "extensible, and allow for higher order evaluation", supporting free plans,
 with each vendor's plans and rates written in and a way to find out when they change.
 
-- **The kind** (liminal-lib 1.3.0, `liminal_lib.assistants`): `AssistantPlugin` is the third kind of
+- **The kind** (liminal-libs 1.3.0, `liminal_libs.assistants`): `AssistantPlugin` is the third kind of
   plugin, on the platform's base (`PlatformPlugin`): its `vendor`, its `assistant` (an `Assistant`
   subclass: the vendor's headers, request body, answer parsing, error shapes and rate-limit headers;
   `ResponsesAssistant` for the OpenAI-shaped Responses API), its tables (`plans`, the free one first;
@@ -647,8 +651,8 @@ with each vendor's plans and rates written in and a way to find out when they ch
   the email or account name, typed in the open, sent to the vendor only as a digest where the API
   takes one), its plan variables (`<NAME>_PLAN`, `_MODEL`, `_REQUESTS_PER_DAY`, `_TOKENS_PER_DAY`) and its
   options (`_MAX_OUTPUT_TOKENS`, `_EFFORT`) are derived from the tables; its settings are an
-  `AssistantSettings` (never shown with the key or the account). The packages: platform-plugin-claude
-  (Anthropic's Messages API), platform-plugin-grok (xAI's Responses API), platform-plugin-codex
+  `AssistantSettings` (never shown with the key or the account). The packages: plugin-platform-claude
+  (Anthropic's Messages API), plugin-platform-grok (xAI's Responses API), plugin-platform-codex
   (OpenAI's Responses API), each with the vendor's tables verified 2026-11-03.
 - **Arguments** (`assistants/arguments.py`): a `Question` (the question, context items such as headlines,
   an assessment, a report or plain text, and the answer form: text, a verdict on a scale, or JSON
@@ -676,14 +680,14 @@ with each vendor's plans and rates written in and a way to find out when they ch
 - **The app**: the "AI assistants" group on the Plugins view (Setup with the key hidden and the
   account in the open, Plan with the plan, model and caps, the written-in tables, Limits, Connect,
   Usage today here and on the machine, the last answers, a Try it box), `POST /api/ai/evaluate` and
-  `GET /api/ai/evaluations` (the fetcher's page serves them too), `liminal ai ask|models|connect|evaluations|judge`,
+  `GET /api/ai/evaluations` (the fetcher's page serves them too), `liminal-charts ai ask|models|connect|evaluations|judge`,
   the key script's assistants section.
 
 ## Stocks abroad, VIX futures and more forex (2026-11-02)
 
 The user: "are there any other public sources for 'bars'/data for stocks on foreign exchanges?",
 "lets include futures and forex/currencies", "update existing plugins, add exchanges where applicable
-and symbols, and if new sources, create a new plugin". Built with liminal-lib 1.2.0/1.2.1 (plugin
+and symbols, and if new sources, create a new plugin". Built with liminal-libs 1.2.0/1.2.1 (plugin
 API 1.12), liminal-integrator 1.2.0 and this app:
 
 - **One name per listing.** A stock listed outside the US is stored as `TICKER.SUFFIX` with the
@@ -711,17 +715,17 @@ API 1.12), liminal-integrator 1.2.0 and this app:
   group of its own (`x-xtks`); US equities keep US listings alone; the stocks tab names each listing's
   exchange (`exchangeName`), the directory spanning every source's listings (`Store.directory()`,
   one row per listing); a listing's freshness, horizon and next due moment follow its exchange's days.
-- **The plugins.** `liminal-plugin-tiingo` 1.5.0 carries Shanghai's and Shenzhen's A-shares (Tiingo's
+- **The plugins.** `plugin-integrator-tiingo` 1.5.0 carries Shanghai's and Shenzhen's A-shares (Tiingo's
   bare codes, from 2007; `TIINGO_LISTINGS=on` lists them from its supported-tickers file);
-  `liminal-plugin-cboe` 1.3.0 adds a second feed, `cboefutures`: Cboe's daily file of each VX
+  `plugin-integrator-cboe` 1.3.0 adds a second feed, `cboefutures`: Cboe's daily file of each VX
   contract, named by its settlement date (the Wednesday 30 days before the next month's third Friday,
-  holiday-shifted), so `VX1!` rolls by volume from them; new packages `liminal-plugin-twse` 1.0.0
+  holiday-shifted), so `VX1!` rolls by volume from them; new packages `plugin-integrator-twse` 1.0.0
   (every Taiwan Stock Exchange listing's daily bars from TWSE's open data, no key),
-  `liminal-plugin-b3` (B3's COTAHIST files, no key), `liminal-plugin-jquants` (JPX's J-Quants API
+  `plugin-integrator-b3` (B3's COTAHIST files, no key), `plugin-integrator-jquants` (JPX's J-Quants API
   V2, an API key in a header: V1 and its refresh tokens were discontinued on 2026-06-01; the free
-  plan twelve weeks late), `liminal-plugin-alphavantage`
+  plan twelve weeks late), `plugin-integrator-alphavantage`
   (stocks on London, Toronto, Xetra, Bombay, Shanghai and Shenzhen, a free key, the latest 100 days
-  accumulating run by run) and `liminal-plugin-twelvedata` (forex minutes on a free key, its own
+  accumulating run by run) and `plugin-integrator-twelvedata` (forex minutes on a free key, its own
   market like Tiingo's forex). Deferred, with why, in the plan of 2026-11-02: NSE/BSE (bot
   protection, terms), KRX (registration terms), Cboe Europe files, Deutsche Börse's dataset (tens of
   GB, needs a minute-bar foreign calendar), TrueFX/HistData/Dukascopy (accounts or terms), the
@@ -743,7 +747,7 @@ API 1.12), liminal-integrator 1.2.0 and this app:
   pandas 3.1 calendar failure. The fetcher assesses a request even offline, so the stack shows which
   feeds it would ask; a request is put under its stored name however it is typed
   (`server.stored_ticker`, the integrator's `request` too); a listing abroad's plan is one job per
-  feed (liminal-integrator 1.2.1 to 1.2.3, liminal-lib 1.2.2 to 1.2.4, Tiingo 1.5.1, B3 1.0.1, Cboe
+  feed (liminal-integrator 1.2.1 to 1.2.3, liminal-libs 1.2.2 to 1.2.4, Tiingo 1.5.1, B3 1.0.1, Cboe
   1.3.1).
 
 ## The Federal plugin (2026-10-30)
@@ -752,7 +756,7 @@ The user: "lets take a look at all regulatory agencies that affect corporations 
 whats already in place on this app and merge everything in to a Federal plugin, from news feeds to
 edgar access, to everything that matters"; "if there are state regulatory agencies, those would be
 in another plugin"; "if api keys are required we can address that". One publisher plugin,
-`liminal-plugin-federal` (a package of its own since 2026-11-01), a module per agency, each a part
+`plugin-integrator-federal` (a package of its own since 2026-11-01), a module per agency, each a part
 (`part_of="federal"`, API 1.2) with
 its own scrape checks. Official feeds and documented APIs only, never a page; nothing stored moves
 (gov/gov.db, datasets/cftc.db stay); new data in new files beside them. It holds three kinds:
@@ -822,7 +826,7 @@ sync from its next run. An offline copy refuses: it shares the user's real varia
 ## Which source delivers what (2026-10-27)
 
 The user's order of collection: **#1 daily bars, #2 1-minute bars, #3 1-second bars**. `sourcing.py`
-reads every provider's standard report and makes the delivery plan; `liminal sourcing` shows the
+reads every provider's standard report and makes the delivery plan; `liminal-charts sourcing` shows the
 reports and the plan (no requests).
 
 - **Cost** is what a job spends of a subscription's limits (its price is fixed): requests per
@@ -847,7 +851,7 @@ reports and the plan (no requests).
   the bars since 2016.
 - The current session is the live streams' (only for the symbols open on a chart: `LIVE_STREAMS`).
 - **Capability scans.** A plugin may scan what its plan really gives (`scan`: a few requests);
-  each feed's sync runs it once a week (`cli.SCAN_DAYS`), `liminal capabilities`
+  each feed's sync runs it once a week (`cli.SCAN_DAYS`), `liminal-charts capabilities`
   on demand, and its report shows the answers. Tiingo's (2026-10-27): daily bars, IEX's 1-minute
   bars, forex and crypto bars on the free plan; Blue Ocean's overnight bars refused (a $9 a month
   add-on). Only its daily bars are collected.
@@ -1023,7 +1027,7 @@ refresh, so the French library's revisions are lost.
    composite builds, quality scores, audits and dataset quality priors; derived rows point to it.
    Bars built from ticks live apart from the feed's own in `built_bars` (reads combine them, built
    first); the composite has its own file; indicators (computed on request) return their settings,
-   code version and whether they look ahead. `liminal provenance [product] -v`.
+   code version and whether they look ahead. `liminal-charts provenance [product] -v`.
    Bars built before provenance moved apart under "before-provenance" records.
 5. **Calculations out of the GUI.** Resampling, calendar grouping, chart-type construction and
    statistics move to `calc/`; `gui/bars.py` becomes a thin adapter; the projection uses public

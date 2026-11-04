@@ -3,15 +3,15 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "liminal-app"
+name = "liminal-charts"
 version = "0.2.0"
-description = "The Liminal chart app: the chart page and its data views, served by a front that funnels every request to the fetcher (liminal-integrator), on liminal-lib."
+description = "The Liminal chart app: the chart page and its data views, served by a front that funnels every request to the fetcher (liminal-integrator), on liminal-libs."
 readme = "README.md"
 requires-python = ">=3.10"
-# the library (the stores, the plugin contract, the collector, the scheme: liminal-lib) brings the
+# the library (the stores, the plugin contract, the collector, the scheme: liminal-libs) brings the
 # data dependencies (pandas below 3.1, numpy, requests, exchange_calendars, duckdb, pymongo, plotly)
 dependencies = [
-    "liminal-lib @ git+https://github.com/pcxmac-dev/liminal-lib@release/0.2.0",  # 1.3.1: the class contract (API 2.0), the plugin selection
+    "liminal-libs @ git+https://github.com/pcxmac-dev/liminal-libs@release/0.2.0",  # 1.4.0: the class contract (API 2.0), the plugin selection, renamed
 ]
 
 [project.optional-dependencies]
@@ -20,35 +20,35 @@ dev = ["pytest>=8"]
 integrator = ["liminal-integrator @ git+https://github.com/pcxmac-dev/liminal-integrator@release/0.2.0"]  # 1.4.0: --plugins, --name
 # the plugins released on their own, from their tags (docs/ARCHITECTURE.md: Providers are plugins)
 plugins = [
-    "liminal-plugin-cboe @ git+https://github.com/pcxmac-dev/liminal-plugin-cboe@release/0.2.0",
-    "liminal-plugin-bitstamp @ git+https://github.com/pcxmac-dev/liminal-plugin-bitstamp@release/0.2.0",
-    "liminal-plugin-coinbase @ git+https://github.com/pcxmac-dev/liminal-plugin-coinbase@release/0.2.0",
-    "liminal-plugin-bitfinex @ git+https://github.com/pcxmac-dev/liminal-plugin-bitfinex@release/0.2.0",
-    "liminal-plugin-tiingo @ git+https://github.com/pcxmac-dev/liminal-plugin-tiingo@release/0.2.0",
-    "liminal-plugin-french @ git+https://github.com/pcxmac-dev/liminal-plugin-french@release/0.2.0",
-    "liminal-plugin-datahub @ git+https://github.com/pcxmac-dev/liminal-plugin-datahub@release/0.2.0",
-    "liminal-plugin-federal @ git+https://github.com/pcxmac-dev/liminal-plugin-federal@release/0.2.0",
-    "liminal-plugin-alpaca @ git+https://github.com/pcxmac-dev/liminal-plugin-alpaca@release/0.2.0",
-    "liminal-plugin-massive @ git+https://github.com/pcxmac-dev/liminal-plugin-massive@release/0.2.0",
-    "liminal-plugin-twse @ git+https://github.com/pcxmac-dev/liminal-plugin-twse@release/0.2.0",
-    "liminal-plugin-b3 @ git+https://github.com/pcxmac-dev/liminal-plugin-b3@release/0.2.0",
-    "liminal-plugin-alphavantage @ git+https://github.com/pcxmac-dev/liminal-plugin-alphavantage@release/0.2.0",
-    "liminal-plugin-jquants @ git+https://github.com/pcxmac-dev/liminal-plugin-jquants@release/0.2.0",
-    "liminal-plugin-twelvedata @ git+https://github.com/pcxmac-dev/liminal-plugin-twelvedata@release/0.2.0",
-    # the AI assistants (platform plugins: liminal_lib.assistants), each on its own key
-    "platform-plugin-claude @ git+https://github.com/pcxmac-dev/platform-plugin-claude@release/0.2.0",
-    "platform-plugin-grok @ git+https://github.com/pcxmac-dev/platform-plugin-grok@release/0.2.0",
-    "platform-plugin-codex @ git+https://github.com/pcxmac-dev/platform-plugin-codex@release/0.2.0",
+    "plugin-integrator-cboe @ git+https://github.com/pcxmac-dev/plugin-integrator-cboe@release/0.2.0",
+    "plugin-integrator-bitstamp @ git+https://github.com/pcxmac-dev/plugin-integrator-bitstamp@release/0.2.0",
+    "plugin-integrator-coinbase @ git+https://github.com/pcxmac-dev/plugin-integrator-coinbase@release/0.2.0",
+    "plugin-integrator-bitfinex @ git+https://github.com/pcxmac-dev/plugin-integrator-bitfinex@release/0.2.0",
+    "plugin-integrator-tiingo @ git+https://github.com/pcxmac-dev/plugin-integrator-tiingo@release/0.2.0",
+    "plugin-integrator-french @ git+https://github.com/pcxmac-dev/plugin-integrator-french@release/0.2.0",
+    "plugin-integrator-datahub @ git+https://github.com/pcxmac-dev/plugin-integrator-datahub@release/0.2.0",
+    "plugin-integrator-federal @ git+https://github.com/pcxmac-dev/plugin-integrator-federal@release/0.2.0",
+    "plugin-integrator-alpaca @ git+https://github.com/pcxmac-dev/plugin-integrator-alpaca@release/0.2.0",
+    "plugin-integrator-massive @ git+https://github.com/pcxmac-dev/plugin-integrator-massive@release/0.2.0",
+    "plugin-integrator-twse @ git+https://github.com/pcxmac-dev/plugin-integrator-twse@release/0.2.0",
+    "plugin-integrator-b3 @ git+https://github.com/pcxmac-dev/plugin-integrator-b3@release/0.2.0",
+    "plugin-integrator-alphavantage @ git+https://github.com/pcxmac-dev/plugin-integrator-alphavantage@release/0.2.0",
+    "plugin-integrator-jquants @ git+https://github.com/pcxmac-dev/plugin-integrator-jquants@release/0.2.0",
+    "plugin-integrator-twelvedata @ git+https://github.com/pcxmac-dev/plugin-integrator-twelvedata@release/0.2.0",
+    # the AI assistants (platform plugins: liminal_libs.assistants), each on its own key
+    "plugin-platform-claude @ git+https://github.com/pcxmac-dev/plugin-platform-claude@release/0.2.0",
+    "plugin-platform-grok @ git+https://github.com/pcxmac-dev/plugin-platform-grok@release/0.2.0",
+    "plugin-platform-codex @ git+https://github.com/pcxmac-dev/plugin-platform-codex@release/0.2.0",
 ]
 
 [project.scripts]
-liminal = "liminal_app.cli:main"
+liminal-charts = "liminal_charts.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-liminal_app = ["gui/static/*", "gui/static/vendor/klinecharts/*", "gui/static/vendor/world/*", "gui/static/vendor/sky/*"]
+liminal_charts = ["gui/static/*", "gui/static/vendor/klinecharts/*", "gui/static/vendor/world/*", "gui/static/vendor/sky/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

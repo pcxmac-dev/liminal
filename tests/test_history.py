@@ -7,8 +7,8 @@ from datetime import date, datetime, timezone
 import pandas as pd
 import pytest
 
-from liminal_lib.storage import Store
-from liminal_lib.storage import history
+from liminal_libs.storage import Store
+from liminal_libs.storage import history
 
 pytest.importorskip("duckdb")
 

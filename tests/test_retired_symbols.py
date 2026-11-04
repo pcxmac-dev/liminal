@@ -8,10 +8,10 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
-from liminal_lib import collector
-from liminal_lib.config import load_settings
-from liminal_app.gui.server import ChartApp
-from liminal_lib.storage import Store
+from liminal_libs import collector
+from liminal_libs.config import load_settings
+from liminal_charts.gui.server import ChartApp
+from liminal_libs.storage import Store
 
 RETIRED_ON = date(2026, 10, 27)
 

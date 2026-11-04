@@ -13,13 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from liminal_lib import config, publications
-from liminal_lib.gov import GovDB
-from liminal_lib.sources import keys, publishers, registry
+from liminal_libs import config, publications
+from liminal_libs.gov import GovDB
+from liminal_libs.sources import keys, publishers, registry
 
 from .test_plugin_plans import _choosing_app
 
-STATIC = Path(__file__).resolve().parents[1] / "src" / "liminal_app" / "gui" / "static"
+STATIC = Path(__file__).resolve().parents[1] / "src" / "liminal_charts" / "gui" / "static"
 
 
 def test_every_variable_a_plugin_reads_is_declared_by_it():
@@ -99,7 +99,7 @@ def test_an_offline_copy_saves_no_key(tmp_path, monkeypatch):
 
 
 def test_the_key_route_takes_only_this_apps_pages_and_answers_no_value(tmp_path, monkeypatch):
-    from liminal_app.gui.server import make_handler
+    from liminal_charts.gui.server import make_handler
 
     store, app, wrote = _choosing_app(tmp_path, monkeypatch)
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(app, [0]))
@@ -144,7 +144,7 @@ def test_the_page_sets_each_plugin_up_and_shows_headlines_in_massives_page():
 
 
 def test_no_plugin_sets_a_system_variable_or_another_plugins(tmp_path, monkeypatch):
-    from liminal_lib.sources.publisher import Policy, Publisher
+    from liminal_libs.sources.publisher import Policy, Publisher
     from importlib.metadata import entry_points
 
     for name in ("PATH", "PYTHONPATH", "TEMP", "LIMINAL_DB", "LIMINAL_OFFLINE", "lower", "A-B", ""):
