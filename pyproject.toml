@@ -35,6 +35,10 @@ plugins = [
     "liminal-plugin-alphavantage @ git+https://github.com/pcxmac-dev/liminal-plugin-alphavantage@release/0.2.0",
     "liminal-plugin-jquants @ git+https://github.com/pcxmac-dev/liminal-plugin-jquants@release/0.2.0",
     "liminal-plugin-twelvedata @ git+https://github.com/pcxmac-dev/liminal-plugin-twelvedata@release/0.2.0",
+    # the AI assistants (platform plugins: liminal_lib.assistants), each on its own key
+    "platform-plugin-claude @ git+https://github.com/pcxmac-dev/platform-plugin-claude@release/0.2.0",
+    "platform-plugin-grok @ git+https://github.com/pcxmac-dev/platform-plugin-grok@release/0.2.0",
+    "platform-plugin-codex @ git+https://github.com/pcxmac-dev/platform-plugin-codex@release/0.2.0",
 ]
 
 [project.scripts]
