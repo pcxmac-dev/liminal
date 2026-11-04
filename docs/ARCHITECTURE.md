@@ -279,7 +279,8 @@ liminal-integrator"; "all lib calls will point to liminal-lib".
 
 ## Providers are plugins (2026-10-27)
 
-Every data provider the fetcher uses is a plugin: one `Provider` record (`sources/registry.py`)
+Every data provider the fetcher uses is a plugin: one `FeedPlugin` (`sources/plugin.py`, plugin
+API 2.0; the `Provider` record of `sources/registry.py` before it, a subclass of the same class)
 holding everything the app knows about it, so nothing else names a provider to decide how to treat
 it. Every one is a package of its own since 2026-11-01 (`liminal-plugin-<name>`, a repository each
 under pcxmac-dev, installed by the app's `plugins` extra): Massive with its headlines publisher,
@@ -355,9 +356,11 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     An unknown value is Starter.
 - **The plugin contract, versioned** (2026-10-29; the user: "eventually plugins will need to be in
   their own repo with their own version"). The app offers `registry.PLUGIN_API` (major.minor, now
-  1.9). Each plugin, a `Provider` or a `Publisher`, gives its own `version` (its release:
-  major.minor.patch) and the contract it was written for (`api`: a literal such as `"1.0"`, never
-  `PLUGIN_API` itself, which would always match). At discovery a plugin written for another major,
+  2.0: the class contract) and, for the record form, `registry.RECORD_API` (1.12: every minor of
+  the records' contract, still loaded). Each plugin, a `FeedPlugin` or a `PublisherPlugin` (a
+  `Provider` or a `Publisher` record), gives its own `version` (its release: major.minor.patch) and
+  the contract it was written for (`api`: a literal such as `"2.0"`, never `PLUGIN_API` itself,
+  which would always match; a class's default is 2.0, a record's 1.0). At discovery a plugin written for another major,
   or for a newer minor than the app offers, is left out and reported with the ones that fail to
   load (`errors()`, `plugins`, the key script, the Plugins view's "Left out"), never fatal. An `api`
   left out is 1.0. Each plugin's release is its distribution's and its contract (`api`) in its module
@@ -482,10 +485,37 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     `gui/queue.py`); the dependencies moved to the Resources view (`tests/test_fetch_queue.py`).
     Step 1 of the plan: no plugin fetches on its own yet; the datasets, the news sources, the
     release documents and the feeds move into their plugins next, one at a time.
-  - **What a plugin may rely on (API 1.0)**, and nothing else of `liminal`:
-    `sources.registry`: `PLUGIN_API`, `Provider`, `KeyVar`, `Scanned`, and `Report`, `Limits`,
-    `Capability` for a `reporter`; the helpers `limiter`, `machine_caps`, `public_client`,
-    `minute_window`. `sources.publisher`: `Publisher`, `Feed`, `Policy`. `sources.dataset` (1.4):
+  - **2.0** (2026-11-03; the user: "all the plugins under liminal should basically follow
+    inheritance/oop paradigm") is the class contract (`sources/plugin.py`, liminal-lib 1.3.0). A
+    plugin is an instance of a `FeedPlugin` or `PublisherPlugin` subclass (an `AssistantPlugin`'s,
+    `assistants/plugin.py`): what it declares is a class attribute of the field's name (`name`,
+    `assets`, `keys`, `provides` ...), what it does a method of the callback's name with `self`
+    (`build(self, settings, budget)`, `view(self, base)`, `scan(self, source)`, `settings(self,
+    variables)`; a publisher's `moments`, `calendar`, `read`), overriding the contract's default
+    (`FeedPlugin.view`: its fixed tier and caps; `rate`: its plan's rate a minute ...). The registry
+    loads an instance, a class (instantiated) or a module's `PLUGIN(S)`, `PUBLISHER(S)`,
+    `ASSISTANT(S)`; a second feed or part of a package shares a base class of its own (`TiingoFeed`,
+    `Agency`), and a subclass drops an inherited hook with `scan = None`. The record form (`Provider`,
+    `Publisher`: the callbacks as fields) is a subclass of the same classes (`is_record`), plugin
+    API 1.x still (`RECORD_API`), so every plugin loads as before; the app asks both the same way:
+    `gives(hook)` (a record's field set, a class's method overriding the contract's), `has_scan`,
+    `has_settings`, `settings_of`; a publisher's `has_moments`, `has_calendar`, `reads_itself`;
+    `with_(**changes)` (a changed copy: the registry's origin and version, a test's `with_(scan=None)`;
+    `dataclasses.replace` is the records' alone). A feed declares what `freshness.py` held for it
+    (`delays`: tier name -> asset class -> `Delay`; `hours`: a market with hours of its own), kept
+    in `freshness.DELAYS` when it loads. `sources.archive`: `PublicFeedPlugin` (a keyless feed's
+    source on the contract's public client) and `CryptoVenuePlugin` (a crypto exchange's plan and
+    caps, `CRYPTO_VENUE_DAYS`). `config.load_settings` builds every kind's own settings
+    (`Settings.plugin` for a publisher too). The recipe for a record: a field becomes an attribute,
+    a callback a method of the same name; module helpers other functions use stay functions; a
+    `Live` needing `self` becomes a `live` property; the module keeps its instances (`PLUGIN =
+    TwsePlugin()`; `PLUGINS = (TIINGO, FOREX)`), tests move from module functions to them.
+  - **What a plugin may rely on (API 1.0; 2.0: the classes)**, and nothing else of `liminal`:
+    `sources.registry`: `PLUGIN_API`, `RECORD_API`, `FeedPlugin`, `Plugin`, `Provider`, `KeyVar`,
+    `Scanned`, and `Report`, `Limits`, `Capability` for a `reporter`; the helpers `limiter`,
+    `machine_caps`, `public_client`, `minute_window`. `sources.plugin`: the same classes and records.
+    `sources.publisher`: `PublisherPlugin`, `Publisher`, `Feed`, `Policy`. `sources.archive` (2.0):
+    `PublicFeedPlugin`, `CryptoVenuePlugin`. `freshness`: `Delay` (a feed's `delays`). `sources.dataset` (1.4):
     `Dataset`, `Parsed` and the parsers' helpers (`ms`, `day_of`, `at`, `months_after`, `num`,
     `text`). `sources.stream` (1.5): `Live`, `Reconnect`, `Refused`, `Notice`, `PING`, `trade`, `ns`.
     `sources.base`:

@@ -71,7 +71,7 @@ def _scanning(p, running: dict | None, scan: dict | None, state: str) -> bool:
     """Whether the rescan going now has this feed still to ask: it covers the feed (every plugin,
     the feed, or the plugin it is part of), the feed has a scan and is set up (ready, or partly:
     what it serves without its keys), and its kept scan is older than the rescan."""
-    if not running or p.scan is None or state not in ("ready", "partly"):
+    if not running or not p.has_scan or state not in ("ready", "partly"):
         return False
     if running.get("name") not in (None, p.name, plugin_of(p.name)):
         return False
@@ -183,7 +183,7 @@ def view(store, settings, feeds: dict, scheme, scans: dict, running: dict | None
             "capabilitiesWithKey": would is not None,
             "streams": [{"asset": a, "what": w} for a, w in (report.streams if report else ())],
             "notes": list(report.notes) if report else [],
-            "scan": {"has": p.scan is not None, "at": (scan or {}).get("at"),
+            "scan": {"has": p.has_scan, "at": (scan or {}).get("at"),
                      "results": [{"what": w, "available": bool(ok), "detail": d} for w, ok, d in (scan or {}).get("results", [])],
                      "running": scanning},
             "usage": {"today": store.requests_today(name), "perDay": view_.max_requests_per_day,

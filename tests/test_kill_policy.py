@@ -308,7 +308,7 @@ def test_keys_are_read_without_the_spaces_and_line_breaks_around_them():
 
 def test_a_rate_limit_in_the_weekly_scan_stops_the_run_and_other_failures_do_not(store, monkeypatch):
     class Limited:
-        scan = True
+        has_scan = True  # what the app asks of a plugin (plugin API 2.0)
 
         def run_scan(self, source, settings=None):
             raise RateLimited(429, "slow down", 600)

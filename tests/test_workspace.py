@@ -42,10 +42,11 @@ def _checkout(folder: Path, name: str, module: str, version: str = "9.9.9") -> N
     (sub / "pyproject.toml").write_text(
         f'[project]\nname = "{name}"\nversion = "{version}"\n\n[project.entry-points."liminal.providers"]\n'
         f'{module.removeprefix("liminal_plugin_")} = "{module}:PLUGIN"\n', encoding="utf-8")
-    (sub / "src" / module / "__init__.py").write_text(
-        "from liminal_lib.sources.registry import PLUGIN_API, Provider\n\n"
-        f"PLUGIN = Provider(name={module.removeprefix('liminal_plugin_')!r}, title='A test plugin', "
-        "build=lambda settings, budget: None, assets=frozenset({'crypto'}), api=PLUGIN_API)\n", encoding="utf-8")
+    (sub / "src" / module / "__init__.py").write_text(  # a plugin of the class form (plugin API 2.0)
+        "from liminal_lib.sources.registry import FeedPlugin\n\n\n"
+        f"class Plugin(FeedPlugin):\n    name = {module.removeprefix('liminal_plugin_')!r}\n    title = 'A test plugin'\n"
+        "    assets = frozenset({'crypto'})\n\n    def build(self, settings, budget):\n        return None\n\n\n"
+        "PLUGIN = Plugin()\n", encoding="utf-8")
 
 
 def test_the_plugins_in_the_plugin_directory_are_loaded_from_there(tmp_path, monkeypatch, installed):

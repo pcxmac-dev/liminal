@@ -204,7 +204,7 @@ def test_a_module_may_give_several_providers(installed):
     assert list(found) == ["acme2", "acme"]  # in their order (5, then Acme's 100): the fakes are the only entry points
 
 
-# -- the plugin contract's version (registry.PLUGIN_API) ---------------------------------------------
+# -- the plugin contract's version (registry.PLUGIN_API for a class, RECORD_API for a record) ---------
 def test_a_contract_version_takes_its_own_major_and_no_newer_minor():
     assert registry.api_version("1.2") == (1, 2) and registry.api_version("1") == (1, 0)
     assert registry.api_refusal("1.0", "1.0") is None and registry.api_refusal("1.0", "1.3") is None
@@ -232,8 +232,8 @@ def test_every_plugin_is_versioned_for_this_apps_contract():
             **dict.fromkeys(("federal", "fed", "nyfed", "sec", "bls", "fedreg", "cftc"), ("1.4.1", "1.7")),  # its package's
             "french": ("1.1.1", "1.4"), "datahub": ("1.1.1", "1.4")}  # the dataset libraries: packages too
     assert {p.name: (p.version, p.api) for p in plugins_} == want
-    assert all(registry.api_refusal(p.api) is None for p in plugins_)
-    assert registry.PLUGIN_API == "1.12"
+    assert all(registry.api_refusal(p.api, record=p.is_record) is None for p in plugins_)
+    assert registry.PLUGIN_API == "2.0" and registry.RECORD_API == "1.12"  # the classes' contract, the records'
 
 
 def test_a_plugins_parts_are_released_with_it():
@@ -260,38 +260,58 @@ def test_a_plugin_for_another_major_is_left_out_and_reported_and_a_matching_one_
         return replace(ACME, name=name, title=name, keys=(), plan_vars=(), api=api, **kw)
 
     old_news = Publisher(name="old-news", title="Old news", about="", feeds=(), policy=Policy(), api="0.3")
-    major, minor = registry.api_version(registry.PLUGIN_API)
-    newer = f"{major}.{minor + 1}"  # a minor this app does not offer yet
-    found = installed(("next", "acme_next:PLUGIN", lambda: acme("acme-next", "2.0")),
+    major, minor = registry.api_version(registry.RECORD_API)
+    newer = f"{major}.{minor + 1}"  # a minor of the record form this app does not offer yet
+
+    class AcmeClass(registry.FeedPlugin):  # the class form (API 2.0): a class, or an instance
+        name, title, assets = "acme-class", "Acme class", frozenset({"stock"})
+
+        def build(self, settings, budget):
+            return AcmeSource(budget=budget)
+
+    class AcmeEarly(AcmeClass):
+        name, api = "acme-early", "1.12"  # a class claiming the record form's contract
+
+    class AcmeLater(AcmeClass):
+        name, api = "acme-later", "2.1"
+    found = installed(("next", "acme_next:PLUGIN", lambda: acme("acme-next", "2.0")),  # a record claiming the classes'
                       ("old", "acme_old:PLUGIN", lambda: acme("acme-old", "0.9")),
                       ("newer", "acme_newer:PLUGIN", lambda: acme("acme-newer", newer)),
                       ("odd", "acme_odd:PLUGIN", lambda: acme("acme-odd", "latest")),
                       ("same", "acme_same:PLUGIN", lambda: acme("acme-same", "1.0", version="2.4.1")),
                       ("plain", "acme_plain:PLUGIN", lambda: acme("acme-plain", "1")),
-                      ("news", "old_news:PUBLISHER", lambda: old_news))
-    assert list(found) == BUILT_IN + ["acme-plain", "acme-same"]  # the app goes on with the others
+                      ("news", "old_news:PUBLISHER", lambda: old_news),
+                      ("klass", "acme_class:PLUGIN", lambda: AcmeClass),
+                      ("early", "acme_early:PLUGIN", lambda: AcmeEarly()),
+                      ("later", "acme_later:PLUGIN", lambda: AcmeLater()))
+    assert list(found) == BUILT_IN + ["acme-class", "acme-plain", "acme-same"]  # the app goes on with the others
     assert provider("acme-same").version == "2.4.1" and provider("acme-same").api == "1.0"
+    assert isinstance(provider("acme-class"), AcmeClass) and provider("acme-class").api == "2.0"
     assert "old-news" not in publishers()
     why = dict(registry.errors())
     assert set(why) == {"next (acme_next:PLUGIN)", "old (acme_old:PLUGIN)", "newer (acme_newer:PLUGIN)",
-                        "odd (acme_odd:PLUGIN)", "news (old_news:PUBLISHER)"}
-    assert why["next (acme_next:PLUGIN)"] == (f"acme-next: written for plugin API 2.0; this app offers {registry.PLUGIN_API}: "
-                                              "it needs a newer app")
+                        "odd (acme_odd:PLUGIN)", "news (old_news:PUBLISHER)", "early (acme_early:PLUGIN)",
+                        "later (acme_later:PLUGIN)"}
+    assert why["next (acme_next:PLUGIN)"].startswith("acme-next: written for plugin API 2.0 as a record") \
+        and "is a class (FeedPlugin, PublisherPlugin)" in why["next (acme_next:PLUGIN)"]
     assert why["old (acme_old:PLUGIN)"].startswith("acme-old: written for plugin API 0.9") \
         and "needs a release for 1.x" in why["old (acme_old:PLUGIN)"]
-    assert f"newer than this app's {registry.PLUGIN_API}" in why["newer (acme_newer:PLUGIN)"]
+    assert f"newer than this app's {registry.RECORD_API} for records" in why["newer (acme_newer:PLUGIN)"]
     assert "not a contract version" in why["odd (acme_odd:PLUGIN)"]
     assert "old-news: written for plugin API 0.3" in why["news (old_news:PUBLISHER)"]
+    assert why["early (acme_early:PLUGIN)"] == (f"acme-early: written for plugin API 1.12; this app offers "
+                                                f"{registry.PLUGIN_API}: it needs a release for 2.x")
+    assert f"newer than this app's {registry.PLUGIN_API}" in why["later (acme_later:PLUGIN)"]
 
 
 def test_a_plugin_that_says_no_api_was_written_for_the_first_contract(installed, monkeypatch):
     before = Provider(name="acme-before", title="Acme", build=lambda s, b: None, assets=frozenset({"stock"}))
     assert before.api == "1.0"
     assert "acme-before" in installed(("before", "acme_before:PLUGIN", lambda: before))
-    monkeypatch.setattr(registry, "PLUGIN_API", "2.0")  # an app of a later major: it is left out then
+    monkeypatch.setattr(registry, "RECORD_API", "2.0")  # an app of a later major for records: it is left out then
     assert "acme-before" not in registry.reload()
     why = dict(registry.errors())["before (acme_before:PLUGIN)"]
-    assert why == "acme-before: written for plugin API 1.0; this app offers 2.0: it needs a release for 2.x"
+    assert why == "acme-before: written for plugin API 1.0; this app offers 2.0 for records: it needs a release for 2.x"
 
 
 def test_every_installed_plugin_package_loads(monkeypatch):

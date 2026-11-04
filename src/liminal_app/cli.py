@@ -1183,10 +1183,10 @@ def cmd_capabilities(args, settings: Settings) -> int:
     plugin's name scans each of its feeds (Alpaca: Blue Ocean's too)."""
     from liminal_lib.sources.registry import plugin_feeds
 
-    names = plugin_feeds(args.name) if args.name else [n for n, p in providers().items() if p.scan]
+    names = plugin_feeds(args.name) if args.name else [n for n, p in providers().items() if p.has_scan]
     for name in names:
         p = providers().get(name)
-        if p is None or p.scan is None:
+        if p is None or not p.has_scan:
             print(f"{name}: no capability scan")
             continue
         if not p.served(settings):  # its keys not set: a scan would ask with none
@@ -1211,7 +1211,7 @@ def _scan(name: str, source, store: Store, log, due_days: float | None = None, s
     from liminal_lib import sourcing
 
     p = providers().get(name)
-    if p is None or p.scan is None:
+    if p is None or not p.has_scan:
         return
     last = store.kv_json(sourcing.SCAN_KEY.format(name), None)
     now = datetime.now().astimezone()

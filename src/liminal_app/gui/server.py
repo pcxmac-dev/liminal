@@ -954,7 +954,7 @@ class ChartApp:
             raise RuntimeError("offline (LIMINAL_OFFLINE): this copy of the app sends no requests")
         if self._halted():
             raise RuntimeError("fetching is halted: resume it first")
-        if name is not None and (name not in providers() or providers()[name].scan is None):
+        if name is not None and (name not in providers() or not providers()[name].has_scan):
             raise LookupError(f"{name} has no capability scan")
         if self._rescan_running():
             raise RuntimeError("a rescan is already running")
