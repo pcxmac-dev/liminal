@@ -94,10 +94,11 @@ class ChartApp:
         # The page served at /: the chart app's ("chart") or the fetcher's own ("fetcher": the data
         # and monitoring views, without the chart and what is the user's); the API is the same.
         self.mode = mode
-        # The fetcher this API runs inside (fetcher.Fetcher: serve_fetcher), asked for the symbols
-        # the pages open and for a pass; None alone (serve): the requests wait in the file.
+        # The fetcher this API speaks for (serve_integrator: the integrator's link to the fetcher host
+        # over the pipe), asked for the symbols the pages open and for a pass; None alone (serve):
+        # the requests wait in the file.
         self._fetcher = fetcher
-        self._touch = touch  # tells the host a page is in touch (host.Host.touch): the fetcher stays up
+        self._touch = touch  # tells the integrator a page is in touch (its link attaches): the fetcher stays up
         self._symbol_request: tuple[str, int] | None = None  # the last symbol a page opened, and its request
         self._settings = settings or load_settings(env={}, env_file=None)
         # With `reload_settings` (the app started from the command line), a key or plan saved after
@@ -307,7 +308,7 @@ class ChartApp:
             self.release()
 
     # -- the fetcher ---------------------------------------------------------------------------
-    # This API runs inside the fetcher (fetcher.py: the host `fetcher`, serve_fetcher), which takes
+    # This API speaks for the fetcher (fetcher.py: the host `fetcher`, over serve_integrator's link), which takes
     # the requests (a symbol a page opened, the request box) and holds the feeds' runs; the chart
     # app's front funnels its pages' requests here (gui/front.py). Alone (serve: a copy with no
     # fetcher in it, nothing collected) the requests wait in the file for a fetcher.
@@ -323,9 +324,11 @@ class ChartApp:
         return True
 
     def fetcher_status(self) -> dict | None:
-        """The fetcher's status: its own here, else as it last wrote it in the file."""
+        """The fetcher's status: over the link when it answers, else as it last wrote it in the file."""
         if self._fetcher is not None:
-            return self._fetcher.status()
+            status = self._fetcher.status()
+            if status is not None:
+                return status
         with self._queue_lock:
             return read_status(self._queue_store)
 
@@ -2456,7 +2459,7 @@ def serve(db_path: Path, port: int = 8765, open_browser: bool = True, priority: 
           rescan: bool = False) -> None:
     """The chart app alone (`gui --alone`): its page and the data API in this one process, no
     fetcher in it (nothing is collected: a read-only copy, a test). The app proper is the front
-    (gui/front.py), with the API inside the fetcher (serve_fetcher). With `rescan` every provider
+    (gui/front.py), with the API in the integrator's process (serve_integrator). With `rescan` every provider
     plugin set up here scans its capabilities and plan again shortly after the first page."""
     store = Store(db_path, check_same_thread=False)
     app = ChartApp(store, priority, settings, reload_settings=reload_settings)
@@ -2475,26 +2478,44 @@ def serve(db_path: Path, port: int = 8765, open_browser: bool = True, priority: 
         app.close()
 
 
-def serve_fetcher(settings: Settings, f, h, port: int | None, rescan: bool = True,
-                  reload_settings: Callable[[], Settings] | None = None) -> str:
-    """The fetcher's process: its page and the data API on `port` (0: a free one; None: no page)
-    in a thread, the fetcher's work (f.run) under the host `h` (host.py) here, until its clients
-    are gone: a page in touch counts as one (h.touch). Returns why the host stopped."""
+def serve_integrator(settings: Settings, port: int, *, link, open_browser: bool = False, log=None,
+                     stop: threading.Event | None = None, rescan: bool = False,
+                     reload_settings: Callable[[], Settings] | None = None, until_quiet: bool = False) -> str:
+    """The integrator's page and the data API in the integrator's own process (the user, 2026-11-03:
+    "for the webserver / ports, i just integrator, and charts": two listeners, this one at
+    LIMINAL_FETCHER_PORT and the chart front's), on 127.0.0.1:`port` (a free one when something
+    answers there), until `stop` is set or Ctrl+C; with `until_quiet` also once no page has been in
+    touch for a while (an integrator the chart front started for itself). The data is read here;
+    `link` is this process's hold on the fetcher host over the pipe (liminal_integrator.service's
+    FetcherLink: a page in touch keeps the fetcher attached, started if none answers; its status, a
+    wake and a pass go over the pipe). Returns the URL served."""
+    log = log or _log_to(settings.db_path)
+    stop = stop or threading.Event()
     store = Store(settings.db_path, check_same_thread=False)
     app = ChartApp(store, list(settings.source_priority), settings, reload_settings=reload_settings, mode="fetcher",
-                   fetcher=f, touch=h.touch)
+                   fetcher=link, touch=link.touch)
     _prepare(app, rescan)
-    httpd = make_server(app, port) if port is not None else None
-    if httpd is not None:
-        f.page_url = f"http://127.0.0.1:{httpd.server_address[1]}/"
-        threading.Thread(target=httpd.serve_forever, name="fetcher-page", daemon=True).start()
-        _log_to(settings.db_path)(f"fetcher: its page and the data API at {f.page_url}")
-    f.host = h
+    httpd = make_server(app, port)
+    url = f"http://127.0.0.1:{httpd.server_address[1]}/"
+    log(f"integrator: its page and the data API at {url}; the fetcher runs while a page is in touch")
+    print(f"the integrator's page at {url}; the fetcher runs while a page is in touch  (Ctrl+C to stop)", flush=True)
+    if open_browser:
+        threading.Timer(0.5, webbrowser.open, args=(url,)).start()
+    threading.Thread(target=link.watch_quiet, args=(stop, stop.set if until_quiet else None), name="integrator-quiet",
+                     daemon=True).start()
 
-    def secure() -> None:
-        if httpd is not None:
-            httpd.shutdown()
-            httpd.server_close()
+    def stopping() -> None:
+        stop.wait()
+        httpd.shutdown()
+
+    threading.Thread(target=stopping, name="integrator-stop", daemon=True).start()
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop.set()
+        httpd.server_close()
         app.close()
-
-    return h.serve(f.run, secure=secure, handle=f.handle)
+        link.let_go()
+    return url

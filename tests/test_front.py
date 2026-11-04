@@ -1,10 +1,10 @@
 """The chart app's front (gui/front.py): the chart page here, every request of its pages funnelled
-to the fetcher's data API (the user, 2026-11-01: "the app needs to funnel requests through the
-fetcher to the databases"). The fetcher stands in as a small server here; no process starts."""
+to the integrator's data API at its port (the user, 2026-11-01: "the app needs to funnel requests
+through the fetcher to the databases"; 2026-11-03: "for the webserver / ports, i just integrator, and
+charts"). The integrator stands in as a small server here; no process starts."""
 from __future__ import annotations
 
 import json
-import re
 import threading
 import time
 from http.client import HTTPConnection
@@ -12,27 +12,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from liminal_libs import host as hosting
 from liminal_charts.gui import front as front_mod, web
 from liminal_charts.gui.front import Front, make_front_handler
 
 
-class FakeAttachment:
-    def __init__(self, page):
-        self.page, self.detached, self.host_pid = page, False, 4242
-
-    def alive(self):
-        return not self.detached
-
-    def detach(self):
-        self.detached = True
-
-    def ask(self, **what):
-        return {"page": self.page, "busy": False}
-
-
 class Upstream(BaseHTTPRequestHandler):
-    """The fetcher's data API, as far as the front needs one: it echoes what it got."""
+    """The integrator's data API, as far as the front needs one: it echoes what it got."""
 
     def log_message(self, *a):
         pass
@@ -82,10 +67,16 @@ def _get(port, path, headers=None):
     return r.status, r.read(), r
 
 
-def test_the_front_funnels_its_pages_requests_to_the_fetcher(tmp_path, monkeypatch, upstream):
-    page = f"http://127.0.0.1:{upstream.server_address[1]}/"
-    att = FakeAttachment(page)
-    monkeypatch.setattr(hosting, "attach_or_start", lambda name, db, log=print: att)
+def _free_port() -> int:
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+    port = srv.server_address[1]
+    srv.server_close()
+    return port
+
+
+def test_the_front_funnels_its_pages_requests_to_the_integrator(tmp_path, monkeypatch, upstream):
+    monkeypatch.setenv("LIMINAL_FETCHER_PORT", str(upstream.server_address[1]))  # the integrator's port: answering
+    monkeypatch.setattr(front_mod, "start_integrator", lambda db_path, port, log=print: pytest.fail("nothing to start"))
     lines: list[str] = []
     front = Front(tmp_path / "liminal.db", log=lines.append)
     srv = ThreadingHTTPServer(("127.0.0.1", 0), make_front_handler(front))
@@ -99,9 +90,9 @@ def test_the_front_funnels_its_pages_requests_to_the_fetcher(tmp_path, monkeypat
         assert status == 200 and j["path"] == "/api/echo?x=1" and j["cookie"] == "mc_profile=3" and j["profile"] == "3"
         assert j["origin"] is None and j["site"] is None  # where it came from was checked here, not passed on
         assert j["host"] == f"127.0.0.1:{upstream.server_address[1]}"
-        assert r.getheader("Set-Cookie") == "mc_profile=7; Path=/"  # the fetcher's cookie passed back
-        assert front.connected and any("connected to the fetcher" in m for m in lines)
-        # another site's page is refused here, before the fetcher sees it
+        assert r.getheader("Set-Cookie") == "mc_profile=7; Path=/"  # the integrator's cookie passed back
+        assert front.connected and any("connected to the integrator" in m for m in lines)
+        # another site's page is refused here, before the integrator sees it
         assert _get(port, "/api/echo", {"Origin": "http://evil.example"})[0] == 403
         assert _get(port, "/api/echo", {"Host": "evil.example"})[0] == 403
         # a write needs the app's own header, and goes through with its body
@@ -115,79 +106,93 @@ def test_the_front_funnels_its_pages_requests_to_the_fetcher(tmp_path, monkeypat
         # the event stream comes through as it is sent
         status, body, r = _get(port, "/api/stream?since=1")
         assert status == 200 and body == b"data: 0\n\ndata: 1\n\n" and r.getheader("Content-Type").startswith("text/event-stream")
-        # the pages: the login page without a profile, the chart page with one (not the fetcher's), nothing outside
+        # the pages: the login page without a profile, the chart page with one, nothing outside
         status, body, _ = _get(port, "/")
         assert status == 200 and b"<title>Liminal Charts" in body and b'id="rail"' not in body
         status, body, _ = _get(port, "/", {"Cookie": "mc_profile=1"})
         assert status == 200 and b'id="rail"' in body and b'data-mode="fetcher"' not in body
         assert _get(port, "/style.css")[0] == 200 and _get(port, "/../pyproject.toml")[0] == 404
-        # quiet: no page in touch for a while, the fetcher let go; the next request attaches again
-        monkeypatch.setattr(front, "quiet_seconds", lambda: 0.2)
-        monkeypatch.setattr(front_mod, "QUIET_CHECK_SECONDS", 0.05)
-        stop = threading.Event()
-        threading.Thread(target=front.watch_quiet, args=(stop,), daemon=True).start()
-        end = time.monotonic() + 5
-        while front.connected and time.monotonic() < end:
-            time.sleep(0.02)
-        stop.set()
-        assert not front.connected and att.detached and lines[-1].startswith("quiet: no page in touch")
-        again = FakeAttachment(page)
-        monkeypatch.setattr(hosting, "attach_or_start", lambda name, db, log=print: again)
-        assert _get(port, "/api/echo")[0] == 200 and front.connected and not again.detached
-        # no fetcher answers at all: the page is told, nothing else
-        front.let_go()
-        monkeypatch.setattr(hosting, "attach_or_start", lambda name, db, log=print: None)
+        # no page at all (the port off): the page is told, nothing started
+        monkeypatch.setenv("LIMINAL_FETCHER_PORT", "none")
         status, body, _ = _get(port, "/api/echo")
-        assert status == 503 and b"the fetcher is not running" in body
+        assert status == 503 and b"the integrator is not running" in body and any("has no page" in m for m in lines)
     finally:
         srv.shutdown()
         srv.server_close()
-        front.let_go()
 
 
-def test_the_front_in_fetcher_mode_is_the_integrators_page(tmp_path, monkeypatch, upstream):
-    """`liminal-integrator serve` and its service (the user, 2026-11-02: "i need a way to run it from
-    the browser like the other liminals"): the fetcher's own page at its port, nobody's (no login),
-    its data through the fetcher like the chart's; serve_front ends when told to stop."""
-    page = f"http://127.0.0.1:{upstream.server_address[1]}/"
-    att = FakeAttachment(page)
-    monkeypatch.setattr(hosting, "attach_or_start", lambda name, db, log=print: att)
+def test_the_front_starts_the_integrator_when_nothing_answers_at_its_port(tmp_path, monkeypatch, upstream):
+    """Nothing answers at the integrator's port: the front starts the integrator's server for itself
+    (`liminal-integrator serve --no-browser --until-quiet`) and waits for it; none could be started,
+    or it never answers: the page is told."""
+    free = _free_port()
+    monkeypatch.setenv("LIMINAL_FETCHER_PORT", str(free))
+    monkeypatch.setattr(front_mod, "START_SECONDS", 0.3)
+    real_start = front_mod.start_integrator
+    started: list = []
+    up: list = []
+
+    def start_integrator(db_path, port, log=print):
+        started.append((db_path, port))
+        srv = ThreadingHTTPServer(("127.0.0.1", port), Upstream)  # the integrator's server comes up at its port
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        up.append(srv)
+        return True
+    monkeypatch.setattr(front_mod, "start_integrator", start_integrator)
     lines: list[str] = []
-    front = Front(tmp_path / "liminal.db", log=lines.append, name="the integrator's page")
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), make_front_handler(front, mode="fetcher"))
+    front = Front(tmp_path / "liminal.db", log=lines.append)
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), make_front_handler(front))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     port = srv.server_address[1]
     try:
-        for headers in ({}, {"Cookie": "mc_profile=1"}):  # the same page whoever the browser signed in as
-            status, body, _ = _get(port, "/", headers)
-            assert status == 200 and b'data-mode="fetcher"' in body and b"<title>Liminal Fetcher" in body
-        assert _get(port, "/app.js")[0] == 200
-        assert json.loads(_get(port, "/api/queue")[1])["path"] == "/api/queue" and front.connected
-        assert any(m.startswith("the integrator's page is connected to the fetcher") for m in lines)
+        status, body, _ = _get(port, "/api/echo")
+        assert status == 200 and json.loads(body)["host"] == f"127.0.0.1:{free}" and started == [(tmp_path / "liminal.db", free)]
+        assert front.connected and any("connected to the integrator" in m for m in lines)
+        assert _get(port, "/api/echo")[0] == 200 and len(started) == 1  # answering: not started again
+        up[0].shutdown()
+        up[0].server_close()
+        # the integrator is not installed: nothing could be started
+        monkeypatch.setattr(front_mod, "start_integrator", lambda db_path, port, log=print: False)
+        status, body, _ = _get(port, "/api/echo")
+        assert status == 503 and b"none could be started" in body
+        # started, but it never answers
+        monkeypatch.setattr(front_mod, "start_integrator", lambda db_path, port, log=print: True)
+        status, body, _ = _get(port, "/api/echo")
+        assert status == 503 and any("never answered" in m for m in lines)
     finally:
         srv.shutdown()
         srv.server_close()
-        front.let_go()
-    assert att.detached
-    with pytest.raises(ValueError):
-        make_front_handler(front, mode="plots")
-    # serve_front itself, as the service runs it: on the port asked, or a free one when something
-    # answers there already (on Windows a second server binds a port in use), until told to stop
+    # the start itself: the integrator's module, no window, on this database, until quiet
+    popen: list = []
+    monkeypatch.setattr(front_mod.subprocess, "Popen", lambda args, **kw: popen.append((args, kw)))
+    assert real_start(tmp_path / "liminal.db", 8791, lines.append) is True
+    args, kw = popen[0]
+    assert args[1:] == ["-m", "liminal_integrator", "serve", "--no-browser", "--port", "8791", "--until-quiet"]
+    assert kw["env"]["LIMINAL_DB"] == str(tmp_path / "liminal.db") and kw["close_fds"] is True
+    assert front_mod.integrator_port() == free
+    monkeypatch.setenv("LIMINAL_FETCHER_PORT", "0")
+    assert front_mod.integrator_port() is None  # a free one: this front cannot know it
+    monkeypatch.delenv("LIMINAL_FETCHER_PORT")
+    assert front_mod.integrator_port() == 8785
+
+
+def test_serve_front_takes_a_free_port_when_its_own_is_taken_and_stops_when_told(tmp_path, upstream):
     taken = upstream.server_address[1]
     assert web.listening(taken)
+    lines: list[str] = []
     stop = threading.Event()
     done = threading.Event()
 
     def run():
-        front_mod.serve_front(tmp_path / "liminal.db", port=taken, open_browser=False, log=lines.append, mode="fetcher", stop=stop)
+        front_mod.serve_front(tmp_path / "liminal.db", port=taken, open_browser=False, log=lines.append, stop=stop)
         done.set()
     threading.Thread(target=run, daemon=True).start()
     end = time.monotonic() + 5
-    while not (urls := [m for m in lines if m.startswith("front: the fetcher's page at")]) and time.monotonic() < end:
+    while not (urls := [m for m in lines if m.startswith("front: the chart's page at")]) and time.monotonic() < end:
         time.sleep(0.02)
-    served = int(re.search(r"http://127\.0\.0\.1:(\d+)/", urls[0]).group(1))
+    served = int(urls[0].split("http://127.0.0.1:", 1)[1].split("/", 1)[0])
     assert served != taken and any(f"port {taken} is taken" in m for m in lines)
-    assert b'data-mode="fetcher"' in _get(served, "/")[1]
+    assert b"<title>Liminal Charts" in _get(served, "/")[1]
     stop.set()
     assert done.wait(5)
     assert not web.listening(served)

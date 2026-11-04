@@ -121,11 +121,11 @@ def test_the_starts_extras_run_at_the_first_page_not_at_the_start(app):
         pass
     assert ran == ["rescan", "warm"]  # once
     src = Path(server.__file__).read_text(encoding="utf-8")
-    prepare = src.split("\ndef _prepare(", 1)[1].split("\ndef ", 1)[0]  # the start of serve and serve_fetcher alike
+    prepare = src.split("\ndef _prepare(", 1)[1].split("\ndef ", 1)[0]  # the start of serve and serve_integrator alike
     assert "app.on_wake(lambda: threading.Timer(RESCAN_AFTER_START_S, rescan_now).start())" in prepare
     assert "app.on_wake(lambda: threading.Thread(target=world.warm, daemon=True).start())" in prepare
     assert "app.monitor.start()" not in prepare and "threading.Thread(target=app.watch_quiet" in prepare
-    for name in ("serve", "serve_fetcher"):
+    for name in ("serve", "serve_integrator"):
         body = src.split(f"\ndef {name}(", 1)[1].split("\ndef ", 1)[0]
         assert "_prepare(app, rescan)" in body and "app.close()" in body, name  # the app ending: its stores closed
 

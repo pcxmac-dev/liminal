@@ -233,13 +233,17 @@ liminal-integrator"; "all lib calls will point to liminal-libs".
   - *Its page*: the chart app's page in fetcher mode (`gui/web.fetcher_page`: the body marked
     `data-mode="fetcher"`; style.css hides the top bar, the drawing tools, the chart and its side panel,
     the upper rail group and the profile; app.js loads no chart; panels.js keeps to the data and
-    monitoring views) and the data API, on LIMINAL_FETCHER_PORT (8785; 0 a free one; none: no page).
-    A page in touch holds the host (`Host.touch`) as a client does. The integrator's service keeps that
-    page at the port from outside the fetcher (the app's front in mode "fetcher", `gui/front.py`: the
-    fetcher attached, started if none answers, when a page comes; let go once none has been in touch
-    for LIMINAL_QUIET_SECONDS; the fetcher's own page then takes a free port, learnt from it), so the
-    page is there from the browser like the chart app's (the user, 2026-11-02: "i need a way to run it
-    from the browser like the other liminals").
+    monitoring views) and the data API, on LIMINAL_FETCHER_PORT (8785; 0 a free one; none: no page),
+    served by the integrator's own process (`gui/server.serve_integrator`, reached through the
+    integrator's `lib.page()`): the user, 2026-11-03, "for the webserver / ports, i just integrator, and
+    charts", so there are two listeners on the machine, the integrator's and the chart front's, and the
+    fetcher host has no HTTP of its own. The integrator's process reads the data itself and holds the
+    fetcher host over the pipe while a page is in touch (`service.FetcherLink`: attached at the first
+    request, started if none answers, let go once none has been in touch for LIMINAL_QUIET_SECONDS; the
+    status, a wake and a pass go over the pipe; `Fetcher.handle`). `liminal-integrator serve` and the
+    service keep that page at the port from the browser like the chart app's (the user, 2026-11-02: "i
+    need a way to run it from the browser like the other liminals"); `serve --until-quiet` ends the
+    server itself once no page has been in touch for a while (what the chart front starts for itself).
   - *The service* (`service.py`): that page from the user's logon, the fetcher running only while a
     page is in touch ("Only while I use it" stays the default), or with `--daemon` held for good and
     started again when it ends, so its standing passes go on on their own (the user, 2026-11-02: "the
@@ -268,11 +272,15 @@ liminal-integrator"; "all lib calls will point to liminal-libs".
     applies the three before the settings load; the app's `fetcher` and `service` commands do the
     same (`cli._instance`) and load the settings again when anything changed.
 - **The app** (this repository): the chart front (`gui/front.py`, `liminal-charts gui`): serves the chart page
-  and its scripts, attaches to the fetcher at the first page (`host.attach_fetcher`, started if none
-  answers; its port learnt from its status over the pipe) and passes every `/api/` request of its
-  pages to it, the profile cookie and the app's own headers with it, where it came from checked here
-  and not passed on; an event stream as it comes. No database is opened here; with no page in touch
-  for LIMINAL_QUIET_SECONDS it lets the fetcher go and attaches again at the next request. `gui
+  and its scripts and passes every `/api/` request of its pages to the integrator's data API at its
+  port (LIMINAL_FETCHER_PORT, 8785), the profile cookie and the app's own headers with it, where it
+  came from checked here and not passed on; an event stream as it comes. No database is opened here
+  and no pipe: when nothing answers at the integrator's port, the front starts the integrator's server
+  for itself (`front.start_integrator`: `liminal-integrator serve --no-browser --until-quiet`, which ends
+  again once no page has been in touch for LIMINAL_QUIET_SECONDS); the integrator holds the fetcher.
+  (Until 2026-11-03 the front attached to the fetcher host itself and proxied to the page that host
+  served on a port of its own: three listeners. The user: "for the webserver / ports, i just
+  integrator, and charts".) `gui
   --alone` keeps the old one-process app (page and data API, no fetcher: a read-only copy, a test).
   The data API (`ChartApp`) runs inside the fetcher: a symbol a page opens is a request on the
   fetcher's stack (`priority`: no `sync --tickers` process of the app's own any more); resuming

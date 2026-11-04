@@ -1526,9 +1526,9 @@ def cmd_deps(args, settings: Settings) -> int:
 
 
 def cmd_gui(args, settings: Settings) -> int:
-    """The chart app: its page here, its data through the fetcher (gui/front.py), which it starts
-    if none answers. `--alone`: page and data in this one process, no fetcher (nothing collected:
-    a read-only copy, a test)."""
+    """The chart app: its page here, its data through the integrator's data API (gui/front.py),
+    the integrator started for it when nothing answers at its port. `--alone`: page and data in
+    this one process, no fetcher (nothing collected: a read-only copy, a test)."""
     if args.alone:
         from .gui.server import serve
 
@@ -1539,7 +1539,7 @@ def cmd_gui(args, settings: Settings) -> int:
     from .gui.front import serve_front
 
     if args.no_rescan:
-        os.environ["LIMINAL_NO_RESCAN"] = "1"  # the fetcher this front starts rescans nothing at its start
+        os.environ["LIMINAL_NO_RESCAN"] = "1"  # the integrator this front starts rescans nothing at its start
     serve_front(settings.db_path, port=args.port, open_browser=not args.no_browser)
     return 0
 

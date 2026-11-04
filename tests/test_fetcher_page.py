@@ -1,31 +1,31 @@
-"""The fetcher's own page and the data API, served in the fetcher's process (gui/server.py
-serve_fetcher): the chart app's page without the chart, the tools and what is the user's (the
-user, 2026-11-01), with the request stack; the fetcher itself (liminal-integrator) stands in."""
+"""The integrator's page and the data API, served in the integrator's own process (gui/server.py
+serve_integrator; the user, 2026-11-03: "for the webserver / ports, i just integrator, and charts"):
+the chart app's page without the chart, the tools and what is the user's (the user, 2026-11-01), with
+the request stack; the fetcher is reached over a link (liminal-integrator's FetcherLink stands in)."""
 from __future__ import annotations
 
 import http.client
 import json
 import threading
+import time
 from dataclasses import replace
 
 from liminal_libs.config import load_settings
 from liminal_charts.gui import server
 
 
-class FakeFetcher:
-    """What serve_fetcher needs of the fetcher: its work, its handle, its status, a wake."""
+class FakeLink:
+    """What serve_integrator needs of the integrator's link to the fetcher: a touch, its status, a
+    wake, a pass, the quiet watch, letting go."""
 
     def __init__(self):
-        self.page_url, self.host, self.woken, self.passes = None, None, 0, 0
+        self.touched, self.woken, self.passes, self.let, self.quiet_args = 0, 0, 0, 0, None
 
-    def run(self, stop):
-        stop.wait()
-
-    def handle(self, msg):
-        return {"ok": True}
+    def touch(self):
+        self.touched += 1
 
     def status(self):
-        return {"pid": 4242, "busy": False, "clients": self.host.clients() if self.host else [], "feeds": []}
+        return {"pid": 4242, "busy": False, "clients": [4242], "feeds": []}
 
     def wake_up(self):
         self.woken += 1
@@ -33,31 +33,24 @@ class FakeFetcher:
     def ask_pass(self):
         self.passes += 1
 
+    def let_go(self):
+        self.let += 1
+        return True
 
-class FakeHost:
-    """serve records the work; the test looks at the page meanwhile."""
-    name = "fetcher"
-
-    def __init__(self):
-        self.stop, self.touched, self.work, self.secure, self.handle = threading.Event(), 0, None, None, None
-
-    def touch(self):
-        self.touched += 1
-
-    def clients(self):
-        return [4242]
-
-    def serve(self, work, secure=None, handle=None):
-        self.work, self.secure, self.handle = work, secure, handle
-        return "recorded"
+    def watch_quiet(self, stop, on_quiet=None):
+        self.quiet_args = (stop, on_quiet)
+        stop.wait()
 
 
-def test_serve_fetcher_serves_the_fetchers_page_and_the_data_api_in_its_process(tmp_path):
+def test_serve_integrator_serves_the_integrators_page_and_the_data_api_in_its_process(tmp_path):
     settings = replace(load_settings(env={}, env_file=None), db_path=tmp_path / "liminal.db")
-    h, f = FakeHost(), FakeFetcher()
-    assert server.serve_fetcher(settings, f, h, port=0, rescan=False) == "recorded"
-    assert f.page_url and f.host is h and h.handle == f.handle and h.work == f.run
-    port = int(f.page_url.rsplit(":", 1)[1].rstrip("/"))
+    link, lines, stop, served = FakeLink(), [], threading.Event(), []
+    threading.Thread(target=lambda: served.append(server.serve_integrator(settings, 0, link=link, log=lines.append, stop=stop,
+                                                                        until_quiet=True)), daemon=True).start()
+    end = time.monotonic() + 5
+    while not (urls := [m for m in lines if m.startswith("integrator: its page and the data API at")]) and time.monotonic() < end:
+        time.sleep(0.02)
+    port = int(urls[0].split("http://127.0.0.1:", 1)[1].split("/", 1)[0])
     try:
         conn = http.client.HTTPConnection("127.0.0.1", port)
         conn.request("GET", "/")
@@ -73,15 +66,20 @@ def test_serve_fetcher_serves_the_fetchers_page_and_the_data_api_in_its_process(
         r = conn.getresponse()
         row = json.loads(r.read())
         assert r.status == 202 and row["symbol"] == "AAPL" and row["kinds"] == ["bars", "live"] and row["by"] == "page"
-        assert f.woken == 1  # the fetcher woken: it takes the request at once
+        assert link.woken == 1  # the fetcher woken over the link: it takes the request at once
         conn.request("DELETE", f"/api/requests/{row['id']}", headers={"X-Liminal-Charts": "1"})
-        assert json.loads(conn.getresponse().read())["cancelled"] is True and f.woken == 2
+        assert json.loads(conn.getresponse().read())["cancelled"] is True and link.woken == 2
         conn.request("POST", "/api/fetching", body=json.dumps({"paused": False}),
                      headers={"Content-Type": "application/json", "X-Liminal-Charts": "1"})
-        assert json.loads(conn.getresponse().read())["started"] is True and f.passes == 1  # resuming asks for a pass
-        assert h.touched >= 5  # every request touched the host: a page in touch keeps the fetcher up
+        assert json.loads(conn.getresponse().read())["started"] is True and link.passes == 1  # resuming asks for a pass
+        assert link.touched >= 5  # every request touched the link: a page in touch keeps the fetcher attached
+        assert link.quiet_args[0] is stop and link.quiet_args[1] == stop.set  # until quiet: the server ends then
     finally:
-        h.secure()
+        stop.set()
+        end = time.monotonic() + 5
+        while not served and time.monotonic() < end:
+            time.sleep(0.02)
+    assert served == [f"http://127.0.0.1:{port}/"] and link.let == 1  # the fetcher let go with the server
 
 
 def test_the_fetchers_page_is_the_chart_page_without_the_chart_and_what_is_the_users():
