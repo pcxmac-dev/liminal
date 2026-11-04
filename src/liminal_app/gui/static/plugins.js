@@ -676,7 +676,8 @@
 
   // -- an AI assistant (p.ai: its tables, caps, usage and last answers) ---------------------------
   const usd = (c) => (c == null ? '–' : c < 0.01 ? `$${c.toFixed(6)}` : `$${c.toFixed(4)}`);
-  const price = (c) => (c == null ? '–' : `$${c >= 1 ? String(c) : c.toFixed(c < 0.01 ? 3 : 2)}`);  // per million tokens
+  // a price per million tokens: $2, $1.25, $0.40, $0.025 (never rounded away)
+  const price = (c) => (c == null ? '–' : `$${c >= 1 ? (Number.isInteger(c) ? String(c) : c.toFixed(2)) : Number(c.toFixed(2)) === c ? c.toFixed(2) : String(c)}`);
   const aiTry = { busy: false, answer: null, error: '' };
 
   function aiTablesHtml(p) {
