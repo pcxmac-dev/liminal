@@ -40,7 +40,13 @@ class Exchange:
 E = Exchange
 EXCHANGES: tuple[Exchange, ...] = (
     # Americas
-    E("XNYS", "New York Stock Exchange / Nasdaq", "New York", "United States", "Americas", 40.71, -74.01, "S&P 500 · Nasdaq · Dow", proxy="SPY"),
+    E("XNYS", "New York Stock Exchange", "New York", "United States", "Americas", 40.71, -74.01, "S&P 500 · Dow", proxy="SPY"),
+    E("XNAS", "Nasdaq", "New York", "United States", "Americas", 40.76, -73.99, "Nasdaq Composite · Nasdaq-100", proxy="QQQ"),
+    E("XASE", "NYSE American", "New York", "United States", "Americas", 40.71, -74.01, "NYSE American Composite", proxy="IWM"),
+    E("ARCX", "NYSE Arca", "New York", "United States", "Americas", 40.71, -74.01, "ETFs (SPY, QQQ, IWM ...)", proxy="SPY"),
+    E("BATS", "Cboe BZX Exchange", "Chicago", "United States", "Americas", 41.88, -87.64, "Cboe equities (BZX)", proxy="SPY"),
+    E("CBOT", "Chicago Board of Trade (CME Group)", "Chicago", "United States", "Americas", 41.88, -87.63, "Treasury · grain futures", proxy="TLT"),
+    E("XTSX", "TSX Venture Exchange", "Calgary", "Canada", "Americas", 51.05, -114.07, "S&P/TSX Venture Composite", proxy="EWC"),
     E("CMES", "CME Group (Globex)", "Chicago", "United States", "Americas", 41.88, -87.63, "E-mini S&P 500 futures", proxy="SPY"),
     E("XCBF", "Cboe Futures Exchange", "Chicago", "United States", "Americas", 41.78, -87.75, "VIX futures", proxy="VIXY"),
     E("IEPA", "ICE Futures U.S.", "Atlanta", "United States", "Americas", 33.75, -84.39, "Russell 2000 · DXY futures", proxy="IWM"),
