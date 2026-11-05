@@ -699,12 +699,12 @@ def _sync(args, settings: Settings) -> tuple[int, int]:
 
                 from .gui.world import PROXIES  # the market's proxies, from the app's exchanges table
 
-                result = collector.sync(source, store, feed.tier, log=log, refresh_hours=settings.refresh_hours,
-                                        feeds=feed_profiles(settings), only=tickers, published_only=True,
-                                        audits=(settings.audits_per_run, settings.audits_random_per_run),
-                                        on_item=lambda t: store.set_run_current(args._run_id, t),
-                                        directory_allowance=reserve_left, futures_per_run=settings.futures_per_run,
-                                        proxies=PROXIES)
+                run = collector.Collector(source, store, feed.tier, log=log, refresh_hours=settings.refresh_hours,
+                                          feeds=feed_profiles(settings), proxies=PROXIES,
+                                          audits=(settings.audits_per_run, settings.audits_random_per_run),
+                                          futures_per_run=settings.futures_per_run)
+                result = run.run(only=tickers, published_only=True, directory_allowance=reserve_left,
+                                 on_item=lambda t: store.set_run_current(args._run_id, t))
                 args._rows = result.rows
                 log(f"sync {name}: {result.rows} rows saved"
                     + (f", {result.skipped} symbols refreshed within {settings.refresh_hours:g} h left for later"
@@ -757,7 +757,7 @@ def _instance(found, args, settings: Settings) -> Settings | None:
         return settings
     from liminal_libs import sourcing
 
-    return sourcing.apply_detected(load_settings())
+    return sourcing.Scans.apply(load_settings())
 
 
 def cmd_fetcher(args, settings: Settings) -> int:
@@ -871,16 +871,12 @@ def cmd_live(args, settings: Settings) -> int:
 
 
 def make_recorder(settings: Settings, locks: list, stop=None):
-    """The recorder of this database's live trades, holding `locks` (live.take_locks), stopping on
-    `stop` (a host's, or its own)."""
+    """The recorder of this database's live trades (live.Recorder.for_settings: the coins and the stock
+    keys the settings allow, a plugin's night poller, the database's log), holding `locks`
+    (live.take_locks), stopping on `stop` (a host's, or its own)."""
     from liminal_libs import live
 
-    # a night no stream has, polled by its plugin on its key's limits (Tiingo's Blue Ocean nights)
-    boats = live.night_poller(settings)
-    extra = {"stop": stop} if stop is not None else {}
-    return live.Recorder(settings.db_path, coins=settings.live_coins, stock_keys=live.stock_keys(settings),
-                         locks=locks, log=Logger(settings.db_path.parent / "logs" / "liminal.log"),
-                         selected_only=settings.live_selected_only, boats=boats, publications=settings, **extra)
+    return live.Recorder.for_settings(settings, locks, stop=stop)
 
 
 def cmd_host(args, settings: Settings) -> int:
@@ -1277,15 +1273,15 @@ def cmd_sourcing(args, settings: Settings) -> int:
 
     feeds = feed_profiles(settings)
     with Store(settings.db_path) as store:
-        scheme = sourcing.standing(store, feeds)
+        scheme = sourcing.Scheme.standing(store, feeds)
         used = {name: store.requests_today(name) for name in feeds}
-        scans = {name: store.kv_json(sourcing.SCAN_KEY.format(name), None) for name in feeds}
-    reports = sourcing.reports(feeds, scheme.today, settings, scans)
+        scans = sourcing.Scans.read(store, feeds)
+    reports = sourcing.Scheme.reports(feeds, scheme.today, settings, scans)
     if args.json:
         print(json.dumps({"reports": [{**r.as_dict(), "usedToday": used.get(n)} for n, r in reports.items()],
                           "scheme": scheme.as_dict()}, default=str))
         return 0
-    print(sourcing.report(scheme, reports))
+    print(scheme.text(reports))
     return 0
 
 
@@ -1323,17 +1319,15 @@ SCAN_DAYS = 7  # each provider's capabilities are scanned again this often, at t
 
 
 def _scan(name: str, source, store: Store, log, due_days: float | None = None, settings: Settings | None = None) -> None:
-    """Run a provider's capability scan and keep it (kv sourcing.SCAN_KEY); with `due_days` (a sync's),
+    """Run a provider's capability scan and keep it (sourcing.Scans.keep); with `due_days` (a sync's),
     only when the last is older and the feed has symbols to collect. A scan that fails is logged;
     the run goes on."""
-    import json
-
     from liminal_libs import sourcing
 
     p = providers().get(name)
     if p is None or not p.has_scan:
         return
-    last = store.kv_json(sourcing.SCAN_KEY.format(name), None)
+    last = sourcing.Scans.last(store, name)
     now = datetime.now().astimezone()
     if due_days is not None and last and now - datetime.fromisoformat(last["at"]) < timedelta(days=due_days):
         return
@@ -1346,11 +1340,7 @@ def _scan(name: str, source, store: Store, log, due_days: float | None = None, s
     except Exception as e:  # noqa: BLE001 - a scan must not stop the feed's run
         log(f"{name}: capability scan failed ({type(e).__name__}: {e})")
         return
-    store.kv_set(sourcing.SCAN_KEY.format(name), json.dumps({"at": now.isoformat(timespec="seconds"),
-                                                             "results": [list(r) for r in found.results],
-                                                             "plan": dict(found.plan),
-                                                             "alike": {k: list(v) for k, v in found.alike.items()},
-                                                             "limits": dict(found.limits)}))
+    sourcing.Scans.keep(store, name, found, now)
     for what, ok, detail in found.results:
         log(f"{name}: {'yes' if ok else 'no '} {what}" + (f": {detail}" if detail else ""))
     client = getattr(source, "client", None)
@@ -2098,7 +2088,7 @@ def main(argv: list[str] | None = None) -> int:
         from liminal_libs.storage import set_read_only
 
         set_read_only(settings.read_only)  # LIMINAL_READONLY: every store this command opens reads only
-        settings = sourcing.apply_detected(settings)  # each plugin's plan as its scan found it, unless you set it
+        settings = sourcing.Scans.apply(settings)  # each plugin's plan as its scan found it, unless you set it
 
         set_tick_access(not settings.bars_only)  # bars-only: no store this command opens reads ticks
         return args.func(args, settings)

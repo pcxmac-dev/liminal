@@ -139,11 +139,12 @@ def symbol_rows(store: Store, settings: Settings, source: str, now: datetime, cu
                 detail: int | None = None, focus: frozenset = frozenset(),
                 order: dict[str, int] | None = None) -> list[dict]:
     """The Fetcher's rows for one feed. With several feeds, what a row still needs is the spans
-    this feed should download (coverage.plan: nobody holds them and no better-ranked feed serves
-    them), not everything it lacks itself. That plan costs a few queries a symbol: with `detail`,
-    only the first `detail` rows by relevance (`ranked`), and the `focus` tickers, get it (each
-    marked `planned`); the others keep the estimate from what the feed holds itself."""
-    from liminal_libs.coverage import plan
+    this feed should download (coverage.Planner, one for the pass: nobody holds them and no
+    better-ranked feed serves them), not everything it lacks itself. A plan costs a few queries a
+    symbol: with `detail`, only the first `detail` rows by relevance (`ranked`), and the `focus`
+    tickers, get it (each marked `planned`); the others keep the estimate from what the feed holds
+    itself."""
+    from liminal_libs.coverage import Planner
     from liminal_libs.sources import feed_profiles, providers
 
     today = now.date()
@@ -196,6 +197,7 @@ def symbol_rows(store: Store, settings: Settings, source: str, now: datetime, cu
         items.append((item, floor))
     chosen = set(range(len(rows))) if detail is None else \
         {i for i, r in enumerate(rows) if r["ticker"] in focus} | set(ranked(rows, order)[:detail])
+    planner = Planner(store, profiles, now)  # the scores, the scheme and the watch rows read once for the pass
     for i in sorted(chosen):
         row, (item, floor) = rows[i], items[i]
         row["planned"] = True
@@ -203,7 +205,7 @@ def symbol_rows(store: Store, settings: Settings, source: str, now: datetime, cu
                 or row["state"] in ("closed", "retired", "blocked")):
             continue
         item_floor = max(floor, item["listed_from"]) if item.get("listed_from") else floor
-        gaps = plan(store, me, profiles, item["ticker"], item["asset"], "minute", item_floor, now, item.get("listed_from"))
+        gaps = planner.plan(me, item["ticker"], item["asset"], "minute", item_floor, item.get("listed_from"))
         missing_days = sum(b - a for a, b in gaps) / 86_400_000
         per_day = MINUTES_PER_DAY.get(item["asset"], 960) * (1 if item["asset"] == "crypto" else 5 / 7)
         row["requestsLeft"] = math.ceil(missing_days * per_day / (per_request or BARS_PER_REQUEST))

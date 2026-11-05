@@ -23,7 +23,7 @@ from urllib.parse import parse_qs, urlparse
 import pandas as pd
 
 from liminal_libs import config, freshness, live, mongo, sourcing
-from liminal_libs.config import Settings, load_settings
+from liminal_libs.config import Settings
 from liminal_libs.storage import LayoutLimit, Store
 from liminal_libs.storage.markets import mic_names
 from liminal_libs.storage.requests import KINDS as REQUEST_KINDS, OPEN as OPEN_REQUEST, read_status
@@ -100,7 +100,7 @@ class ChartApp:
         self._fetcher = fetcher
         self._touch = touch  # tells the integrator a page is in touch (its link attaches): the fetcher stays up
         self._symbol_request: tuple[str, int] | None = None  # the last symbol a page opened, and its request
-        self._settings = settings or load_settings(env={}, env_file=None)
+        self._settings = settings or Settings.load(env={}, env_file=None)
         # With `reload_settings` (the app started from the command line), a key or plan saved after
         # it started (tools/set-key.ps1) counts within SETTINGS_TTL_S: the Fetcher shows each feed
         # as it is now, not as it was when the app started.
@@ -378,7 +378,7 @@ class ChartApp:
                     self._saved_keys = saved
                     settings = self._reload_settings()
                 # each plugin's plan as its last scan found it, wherever the user set none
-                settings = config.with_detected(settings, sourcing.detected_plans(sourcing.scans_at(self.store.path)))
+                settings = settings.with_detected(sourcing.Scans.plans(sourcing.Scans.at(self.store.path)))
                 if settings is not self._settings:
                     self._settings = settings
                     # what was worked out from the old keys and plans: the feeds, their states, the checks
@@ -903,7 +903,7 @@ class ChartApp:
         cal = self.engine.calendar()  # outside the shared lock, like the Markets view's
         feeds = feed_profiles(self.settings)
         with self._lock:
-            scheme = sourcing.standing(self.store, feeds)
+            scheme = sourcing.Scheme.standing(self.store, feeds)
             out = venues.summary(self.store, cal, feeds, scheme)
         self._venues_cache = (time.monotonic(), out)
         return out
@@ -932,9 +932,9 @@ class ChartApp:
             return hit[1]
         settings = self.settings
         feeds = feed_profiles(settings)
-        scans = sourcing.scans_at(self.store.path)
+        scans = sourcing.Scans.at(self.store.path)
         with self._lock:
-            scheme = sourcing.standing(self.store, feeds)
+            scheme = sourcing.Scheme.standing(self.store, feeds)
             out = plugins.view(self.store, settings, feeds, scheme, scans, running)
         try:
             out["publishers"] = self.publishers()

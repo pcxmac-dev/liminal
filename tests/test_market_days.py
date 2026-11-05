@@ -146,7 +146,7 @@ def test_refusals(store):
 
 
 def test_the_run_takes_the_file_before_the_market_moves():
-    body = inspect.getsource(collector.sync)
+    body = inspect.getsource(collector.Collector._before_symbols)  # the run's first stage
     # the market's proxies are the app's (gui/world.PROXIES), handed to the run (the library names no view)
     assert body.index("market_days(source, store, me, feeds, store.watchlist(source.name), now, proxies or [], log)") \
         < body.index("fetch_market_moves(source, store, now, proxies or [], log)")

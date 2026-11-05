@@ -304,6 +304,46 @@ liminal-integrator"; "all lib calls will point to liminal-libs".
   workspace nothing changes: the data in ~/LiminalData, the plugins as installed packages. On the
   user's PC: `C:\Users\ciara\source\liminal\` (the junction of old replaced by the folder).
 
+## The library's classes (2026-11-03)
+
+The user, 2026-11-03: "most of the code should be OO based" ... "where it is not a detriment to
+performance". liminal-libs 1.5.0 (Phase 5 of the rewrite) gives each core module a class that owns a
+run's or a view's state and its decisions; the hot loops and the pure functions stay functions, and
+every module keeps a function under each name a caller or a test used (`collector.sync` is
+`Collector(...).run(...)`, `coverage.plan` a one-plan `Planner`, `sourcing.standing` is
+`Scheme.standing`, and so on), so a test's stand-in set on the module is the one used. What this app
+and the integrator call since then:
+
+- `collector.Collector(source, store, tier, *, now, log, refresh_hours, feeds, audits,
+  futures_per_run, proxies).run(only, published_only, on_item, directory_allowance)`: a feed's
+  scheduled run, stage by stage (`_before_symbols`: the exchanges, the calendars, the watched stocks'
+  market days, then the market moves; `_plan_run`; `_step`; `_after_symbols`); `cli._sync` makes one
+  per feed. `audit.Auditor` and `initializer.Initializer` behind the audits and `init`.
+- `coverage.Planner(store, feeds, now).plan(me, ticker, asset, timespan, floor, listed_from,
+  exchange)`: the audit scores, the standing scheme and a ticker's watch rows read once for the
+  planner's life; the Fetcher view's `activity.symbol_rows` makes one per pass (not one per symbol),
+  the collector one per symbol step.
+- `sourcing.Scheme.standing(store, feeds, now)` (the delivery scheme, kept by store),
+  `Scheme.reports`, `scheme.text(reports)`; `sourcing.Scans` (`keep`, `last`, `read`, `at`, `plans`,
+  `apply`): the providers' capability scans in one place (`cli._scan` keeps one, `sourcing` reads
+  them, every command starts from `Scans.apply(settings)`, the chart server too when a key was saved).
+- `config.Settings.load(env, env_file)` and `settings.with_detected(plans)`; `config.UserEnvironment`
+  behind `saved_user_keys` (the registry read that the tests stand in for).
+- `live.Recorder.for_settings(settings, locks, stop, log)`: `cli.make_recorder`.
+  `runner.Runner(store_factory, settings, log).run()`: the integrator's workers for the plugins that
+  fetch on their own.
+- `derive.Builder` and `Lease`, `baddata.Scanner`, `datasets.DatasetFetcher`, `publications.Reader`,
+  `killswitch.KillSwitch`, `host.Attachment.to`, `host.Host.start`: behind the module functions this
+  app still calls by name (`derive.run`, `datasets.fetch`, `publications.view`/`run_due`/`recheck_now`,
+  `killswitch.killed`/`strike`/`release`/`kills`, `host.attach`), which its tests patch.
+
+Stays functional, deliberately (the user's "where it is not a detriment to performance"):
+`sessions.py` (the calendar masks), `freshness.expected` and the publication rules, `storage/*` (the
+queries), `stores.py`, `memory.py`, `resources.py`, `proc.py`, `ratelimit.py` (classes already),
+`gov.view`/`parameters`/`upcoming`, `audit.compare`, `derive.aggregate` (vectorised), the bad-data
+rules (`malformed`, `spikes`, `inconsistent`, `scan_series`) and the collector's request loops
+(`sync_bars`, `sync_future`, `check_listing`, `daily_first`, `market_days`, `refresh_directory`).
+
 ## Providers are plugins (2026-10-27)
 
 Every data provider the fetcher uses is a plugin: one `FeedPlugin` (`sources/plugin.py`, plugin
