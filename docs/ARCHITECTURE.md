@@ -347,7 +347,7 @@ rules (`malformed`, `spikes`, `inconsistent`, `scan_series`) and the collector's
 ## Providers are plugins (2026-10-27)
 
 Every data provider the fetcher uses is a plugin: one `FeedPlugin` (`sources/plugin.py`, plugin
-API 2.0; the `Provider` record of `sources/registry.py` before it, a subclass of the same class)
+API 2.1 since 2026-11-04, 2.0 the classes; the `Provider` record of `sources/registry.py` before it, a subclass of the same class)
 holding everything the app knows about it, so nothing else names a provider to decide how to treat
 it. Every one is a package of its own since 2026-11-01 (`plugin-integrator-<name>`, a repository each
 under pcxmac-dev, installed by the app's `plugins` extra): Massive with its headlines publisher,
@@ -577,12 +577,33 @@ A plugin that fails to load is left out and reported (`plugins`), never fatal.
     a callback a method of the same name; module helpers other functions use stay functions; a
     `Live` needing `self` becomes a `live` property; the module keeps its instances (`PLUGIN =
     TwsePlugin()`; `PLUGINS = (TIINGO, FOREX)`), tests move from module functions to them.
-  - **What a plugin may rely on (API 1.0; 2.0: the classes)**, and nothing else of `liminal`:
+  - **2.1** (2026-11-04; the user: "every plugin needs to furnish the correct mechanisms for assessing
+    data, data integrity, provide a 'spec' for the data, different source plugins like massive and
+    Tingo can inherit 'stock_symbol_data'") is the data specs (`sources/data.py`, liminal-libs 1.6.0):
+    a class per kind of data a plugin delivers, each with `spec()` (the fields and dtypes, the
+    resolutions, the sessions and calendar, the adjustments, the symbol form; a document's parts; the
+    products and the store each goes to), `assess(frame, since, until)` (held and missing spans as the
+    coverage ledger has them, completeness against the calendar's slots, latency, with a plan the
+    freshness state) and `integrity(frame)` (the bad-data rules behind one method, duplicates, rows
+    outside the sessions, gaps, a required field missing; `compare` for two feeds' copies, `scan` for
+    the rules that need the store). `TimeSeriesData` (`StockSymbolData`, `IndexData`, `FxData`,
+    `CryptoSymbolData`, `FutureData`) for the feeds' bars and ticks; `DocumentData` (`ReleaseData`,
+    `HeadlineData`, `FilingData`; the parts `Paragraph`, `Page`, `Statement`, and `Document`) for the
+    publishers' documents. Each names its products (`Product`): the original to MongoDB, or SQLite
+    until it moves, and what is evaluated or derived from it kept apart in SQLite or DuckDB, keyed to
+    the original and never written back (the user: "mongo is used to store the original source
+    document, while a different database is used to evaluate or derive information from the original
+    document"). A feed declares its own classes where the vendor's data differs (`data = {"stock":
+    MassiveStockData}`, saying `api = "2.1"`) and takes the asset class's otherwise (`data_for(asset)`);
+    a publisher its `data` or its kind's (`document_data()`); the conformance check reads the
+    declarations. A 2.0 plugin loads unchanged; the fetching stays in each plugin's `DataSource`.
+  - **What a plugin may rely on (API 1.0; 2.0: the classes; 2.1: the data specs)**, and nothing else of `liminal`:
     `sources.registry`: `PLUGIN_API`, `RECORD_API`, `FeedPlugin`, `Plugin`, `Provider`, `KeyVar`,
     `Scanned`, and `Report`, `Limits`, `Capability` for a `reporter`; the helpers `limiter`,
     `machine_caps`, `public_client`, `minute_window`. `sources.plugin`: the same classes and records.
     `sources.publisher`: `PublisherPlugin`, `Publisher`, `Feed`, `Policy`. `sources.archive` (2.0):
-    `PublicFeedPlugin`, `CryptoVenuePlugin`. `freshness`: `Delay` (a feed's `delays`). `sources.dataset` (1.4):
+    `PublicFeedPlugin`, `CryptoVenuePlugin`. `sources.data` (2.1): `TimeSeriesData` and its asset classes,
+    `DocumentData` and its kinds, their parts, `Product`. `freshness`: `Delay` (a feed's `delays`). `sources.dataset` (1.4):
     `Dataset`, `Parsed` and the parsers' helpers (`ms`, `day_of`, `at`, `months_after`, `num`,
     `text`). `sources.stream` (1.5): `Live`, `Reconnect`, `Refused`, `Notice`, `PING`, `trade`, `ns`.
     `sources.base`:
