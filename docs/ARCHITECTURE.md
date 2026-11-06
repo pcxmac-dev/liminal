@@ -344,6 +344,16 @@ queries), `stores.py`, `memory.py`, `resources.py`, `proc.py`, `ratelimit.py` (c
 rules (`malformed`, `spikes`, `inconsistent`, `scan_series`) and the collector's request loops
 (`sync_bars`, `sync_future`, `check_listing`, `daily_first`, `market_days`, `refresh_directory`).
 
+liminal-libs 1.7.0 (2026-11-05), the apps' frame (the user: "define all this stuff in liminal libs ...
+the library basically facilitates the interprocess communication, the way the apps can bind to each
+other ... As well as the framework for the graphics"): `gui/web.py` moved to the library's `web.py`
+(this app's module re-exports it and keeps `STATIC` and `fetcher_page`), `icons.js` to
+`liminal_libs.ui.STATIC` with `liminal.css` (served beside this app's files: `static_file` reads the
+app's folder first, then the library's), and `liminal_libs.apps` gives every app its frame (`App`:
+its master icon, its tray, its routes at its own port) and the login app's client (`LoginClient`).
+The chart front and the integrator's page still run their own servers by hand; they move onto `App`
+at 0.3.0, when the charts app binds the other apps' trays under its own.
+
 ## Providers are plugins (2026-10-27)
 
 Every data provider the fetcher uses is a plugin: one `FeedPlugin` (`sources/plugin.py`, plugin

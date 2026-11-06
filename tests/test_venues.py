@@ -133,5 +133,7 @@ def test_the_page_has_its_rail_icon_and_view():
     static = Path(__file__).resolve().parents[1] / "src" / "liminal_charts" / "gui" / "static"
     html = (static / "index.html").read_text(encoding="utf-8")
     assert 'id="railExchanges"' in html and 'id="viewExchanges"' in html and 'src="venues.js"' in html
-    assert "scales:" in (static / "icons.js").read_text(encoding="utf-8")
+    from liminal_libs import ui
+
+    assert "scales:" in (ui.STATIC / "icons.js").read_text(encoding="utf-8")  # the library's, since liminal-libs 1.7.0
     assert "exchanges: 'exchanges'" in (static / "panels.js").read_text(encoding="utf-8")

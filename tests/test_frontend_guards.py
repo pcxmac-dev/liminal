@@ -12,7 +12,10 @@ STATIC = Path(server.__file__).parent / "static"
 
 
 def _js(name: str) -> str:
-    return (STATIC / name).read_text(encoding="utf-8")
+    """A page file as served: the app's own, else the library's (icons.js since liminal-libs 1.7.0)."""
+    from liminal_libs import ui
+
+    return ((STATIC / name) if (STATIC / name).is_file() else (ui.STATIC / name)).read_text(encoding="utf-8")
 
 
 def test_the_time_axis_asks_for_calendars_the_server_answers():

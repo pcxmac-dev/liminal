@@ -371,7 +371,9 @@ def test_the_page_has_its_plug_and_view():
     static = Path(__file__).resolve().parents[1] / "src" / "liminal_charts" / "gui" / "static"
     html = (static / "index.html").read_text(encoding="utf-8")
     assert 'id="railPlugins"' in html and 'id="viewPlugins"' in html and 'src="plugins.js"' in html
-    assert "plug:" in (static / "icons.js").read_text(encoding="utf-8")
+    from liminal_libs import ui
+
+    assert "plug:" in (ui.STATIC / "icons.js").read_text(encoding="utf-8")  # the library's, since liminal-libs 1.7.0
     panels = (static / "panels.js").read_text(encoding="utf-8")
     assert "plugins: 'plugins'" in panels and "icon('plug', RAIL_ICON)" in panels
     js = (static / "plugins.js").read_text(encoding="utf-8")
