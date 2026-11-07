@@ -28,6 +28,7 @@ from liminal_libs.storage import LayoutLimit, Store
 from liminal_libs.storage.markets import mic_names
 from liminal_libs.storage.requests import KINDS as REQUEST_KINDS, OPEN as OPEN_REQUEST, read_status
 from . import activity, astro, web
+from ..frame import ChartsApp
 from .bars import CALENDAR, PRICE_BASED, TIME_TYPES, BarEngine, Style, _BoundedCache, resample
 from liminal_libs.calc.derivatives import Model
 from .stats import details_subset, key_stats
@@ -89,7 +90,7 @@ class ChartApp:
 
     def __init__(self, store: Store, priority: list[str] | None = None, settings: Settings | None = None,
                  reload_settings: Callable[[], Settings] | None = None, mode: str = "chart", fetcher=None,
-                 touch: Callable[[], None] | None = None):
+                 touch: Callable[[], None] | None = None, frame=None):
         self.store = store
         # The page served at /: the chart app's ("chart") or the fetcher's own ("fetcher": the data
         # and monitoring views, without the chart and what is the user's); the API is the same.
@@ -99,6 +100,12 @@ class ChartApp:
         # the requests wait in the file.
         self._fetcher = fetcher
         self._touch = touch  # tells the integrator a page is in touch (its link attaches): the fetcher stays up
+        # The app of the frame this API speaks for (liminal_libs.apps.App: the plugins attached, with the
+        # app's login as the one way to their keys; the user, 2026-11-06): the charts app's own (frame.py),
+        # or the integrator's when its page is served here (serve_integrator). Its plugins are attached by
+        # the server at start (frame.attach_plugins()), not here: a process holds its plugins once.
+        self.frame = frame if frame is not None else ChartsApp()
+        self.login = self.frame.login
         self._symbol_request: tuple[str, int] | None = None  # the last symbol a page opened, and its request
         self._settings = settings or Settings.load(env={}, env_file=None)
         # With `reload_settings` (the app started from the command line), a key or plan saved after
@@ -2318,6 +2325,8 @@ def make_handler(app: ChartApp, port_ref: list[int]):
                         return self._json(app.profile(q))
                 if url.path == "/api/info":
                     return self._json(app.info(q["source"], q["ticker"], q.get("adjust")))
+                if url.path == "/api/interface":  # the frame: this app, the plugins attached and their API
+                    return self._json({**app.frame.interface(), "attached": app.frame.plugins()})
                 if url.path == "/api/deps":
                     return self._json(app.deps())
                 if url.path == "/api/directory":
@@ -2463,6 +2472,7 @@ def serve(db_path: Path, port: int = 8765, open_browser: bool = True, priority: 
     plugin set up here scans its capabilities and plan again shortly after the first page."""
     store = Store(db_path, check_same_thread=False)
     app = ChartApp(store, priority, settings, reload_settings=reload_settings)
+    app.frame.attach_plugins()  # alone, the charts app holds every plugin loaded (the super app)
     _prepare(app, rescan)
     httpd = make_server(app, port)
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
@@ -2480,7 +2490,8 @@ def serve(db_path: Path, port: int = 8765, open_browser: bool = True, priority: 
 
 def serve_integrator(settings: Settings, port: int, *, link, open_browser: bool = False, log=None,
                      stop: threading.Event | None = None, rescan: bool = False,
-                     reload_settings: Callable[[], Settings] | None = None, until_quiet: bool = False) -> str:
+                     reload_settings: Callable[[], Settings] | None = None, until_quiet: bool = False,
+                     frame=None) -> str:
     """The integrator's page and the data API in the integrator's own process (the user, 2026-11-03:
     "for the webserver / ports, i just integrator, and charts": two listeners, this one at
     LIMINAL_FETCHER_PORT and the chart front's), on 127.0.0.1:`port` (a free one when something
@@ -2488,12 +2499,15 @@ def serve_integrator(settings: Settings, port: int, *, link, open_browser: bool 
     touch for a while (an integrator the chart front started for itself). The data is read here;
     `link` is this process's hold on the fetcher host over the pipe (liminal_integrator.service's
     FetcherLink: a page in touch keeps the fetcher attached, started if none answers; its status, a
-    wake and a pass go over the pipe). Returns the URL served."""
+    wake and a pass go over the pipe). `frame` is the integrator as an app of the frame
+    (liminal_integrator.app.IntegratorApp): this process's hold on the stock-data plugins, attached here
+    with the integrator's login, and what /api/interface describes. Returns the URL served."""
     log = log or _log_to(settings.db_path)
     stop = stop or threading.Event()
     store = Store(settings.db_path, check_same_thread=False)
     app = ChartApp(store, list(settings.source_priority), settings, reload_settings=reload_settings, mode="fetcher",
-                   fetcher=link, touch=link.touch)
+                   fetcher=link, touch=link.touch, frame=frame)
+    app.frame.attach_plugins("integrator")  # the integrator's page holds the stock-data plugins
     _prepare(app, rescan)
     httpd = make_server(app, port)
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
