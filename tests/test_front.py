@@ -216,6 +216,14 @@ def test_the_front_binds_the_login_app_under_its_prefix_and_draws_its_tray(tmp_p
     assert real_start_login(8795, lines.append) is True
     assert popen[0][0][1:] == ["-m", "liminal_login", "serve", "--no-browser", "--port", "8795", "--until-quiet"]
     assert popen[0][1]["env"]["LIMINAL_LOGIN_FOR"] == "charts"  # its users' namespace: this app's
+    # the login's file, when there is one, goes with it: what the login is tied to (the user, 2026-11-06)
+    from liminal_libs.apps import Scope
+
+    monkeypatch.setattr(front_mod.Scope, "find", classmethod(lambda cls, start=None, env=None: None))
+    assert real_start_login(8795, lines.append) is True and "LIMINAL_LOGIN_CFG" not in popen[1][1]["env"]
+    found = Scope.local(tmp_path, title="Here", path=tmp_path / "liminal-login.cfg")
+    monkeypatch.setattr(front_mod.Scope, "find", classmethod(lambda cls, start=None, env=None: found))
+    assert real_start_login(8795, lines.append) is True and popen[2][1]["env"]["LIMINAL_LOGIN_CFG"] == str(tmp_path / "liminal-login.cfg")
     assert front_mod.login_url() == f"http://127.0.0.1:{free}"
     monkeypatch.setenv("LIMINAL_LOGIN_URL", "off")
     assert front_mod.login_url() is None

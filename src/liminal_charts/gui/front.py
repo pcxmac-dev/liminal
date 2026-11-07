@@ -33,7 +33,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from liminal_libs import config
-from liminal_libs.apps import Binding, forward, start_app, wait_for
+from liminal_libs.apps import Binding, Scope, forward, start_app, wait_for
 from liminal_libs.apps.login import DEFAULT_URL as LOGIN_URL
 from liminal_libs.apps.login import URL_VAR as LOGIN_URL_VAR
 from liminal_libs.logs import log_to
@@ -82,7 +82,11 @@ def start_login(port: int, log=print) -> bool:
     """Start the login app's server for this front (`liminal-login serve --no-browser --port PORT
     --until-quiet`, for the charts app: its users' namespace, LIMINAL_LOGIN_FOR). False: the login
     app is not installed (liminal-login)."""
-    if not start_app("liminal_login", port, {"LIMINAL_LOGIN_FOR": "charts"}, log):
+    env = {"LIMINAL_LOGIN_FOR": "charts"}
+    scope = Scope.find()  # the login's own file, read the same way by every app (liminal-login.cfg): what it is tied to
+    if scope is not None and scope.path is not None:
+        env["LIMINAL_LOGIN_CFG"] = str(scope.path)
+    if not start_app("liminal_login", port, env, log):
         log("the login app is not installed (liminal-login): no sign-in on this page")
         return False
     return True
