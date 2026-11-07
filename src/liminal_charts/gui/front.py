@@ -273,8 +273,8 @@ def make_front_handler(front: Front):
                 return self._json({"error": f"the integrator is not running (none answers, none could be started): "
                                             f"{front.name} has no data to show; see logs/liminal.log"},
                                   HTTPStatus.SERVICE_UNAVAILABLE)
-            forward(self, method, f"http://127.0.0.1:{port}", self.path,
-                    unavailable="the integrator does not answer; ask again shortly")
+            forward(self, method, f"http://127.0.0.1:{port}", self.path, drop_cookies=("liminal_login_",),
+                    unavailable="the integrator does not answer; ask again shortly")  # the login's session stays here
 
         def _bound(self, method: str, name: str) -> None:
             """The request passed on to the app bound under /<name>/, its answer and its cookies
@@ -287,8 +287,9 @@ def make_front_handler(front: Front):
             path = self.path[len(f"/{name}"):]
             if not path or path.startswith("?"):
                 path = "/" + path
-            forward(self, method, bound.url, path, cookie_path=f"/{name}",
-                    unavailable=f"the {name} app does not answer; ask again shortly")
+            # the bound app's cookies keep their own path (the login's session at /, so the main page's
+            # request carries it and the front can ask the login app who is signed in)
+            forward(self, method, bound.url, path, unavailable=f"the {name} app does not answer; ask again shortly")
 
         def _static(self, path: str) -> None:
             rel = "index.html" if path in ("", "/") else path.lstrip("/")

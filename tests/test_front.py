@@ -97,6 +97,10 @@ def test_the_front_funnels_its_pages_requests_to_the_integrator(tmp_path, monkey
         j = json.loads(body)
         assert status == 200 and j["path"] == "/api/echo?x=1" and j["cookie"] == "mc_profile=3" and j["profile"] == "3"
         assert j["origin"] is None and j["site"] is None  # where it came from was checked here, not passed on
+        # the login app's session cookie stays here: the integrator never sees it
+        j = json.loads(_get(port, "/api/echo", {"Cookie": "liminal_login_charts=tok; mc_profile=3"})[1])
+        assert j["cookie"] == "mc_profile=3"
+        assert json.loads(_get(port, "/api/echo", {"Cookie": "liminal_login_charts=tok"})[1])["cookie"] is None
         assert j["host"] == f"127.0.0.1:{upstream.server_address[1]}"
         assert r.getheader("Set-Cookie") == "mc_profile=7; Path=/"  # the integrator's cookie passed back
         assert front.connected and any("connected to the integrator" in m for m in lines)
@@ -164,7 +168,7 @@ def test_the_front_binds_the_login_app_under_its_prefix_and_draws_its_tray(tmp_p
         assert "fetch('/login/api/status')" in login_js and "'/login/?embedded=1'" in login_js and "e.data.liminal !== 'login'" in login_js
         assert "post('/api/profiles', { name })" in login_js  # the profile under the account name
         assert "/login/api/sign-out" in (front_mod.web.STATIC / "panels.js").read_text(encoding="utf-8")
-        assert r.getheader("Set-Cookie") == "mc_profile=7; Path=/login"  # the bound app's cookie, its path narrowed
+        assert r.getheader("Set-Cookie") == "mc_profile=7; Path=/"  # the bound app's cookie, its own path (the main page sends it)
         assert json.loads(_get(port, "/login/")[1])["path"] == "/" and json.loads(_get(port, "/login?embedded=1")[1])["path"] == "/?embedded=1"
         assert _get(port, "/login/api/status", {"Origin": "http://evil.example"})[0] == 403
         conn = HTTPConnection("127.0.0.1", port)
