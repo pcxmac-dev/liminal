@@ -185,10 +185,14 @@ def test_the_front_binds_the_login_app_under_its_prefix_and_draws_its_tray(tmp_p
     up[0].server_close()
     monkeypatch.setattr(front_mod, "start_login", lambda port, log=print: False)
     assert front.login() is None and front.trays() == []
-    # the start itself: the login's module, no window, until quiet
+    # the start itself: the login's module, no window, until quiet (the module stood in for: CI has no login app)
+    import sys
+    import types
+
     from liminal_libs.apps import binding as binding_mod
     popen: list = []
     monkeypatch.setattr(binding_mod.subprocess, "Popen", lambda args, **kw: popen.append((args, kw)))
+    monkeypatch.setitem(sys.modules, "liminal_login", types.ModuleType("liminal_login"))
     assert real_start_login(8795, lines.append) is True
     assert popen[0][0][1:] == ["-m", "liminal_login", "serve", "--no-browser", "--port", "8795", "--until-quiet"]
     assert front_mod.login_url() == f"http://127.0.0.1:{free}"

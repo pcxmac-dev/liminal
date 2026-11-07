@@ -16,5 +16,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: python -m pip install -e ".[dev,plugins,integrator]"  # the plugin packages too (each must load), and the fetcher
+      - run: python -m pip install -e ".[dev,plugins,integrator,login]"  # the plugin packages too (each must load), the fetcher and the login app
       - run: python -m pytest -q
