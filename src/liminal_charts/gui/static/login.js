@@ -1,7 +1,10 @@
 'use strict';
-// The login page: the profiles (the most recently signed in first), a click signs in (no
-// passwords) and opens the app; a new one starts with an empty watchlist, no markups and its own
-// preferences. The icon: Leonardo's Vitruvian Man (icons.js).
+// The main page's sign-in (the user, 2026-11-06: "i need a login or sign up on the main page"): the
+// login app's page held here (sign in, or sign up with your email), and once you are signed in your
+// profile is found or made under your account name and the app opens as it. Without a login app the
+// profiles alone, as before: the most recently signed in first, a click signs in (no passwords) and
+// opens the app; a new one starts with an empty watchlist, no markups and its own preferences. The
+// icon: Leonardo's Vitruvian Man (icons.js).
 (() => {
   const { icon, esc } = window.LiminalIcons;
   const $ = (id) => document.getElementById(id);
@@ -35,6 +38,55 @@
     location.reload();
   }
 
+  // -- the login app on this page -----------------------------------------------------------------
+  async function loginStatus() {
+    // the login app bound to this front (/login/), or null when there is none or it does not answer
+    try {
+      const r = await fetch('/login/api/status');
+      return r.ok ? await r.json() : null;
+    } catch (e) { return null; }
+  }
+
+  async function openAs(name) {
+    // your profile, by your account name: found, else made; then the app
+    const res = await fetch('/api/profiles');
+    const { profiles = [] } = await res.json();
+    let me = profiles.find((p) => p.name.toLowerCase() === String(name).toLowerCase());
+    if (!me) me = await post('/api/profiles', { name });
+    await signIn(me.id);
+  }
+
+  function showLoginApp(st) {
+    document.querySelector('.login').classList.add('with-app');
+    $('picker').hidden = true;
+    $('loginApp').hidden = false;
+    const f = $('loginFrame');
+    if (!f.dataset.loaded) { f.src = '/login/?embedded=1'; f.dataset.loaded = '1'; }
+    $('loginNote').textContent = st && st.users === 0
+      ? 'No account yet: sign up with your email, and the app opens as you.'
+      : 'Sign in, or sign up with your email; the app opens as you.';
+  }
+
+  window.addEventListener('message', (e) => {
+    // the login page held here says who signed in (login.js of liminal-login, embedded)
+    if (e.origin !== location.origin || !e.data || e.data.liminal !== 'login') return;
+    if (e.data.signedIn && e.data.name) openAs(e.data.name).catch(failed);
+  });
+
+  async function start() {
+    const st = await loginStatus();
+    if (st) {
+      if (st.signedIn && st.name) {
+        try { await openAs(st.name); return; } catch (err) { failed(err); }
+      }
+      showLoginApp(st);
+      return;
+    }
+    $('picker').hidden = false;  // no login app: the profiles
+    load();
+  }
+
+  // -- the profiles, without a login app ---------------------------------------------------------
   async function load() {
     try {
       const res = await fetch('/api/profiles');
@@ -61,5 +113,5 @@
       await signIn(made.id);
     } catch (err) { failed(err); }
   });
-  load();
+  start();
 })();

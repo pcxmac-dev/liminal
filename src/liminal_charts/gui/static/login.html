@@ -6,20 +6,29 @@
   <title>Liminal Charts: sign in</title>
   <link rel="stylesheet" href="style.css">
 </head>
-<!-- The login page (no passwords): pick a profile or make one. Each keeps its own watchlists,
-     markups, preferences and register of the stocks it opened (gui/server.py serves this page in
-     place of the app to a browser that has not chosen a profile). -->
+<!-- The main page's sign-in (the user, 2026-11-06: "i need a login or sign up on the main page"):
+     the login app's own sign-in and sign-up, held here (an iframe at /login/?embedded=1, through
+     this app's front); once you are signed in, your profile (your watchlists, markups, preferences
+     and register of the stocks you opened) is found or made under your account name and the app
+     opens. Without a login app (none bound, none answering) the profiles alone, as before: pick one
+     or make one. -->
 <body class="login-page">
-  <main class="login">
+  <main class="login login-main">
     <div id="loginIcon" class="login-icon" aria-hidden="true"></div>
     <h1>Liminal Charts</h1>
-    <p class="p-muted">Choose your profile</p>
-    <div id="profileList" class="login-profiles" role="list"></div>
-    <form id="newProfile" class="login-new" autocomplete="off">
-      <input id="newName" type="text" maxlength="40" placeholder="New profile name" aria-label="New profile name">
-      <button type="submit">Create</button>
-    </form>
+    <div id="loginApp" class="login-app" hidden>
+      <iframe id="loginFrame" title="Sign in or sign up" src="about:blank"></iframe>
+    </div>
+    <div id="picker" hidden>
+      <p class="p-muted">Choose your profile</p>
+      <div id="profileList" class="login-profiles" role="list"></div>
+      <form id="newProfile" class="login-new" autocomplete="off">
+        <input id="newName" type="text" maxlength="40" placeholder="New profile name" aria-label="New profile name">
+        <button type="submit">Create</button>
+      </form>
+    </div>
     <p id="loginError" class="login-error" role="alert"></p>
+    <p id="loginNote" class="p-muted"></p>
   </main>
   <script src="icons.js"></script>
   <script src="login.js"></script>

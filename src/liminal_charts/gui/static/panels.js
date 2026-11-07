@@ -182,6 +182,7 @@
       // markups not saved yet go first, as when the page closes: signed out, they went as the first
       // profile's and were refused (no such layout), lost
       if (layout.dirty && layout.current) await saveLayout({ leaving: true }).catch(() => {});
+      await fetch('/login/api/sign-out', { method: 'POST', headers: WRITE_HEADERS, body: '{}' }).catch(() => {});  // the login app's session too
       await fetch('/api/profiles/sign-out', { method: 'POST', headers: WRITE_HEADERS, body: '{}' });
     } finally { location.replace('/'); }  // the login page
   });

@@ -32,6 +32,10 @@ class Upstream(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self.path.startswith("/api/status"):  # the login app's status: signed in by its cookie
+            cookie = self.headers.get("Cookie") or ""
+            return self._json(200, {"signedIn": "liminal_login_charts=tok" in cookie, "name": "ada" if "tok" in cookie else None,
+                                    "users": 1, "for": "charts", "path": self.path, "cookie": self.headers.get("Cookie")})
         if self.path == "/api/tray":  # a bound app's tray (the login app's)
             return self._json(200, {"app": "login", "icon": "user", "title": "Login",
                                     "items": [{"id": "login", "icon": "user", "title": "Login", "kind": "app", "app": "login"}]})
@@ -120,9 +124,10 @@ def test_the_front_funnels_its_pages_requests_to_the_integrator(tmp_path, monkey
         monkeypatch.setenv("LIMINAL_FETCHER_PORT", "none")
         status, body, _ = _get(port, "/api/echo")
         assert status == 503 and b"the integrator is not running" in body and any("has no page" in m for m in lines)
-        # no login app on this page: no tray, and its prefix is told
+        # no login app on this page: no tray, its prefix is told, and the chart page opens on the profile alone
         assert json.loads(_get(port, "/api/trays")[1]) == {"trays": []}
-        assert _get(port, "/login/api/status")[0] == 503
+        assert _get(port, "/login/api/status")[0] == 503 and front.signed_in("mc_profile=1") is None
+        assert b'id="rail"' in _get(port, "/", {"Cookie": "mc_profile=1"})[1]
     finally:
         srv.shutdown()
         srv.server_close()
@@ -148,6 +153,17 @@ def test_the_front_binds_the_login_app_under_its_prefix_and_draws_its_tray(tmp_p
         status, body, r = _get(port, "/login/api/status?x=1", {"Cookie": "liminal_login=tok", "X-Liminal-Session": "tok"})
         j = json.loads(body)
         assert status == 200 and j["path"] == "/api/status?x=1" and j["cookie"] == "liminal_login=tok"
+        # the main page is the sign-in: without the login's session the chart page is not served, with it
+        # and a profile it is; signed in without a profile yet, the sign-in page makes the profile
+        assert front.signed_in("mc_profile=1") is False and front.signed_in("liminal_login_charts=tok") is True
+        status, body, _ = _get(port, "/", {"Cookie": "mc_profile=1"})
+        assert status == 200 and b'id="rail"' not in body and b'id="loginApp"' in body and b"Choose your profile" in body
+        assert b'id="rail"' in _get(port, "/", {"Cookie": "mc_profile=1; liminal_login_charts=tok"})[1]
+        assert b'id="loginApp"' in _get(port, "/", {"Cookie": "liminal_login_charts=tok"})[1]
+        login_js = (front_mod.web.STATIC / "login.js").read_text(encoding="utf-8")
+        assert "fetch('/login/api/status')" in login_js and "'/login/?embedded=1'" in login_js and "e.data.liminal !== 'login'" in login_js
+        assert "post('/api/profiles', { name })" in login_js  # the profile under the account name
+        assert "/login/api/sign-out" in (front_mod.web.STATIC / "panels.js").read_text(encoding="utf-8")
         assert r.getheader("Set-Cookie") == "mc_profile=7; Path=/login"  # the bound app's cookie, its path narrowed
         assert json.loads(_get(port, "/login/")[1])["path"] == "/" and json.loads(_get(port, "/login?embedded=1")[1])["path"] == "/?embedded=1"
         assert _get(port, "/login/api/status", {"Origin": "http://evil.example"})[0] == 403
@@ -195,6 +211,7 @@ def test_the_front_binds_the_login_app_under_its_prefix_and_draws_its_tray(tmp_p
     monkeypatch.setitem(sys.modules, "liminal_login", types.ModuleType("liminal_login"))
     assert real_start_login(8795, lines.append) is True
     assert popen[0][0][1:] == ["-m", "liminal_login", "serve", "--no-browser", "--port", "8795", "--until-quiet"]
+    assert popen[0][1]["env"]["LIMINAL_LOGIN_FOR"] == "charts"  # its users' namespace: this app's
     assert front_mod.login_url() == f"http://127.0.0.1:{free}"
     monkeypatch.setenv("LIMINAL_LOGIN_URL", "off")
     assert front_mod.login_url() is None

@@ -22,7 +22,10 @@ LIMINAL_QUIET_SECONDS), unless the integrator's service keeps it there from the 
 """
 from __future__ import annotations
 
+import json
 import threading
+import urllib.error
+import urllib.request
 import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -77,8 +80,9 @@ def start_integrator(db_path: Path, port: int, log=print) -> bool:
 
 def start_login(port: int, log=print) -> bool:
     """Start the login app's server for this front (`liminal-login serve --no-browser --port PORT
-    --until-quiet`). False: the login app is not installed (liminal-login)."""
-    if not start_app("liminal_login", port, {}, log):
+    --until-quiet`, for the charts app: its users' namespace, LIMINAL_LOGIN_FOR). False: the login
+    app is not installed (liminal-login)."""
+    if not start_app("liminal_login", port, {"LIMINAL_LOGIN_FOR": "charts"}, log):
         log("the login app is not installed (liminal-login): no sign-in on this page")
         return False
     return True
@@ -153,6 +157,23 @@ class Front:
     def bound(self, name: str) -> Binding | None:
         """A bound app by name, answering (started if need be), or None."""
         return self.login() if name == "login" else None
+
+    def signed_in(self, cookies: str | None) -> bool | None:
+        """Whether the browser sending `cookies` is signed in to the login app (asked with those
+        cookies, by this front); None when there is no login app to ask (none bound, none answering):
+        the page then opens as before, on its profile alone."""
+        bound = self.login()
+        if bound is None:
+            return None
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        headers = {"Accept": "application/json"}
+        if cookies:
+            headers["Cookie"] = cookies
+        try:
+            with opener.open(urllib.request.Request(bound.url + "/api/status", headers=headers), timeout=5) as resp:
+                return bool(json.loads(resp.read()).get("signedIn"))
+        except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+            return None
 
     def trays(self) -> list[dict]:
         """The trays of the apps bound to this front, for the foot of the rail (the user, 2026-11-04:
@@ -271,10 +292,13 @@ def make_front_handler(front: Front):
 
         def _static(self, path: str) -> None:
             rel = "index.html" if path in ("", "/") else path.lstrip("/")
-            # a browser signed in as no profile (its cookie; whether it still exists is the integrator's
-            # to check) picks or makes one first
-            if rel == "index.html" and web.profile_cookie(self) is None:
-                rel = "login.html"
+            # the main page is the sign-in (the user, 2026-11-06: "i need a login or sign up on the main
+            # page"): a browser not signed in to the login app gets login.html, which holds the login
+            # app's sign-in and sign-up; so does one signed in as no profile yet (the page makes the
+            # profile for the user, then opens the app). Without a login app, the profile alone, as before.
+            if rel == "index.html":
+                if web.profile_cookie(self) is None or front.signed_in(self.headers.get("Cookie")) is False:
+                    rel = "login.html"
             web.static_file(self, rel)
 
     return Handler
