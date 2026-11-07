@@ -35,9 +35,12 @@
 
   // -- rail --------------------------------------------------------------------------------
   function showPane(name, { toggle = true } = {}) {
+    // a bound app's page (bound-login: the login app's), whole, in the bound view
+    const app = name.startsWith('bound-') && BOUND.has(name.slice(6)) ? name.slice(6) : null;
     // the fetcher's own page has no chart views (window.FETCHER_MODE, app.js): the Fetcher instead
-    if (!(name in VIEWS) || (window.FETCHER_MODE && VIEWS[name] === 'chart')) name = window.FETCHER_MODE ? 'fetcher' : 'stock';
-    const view = VIEWS[name];
+    if (!app && (!(name in VIEWS) || (window.FETCHER_MODE && VIEWS[name] === 'chart'))) name = window.FETCHER_MODE ? 'fetcher' : 'stock';
+    const view = app ? 'bound' : VIEWS[name];
+    if (app) showBound(app);
     const same = document.body.dataset.pane === name && document.body.dataset.view === view;
     if (view === 'chart' && same && toggle) {
       setPanelHidden(!document.body.classList.contains('panel-hidden'));
@@ -122,6 +125,50 @@
     const b = e.target.closest('button[data-pane]');
     if (b) showPane(b.dataset.pane);
   });
+  // The apps bound to this front (the login app), each its own tray at the foot of the rail after a
+  // divider (the user, 2026-11-04: "Each divider represents a separate tray. From a separate object
+  // like the login"); an icon opens the app's page, whole, in the bound view (?embedded=1 hides its
+  // own rail). The front answers /api/trays itself; the integrator's own page has no bound apps.
+  const BOUND = new Set();
+  function showBound(app) {
+    const f = document.getElementById('boundFrame');
+    if (f.dataset.app !== app) { f.src = `/${encodeURIComponent(app)}/?embedded=1`; f.dataset.app = app; }
+  }
+  async function drawBoundTrays() {
+    let trays = [];
+    try { const r = await fetch('/api/trays'); if (r.ok) trays = (await r.json()).trays || []; } catch (e) { trays = []; }
+    const rail = document.getElementById('rail');
+    for (const t of trays) {
+      if (!t || !t.app || BOUND.has(t.app)) continue;
+      BOUND.add(t.app);
+      rail.appendChild(document.createElement('hr'));
+      for (const item of t.items || []) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.pane = `bound-${t.app}`;
+        b.id = `railBound-${t.app}-${item.id}`;
+        if (item.kind === 'app') b.classList.add('master');
+        b.title = item.title || t.title || t.app;
+        b.innerHTML = icon(item.icon, RAIL_ICON);
+        rail.appendChild(b);
+      }
+      if (t.app === 'login') watchLogin();
+    }
+  }
+  function watchLogin() {
+    // the sign-in state on the icon; asked every minute, which keeps the login app in touch
+    const refresh = async () => {
+      try {
+        const r = await fetch('/login/api/status');
+        const st = r.ok ? await r.json() : null;
+        const b = document.getElementById('railBound-login-login');
+        if (b && st) b.title = st.signedIn ? `Login: signed in as ${st.name}` : 'Login: not signed in. Click to sign in or create an account.';
+      } catch (e) { /* the login app is away */ }
+    };
+    refresh();
+    setInterval(refresh, 60000);
+  }
+  if (!window.FETCHER_MODE) drawBoundTrays();
   // The rail's foot: the signed-in profile (its initial); a click signs out to the login page, where
   // another is picked or made.
   fetch('/api/profiles').then((r) => r.json()).then(({ profiles = [], current }) => {

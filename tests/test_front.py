@@ -32,6 +32,9 @@ class Upstream(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self.path == "/api/tray":  # a bound app's tray (the login app's)
+            return self._json(200, {"app": "login", "icon": "user", "title": "Login",
+                                    "items": [{"id": "login", "icon": "user", "title": "Login", "kind": "app", "app": "login"}]})
         if self.path.startswith("/api/stream"):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -76,6 +79,7 @@ def _free_port() -> int:
 
 def test_the_front_funnels_its_pages_requests_to_the_integrator(tmp_path, monkeypatch, upstream):
     monkeypatch.setenv("LIMINAL_FETCHER_PORT", str(upstream.server_address[1]))  # the integrator's port: answering
+    monkeypatch.setenv("LIMINAL_LOGIN_URL", "none")  # no login app on this page
     monkeypatch.setattr(front_mod, "start_integrator", lambda db_path, port, log=print: pytest.fail("nothing to start"))
     lines: list[str] = []
     front = Front(tmp_path / "liminal.db", log=lines.append)
@@ -116,9 +120,82 @@ def test_the_front_funnels_its_pages_requests_to_the_integrator(tmp_path, monkey
         monkeypatch.setenv("LIMINAL_FETCHER_PORT", "none")
         status, body, _ = _get(port, "/api/echo")
         assert status == 503 and b"the integrator is not running" in body and any("has no page" in m for m in lines)
+        # no login app on this page: no tray, and its prefix is told
+        assert json.loads(_get(port, "/api/trays")[1]) == {"trays": []}
+        assert _get(port, "/login/api/status")[0] == 503
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_the_front_binds_the_login_app_under_its_prefix_and_draws_its_tray(tmp_path, monkeypatch, upstream):
+    """The login app bound (LIMINAL_LOGIN_URL): its page and API served under /login/ with its cookies'
+    path narrowed there, its tray in /api/trays; started for the front when nothing answers."""
+    monkeypatch.setenv("LIMINAL_FETCHER_PORT", "none")
+    monkeypatch.setenv("LIMINAL_LOGIN_URL", f"http://127.0.0.1:{upstream.server_address[1]}/")
+    real_start_login = front_mod.start_login
+    monkeypatch.setattr(front_mod, "start_login", lambda port, log=print: pytest.fail("nothing to start"))
+    lines: list[str] = []
+    front = Front(tmp_path / "liminal.db", log=lines.append)
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), make_front_handler(front))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    try:
+        status, body, _ = _get(port, "/api/trays")
+        trays = json.loads(body)["trays"]
+        assert status == 200 and [t["app"] for t in trays] == ["login"] and trays[0]["items"][0]["icon"] == "user"
+        assert any("connected to the login app" in m for m in lines)
+        status, body, r = _get(port, "/login/api/status?x=1", {"Cookie": "liminal_login=tok", "X-Liminal-Session": "tok"})
+        j = json.loads(body)
+        assert status == 200 and j["path"] == "/api/status?x=1" and j["cookie"] == "liminal_login=tok"
+        assert r.getheader("Set-Cookie") == "mc_profile=7; Path=/login"  # the bound app's cookie, its path narrowed
+        assert json.loads(_get(port, "/login/")[1])["path"] == "/" and json.loads(_get(port, "/login?embedded=1")[1])["path"] == "/?embedded=1"
+        assert _get(port, "/login/api/status", {"Origin": "http://evil.example"})[0] == 403
+        conn = HTTPConnection("127.0.0.1", port)
+        conn.request("POST", "/login/api/sign-in", body=json.dumps({"name": "ada"}), headers={"Content-Type": "application/json"})
+        assert conn.getresponse().status == 403  # a write needs the app's own header
+        conn.request("POST", "/login/api/sign-in", body=json.dumps({"name": "ada"}),
+                     headers={"Content-Type": "application/json", "X-Liminal-Charts": "1"})
+        r = conn.getresponse()
+        assert r.status == 202 and json.loads(r.read()) == {"got": {"name": "ada"}, "write": "1"}
+        # the chart page draws the bound trays from /api/trays, after the profile's foot
+        panels = (front_mod.web.STATIC / "panels.js").read_text(encoding="utf-8")
+        assert "fetch('/api/trays')" in panels and "bound-${t.app}" in panels and "/login/api/status" in panels
+        assert 'id="viewBound"' in (front_mod.web.STATIC / "index.html").read_text(encoding="utf-8")
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    # nothing answers at the login's URL: started for the front (the library's start_app, waited for)
+    free = _free_port()
+    monkeypatch.setenv("LIMINAL_LOGIN_URL", f"http://127.0.0.1:{free}")
+    monkeypatch.setattr(front_mod, "START_SECONDS", 0.3)
+    started: list = []
+    up: list = []
+
+    def start_login(port, log=print):
+        started.append(port)
+        srv = ThreadingHTTPServer(("127.0.0.1", port), Upstream)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        up.append(srv)
+        return True
+    monkeypatch.setattr(front_mod, "start_login", start_login)
+    front = Front(tmp_path / "liminal.db", log=lines.append)
+    assert front.login().port == free and started == [free] and front.login().port == free and started == [free]
+    up[0].shutdown()
+    up[0].server_close()
+    monkeypatch.setattr(front_mod, "start_login", lambda port, log=print: False)
+    assert front.login() is None and front.trays() == []
+    # the start itself: the login's module, no window, until quiet
+    from liminal_libs.apps import binding as binding_mod
+    popen: list = []
+    monkeypatch.setattr(binding_mod.subprocess, "Popen", lambda args, **kw: popen.append((args, kw)))
+    assert real_start_login(8795, lines.append) is True
+    assert popen[0][0][1:] == ["-m", "liminal_login", "serve", "--no-browser", "--port", "8795", "--until-quiet"]
+    assert front_mod.login_url() == f"http://127.0.0.1:{free}"
+    monkeypatch.setenv("LIMINAL_LOGIN_URL", "off")
+    assert front_mod.login_url() is None
+    monkeypatch.delenv("LIMINAL_LOGIN_URL")
+    assert front_mod.login_url() == "http://127.0.0.1:8795"
 
 
 def test_the_front_starts_the_integrator_when_nothing_answers_at_its_port(tmp_path, monkeypatch, upstream):
@@ -127,6 +204,7 @@ def test_the_front_starts_the_integrator_when_nothing_answers_at_its_port(tmp_pa
     or it never answers: the page is told."""
     free = _free_port()
     monkeypatch.setenv("LIMINAL_FETCHER_PORT", str(free))
+    monkeypatch.setenv("LIMINAL_LOGIN_URL", "none")
     monkeypatch.setattr(front_mod, "START_SECONDS", 0.3)
     real_start = front_mod.start_integrator
     started: list = []
@@ -162,9 +240,10 @@ def test_the_front_starts_the_integrator_when_nothing_answers_at_its_port(tmp_pa
     finally:
         srv.shutdown()
         srv.server_close()
-    # the start itself: the integrator's module, no window, on this database, until quiet
+    # the start itself (the library's start_app): the integrator's module, no window, on this database, until quiet
+    from liminal_libs.apps import binding as binding_mod
     popen: list = []
-    monkeypatch.setattr(front_mod.subprocess, "Popen", lambda args, **kw: popen.append((args, kw)))
+    monkeypatch.setattr(binding_mod.subprocess, "Popen", lambda args, **kw: popen.append((args, kw)))
     assert real_start(tmp_path / "liminal.db", 8791, lines.append) is True
     args, kw = popen[0]
     assert args[1:] == ["-m", "liminal_integrator", "serve", "--no-browser", "--port", "8791", "--until-quiet"]
@@ -176,7 +255,8 @@ def test_the_front_starts_the_integrator_when_nothing_answers_at_its_port(tmp_pa
     assert front_mod.integrator_port() == 8785
 
 
-def test_serve_front_takes_a_free_port_when_its_own_is_taken_and_stops_when_told(tmp_path, upstream):
+def test_serve_front_takes_a_free_port_when_its_own_is_taken_and_stops_when_told(tmp_path, upstream, monkeypatch):
+    monkeypatch.setenv("LIMINAL_LOGIN_URL", "none")
     taken = upstream.server_address[1]
     assert web.listening(taken)
     lines: list[str] = []

@@ -1108,3 +1108,6 @@ body[data-mode="fetcher"] #rail > hr:last-of-type { display: none !important; }
 .act-table .q-prog { min-width: 150px; }
 .q-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 6px 0 4px; }
 .q-bar span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+/* A bound app's page (the login app's), whole, left of the icons: its own rail hidden there (?embedded=1). */
+main > .view.bound-view { padding: 0; }
+#boundFrame { flex: 1; width: 100%; min-height: 0; border: 0; border-radius: var(--radius); background: var(--card); }

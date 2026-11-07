@@ -196,6 +196,11 @@
 
     <div class="view ds-view" id="viewDatasets" data-view="datasets" hidden></div>
 
+    <!-- A bound app's page (the login app's), shown whole when one of its icons is picked (panels.js) -->
+    <div class="view bound-view" id="viewBound" data-view="bound" hidden>
+      <iframe id="boundFrame" title="A bound app's page" src="about:blank"></iframe>
+    </div>
+
     <nav id="rail" aria-label="Views">
       <button data-pane="stock" id="railStock" title="Stock: chart with the symbol, key statistics and business"></button>
       <button data-pane="analysis" id="railAnalysis" title="Analysis: chart with the highlight and cursor statistics"></button>

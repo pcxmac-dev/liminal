@@ -18,6 +18,7 @@ dependencies = [
 dev = ["pytest>=8"]
 # the fetcher, released on its own (the app's pages get their data through it)
 integrator = ["liminal-integrator @ git+https://github.com/pcxmac-dev/liminal-integrator@release/0.2.0"]  # 1.4.0: --plugins, --name
+login = ["liminal-login @ git+https://github.com/pcxmac-dev/liminal-login@main"]  # the login app the front binds (sign in, your keys)
 # the plugins released on their own, from their tags (docs/ARCHITECTURE.md: Providers are plugins)
 plugins = [
     "plugin-integrator-cboe @ git+https://github.com/pcxmac-dev/plugin-integrator-cboe@release/0.2.0",
